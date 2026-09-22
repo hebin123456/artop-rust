@@ -223,7 +223,9 @@ fn object_refs(v: &Val) -> Vec<ObjectRef> {
     if let Some(o) = v.as_object() {
         vec![Rc::clone(o)]
     } else if let Some(l) = v.as_list() {
-        l.iter().filter_map(|x| x.as_object().map(Rc::clone)).collect()
+        l.iter()
+            .filter_map(|x| x.as_object().map(Rc::clone))
+            .collect()
     } else {
         Vec::new()
     }
@@ -320,7 +322,10 @@ mod tests {
         set(
             &fleet,
             "vehicles",
-            Val::List(vec![Val::Object(Rc::clone(&v1)), Val::Object(Rc::clone(&v2))]),
+            Val::List(vec![
+                Val::Object(Rc::clone(&v1)),
+                Val::Object(Rc::clone(&v2)),
+            ]),
         );
         set(&fleet, "primary", Val::Object(Rc::clone(&v1)));
 

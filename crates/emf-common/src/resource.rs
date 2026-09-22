@@ -54,6 +54,18 @@ impl Resource {
         self.modified = true;
     }
 
+    /// Replace the whole root contents.
+    pub fn set_contents(&mut self, contents: Vec<ObjectRef>) {
+        self.contents = contents;
+        self.modified = true;
+    }
+
+    /// Remove all root contents.
+    pub fn clear_contents(&mut self) {
+        self.contents.clear();
+        self.modified = true;
+    }
+
     /// Whether loaded.
     pub fn is_loaded(&self) -> bool {
         self.loaded
@@ -92,6 +104,85 @@ impl Resource {
     /// Set the warnings buffer.
     pub fn set_warnings(&mut self, warnings: Vec<String>) {
         self.warnings = warnings;
+    }
+
+    // ==== persistence surface (aligned to C++ `Resource::save/load`) ====
+
+    /// Serialize the resource to an XMI/XML string. The base implementation is
+    /// a no-op (empty); a concrete serializing resource overrides this.
+    pub fn save_to_string(&self) -> String {
+        String::new()
+    }
+
+    /// `toXmiString` — delegate to [`Self::save_to_string`].
+    pub fn to_xmi_string(&self) -> String {
+        self.save_to_string()
+    }
+
+    /// Parse XMI/XML text into this resource's contents. The base
+    /// implementation is a no-op and does **not** flip `is_loaded` (aligned to
+    /// the C++ base `load(istream)`).
+    pub fn load_from_string(&mut self, _src: &str) {}
+
+    /// `fromXmiString` — delegate to [`Self::load_from_string`].
+    pub fn from_xmi_string(&mut self, src: &str) {
+        self.load_from_string(src);
+    }
+
+    /// Resolve an object by URI fragment. Base returns `None` (aligned to the
+    /// C++ base `getEObject` returning `nullptr`).
+    pub fn get_eobject(&self, _fragment: &str) -> Option<ObjectRef> {
+        None
+    }
+
+    /// Compute the URI fragment for an object. Base returns empty (aligned to
+    /// the C++ base `getURIFragment`).
+    pub fn get_uri_fragment(&self, _obj: &ObjectRef) -> String {
+        String::new()
+    }
+
+    /// Load from the resource's URI. Base tries to read the file for a `file:`
+    /// URI and surface an error if it cannot be opened (aligned to the C++
+    /// base `load()`).
+    pub fn load(&mut self) -> Result<(), String> {
+        if self.uri.is_file() {
+            let path = self.uri.to_file_path();
+            if path.is_empty() {
+                return Err(format!("cannot load from empty file path"));
+            }
+            let text = std::fs::read_to_string(&path)
+                .map_err(|e| format!("Cannot open file: {} ({e})", path))?;
+            self.load_from_string(&text);
+            self.loaded = true;
+            Ok(())
+        } else {
+            Err(format!(
+                "no stream available for scheme '{}'",
+                self.uri.scheme()
+            ))
+        }
+    }
+
+    /// Save to the resource's URI. Base tries to write the file for a `file:`
+    /// URI and surface an error if the destination cannot be written (aligned
+    /// to the C++ base `save()`).
+    pub fn save(&mut self) -> Result<(), String> {
+        if self.uri.is_file() {
+            let path = self.uri.to_file_path();
+            if path.is_empty() {
+                return Err(format!("cannot save to empty file path"));
+            }
+            let text = self.to_xmi_string();
+            std::fs::write(&path, text)
+                .map_err(|e| format!("Cannot write file: {} ({e})", path))?;
+            self.modified = false;
+            Ok(())
+        } else {
+            Err(format!(
+                "no stream available for scheme '{}'",
+                self.uri.scheme()
+            ))
+        }
     }
 }
 
@@ -205,9 +296,56 @@ mod tests {
         set.create_resource(Uri::parse("file:///r1.xmi"));
         set.create_resource(Uri::parse("file:///r2.xmi"));
         assert_eq!(set.resources().len(), 2);
-        assert!(set
-            .get_resource(&Uri::parse("file:///r1.xmi"))
-            .is_some());
+        assert!(set.get_resource(&Uri::parse("file:///r1.xmi")).is_some());
         assert!(set.get_resource(&Uri::parse("file:///nope.xmi")).is_none());
+    }
+
+    #[test]
+    fn save_load_stream_defaults_no_throw() {
+        let mut r = Resource::new(Uri::default());
+        // base save_to_string is a no-op: empty, no exception.
+        assert_eq!(r.save_to_string(), "");
+        // base load_from_string is a no-op: does not flip is_loaded.
+        r.load_from_string("anything");
+        assert!(!r.is_loaded());
+    }
+
+    #[test]
+    fn to_xmi_string_delegates_save() {
+        let r = Resource::new(Uri::default());
+        assert_eq!(r.to_xmi_string(), ""); // base save is a no-op
+    }
+
+    #[test]
+    fn from_xmi_string_delegates_load_no_throw() {
+        let mut r = Resource::new(Uri::default());
+        r.from_xmi_string("<x/>");
+        assert!(!r.is_loaded());
+    }
+
+    #[test]
+    fn get_eobject_empty_fragment_is_none() {
+        let r = Resource::new(Uri::default());
+        assert!(r.get_eobject("").is_none());
+        assert!(r.get_eobject("//_1").is_none());
+    }
+
+    #[test]
+    fn get_uri_fragment_returns_empty() {
+        let r = Resource::new(Uri::default());
+        let rc: ObjectRef = Rc::new(RefCell::new(R {}));
+        assert_eq!(r.get_uri_fragment(&rc), "");
+    }
+
+    #[test]
+    fn load_nonexistent_file_throws() {
+        let mut r = Resource::new(Uri::parse("file:///nonexistent/path/does/not/exist.mi"));
+        assert!(r.load().is_err());
+    }
+
+    #[test]
+    fn save_nonexistent_file_throws() {
+        let mut r = Resource::new(Uri::parse("file:///nonexistent/path/does/not/exist.mi"));
+        assert!(r.save().is_err());
     }
 }

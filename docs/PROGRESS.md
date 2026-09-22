@@ -92,7 +92,7 @@ oracle，跑参考结果；Rust 侧跑同名/对应测试，逐条比对。**一
 - oracle：`emf-common` C++ 单测二进制（`EMF_TEST` 迷你框架，无需外部依赖），当前 193 条、0 失败。
 - 脚本：`tools/conformance/build_oracle.sh`（编译并跑 C++ oracle）、
   `compare.py`（跑 Rust 侧并输出 PASS/PENDING/REGRESSION）、`cases.tsv`（C++↔Rust 映射表）。
-- 当前基线：`URI_*` 首批 7 条已 `PASS`；其余 186 条 `PENDING`(未映射)，逐个补齐。
+- 当前基线：oracle 全量 193 条；已映射 **69** 条全部 `PASS`（URI / EList / UniqueEList / SegmentSequence / BasicEMap / Resource 六组），剩余 124 条 `PENDING`(未映射)，逐个补齐。
 - 已接入 CI（`conformance` job）：CI 检出 artop-cpp、编译并跑 oracle、再与 Rust 比对。
 
 复用路径：C++ oracle 单测 → `tools/conformance/build`，与 CI 的 `conformance` job 对齐。
@@ -110,11 +110,13 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 ## 7. 下一步（按优先级）
 
-1. `emf-xmi` loader：XML 解析 → 反射建 `DynamicEObject`；handler（`XMILoadImpl` / `XMIHelper`）随后落地。
-2. 一致性测试映射扩展到 EList / SegmentSequence / EMap / Resource：在 `cases.tsv` 补行，翻绿现有 Rust 行为。
-3. `emf-ecore-util`：Copier / EcoreUtil / eContents / eCrossReferences。
-4. 扩展 oracle 到 emf-ecore / emf-xmi 的 C++ tests，逐模块收敛。
-5. `artop-runtime`：AUTOSAR 序列化/反序列化。
+已完成：emf-common/ecore 核心、EcoreUtil/Copier、XMI saver+loader、Resource/XMI 持久化集成、六组一致性测试(69) PASS。
+
+1. 一致性测试映射继续扩展：把剩余 124 条 C++ 单测（URIConverter / ENotifier / EPackage / ...）逐组填进 `cases.tsv`，翻绿。
+2. 扩展 oracle 到 emf-ecore / emf-xmi 的 C++ tests，逐模块收敛。
+3. `emf-xmi` handler 落地：`XMILoadImpl` / `XMIHelper` / `XMIResourceFactory`，把 `XMIResource` 挂进 `ResourceSet`（`getResource` 按需加载）。
+4. `emf-ecore-util` 剩余：Adapter / ECrossReferenceAdapter / containment 遍历到 `all_contents` 的流式实现。
+5. `artop-runtime`：AUTOSAR 序列化/反序列化（届时才引入 artop 相关内容）。
 
 ## 8. emf-xmi 实施记录
 
@@ -130,6 +132,11 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - `<xmi:XMI>` 文档包装元素解包，其子元素即根。
   - 本地 `href="//<id>"` 跨引用在全部对象构建后按 `xmi:id` 表解析（`append_reference` 区分 single/many）。
   - 测试：saver→loader **roundtrip**（类名/属性/containment 结构一致）+ 属性加载 + XMI wrapper + 未知特征容错，全绿。纯通用 EMF，未牵涉任何 artop / AUTOSAR 内容。
+
+- **Milestone 3 — Resource/XMI 持久化集成（本轮新增）**：把 XMI saver/loader 接到 `Resource` 持久化。
+  - `emf-common::Resource` 补齐 C++ 基类表面：`to_xmi_string`/`save_to_string`、`from_xmi_string`/`load_from_string`（基类空实现，不翻转 `is_loaded`）、`get_eobject`/`get_uri_fragment`、基于 `file:` URI 的 `save()`/`load()`（打不开文件/写不了文件报 `Err`）——使 `Resource_ToXmiString_DelegatesSave` 等 8 条 oracle 测试转 `PASS`。
+  - 新增 `Resource::set_contents` / `clear_contents` 以支持反序列化替换根内容。
+  - `emf-xmi::xmi_resource`：把占位模块升级为真实 `XMIResource`（对齐 C++ `emf::xmi::XMIResource`）。它承载一个 `emf_common::Resource` + `PackageRegistry`，`save_to_string`/`load_from_string` 真正让 saver/loader 落地，`save()`/`load()` 打通 `file:` URI 落盘。测试覆盖 saver→loader 端到端 roundtrip 与坏 XMI 报错。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 

@@ -194,9 +194,7 @@ mod tests {
     }
 
     fn make(name: &str, value: &str, cls: EClass, reg: PackageRegistry) -> ObjectRef {
-        let o = Rc::new(std::cell::RefCell::new(DynamicEObject::new_in(
-            cls, reg,
-        )));
+        let o = Rc::new(std::cell::RefCell::new(DynamicEObject::new_in(cls, reg)));
         o.borrow_mut().e_set(name, Val::String(value.into()));
         o
     }
