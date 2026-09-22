@@ -17,7 +17,7 @@
 | SegmentSequenceTests.cpp | 🔶 `cpp_parity_common_path`；空分隔符差异待补（Rust 按字符拆 vs C++ 单段） |
 | ENotifierTests.cpp | ⬜ |
 | URITests.cpp | ✅ cpp_parity_common_path |
-| ResourceTests.cpp | ⬜ |
+| ResourceTests.cpp | 🔶 cpp_parity_common_resource（19）；setResourceSet 关联待补 |
 | CommandTests.cpp | ⬜ |
 | EPackageRegistryTests.cpp | ⬜ |
 
