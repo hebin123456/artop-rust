@@ -13,19 +13,20 @@ pub mod ecore_util;
 /// `EcoreUtil.Copier`: deep copy of an `EObject` graph.
 pub mod copier;
 
+/// `EObjectValidator`: structural validation of `EPackage` metadata.
+pub mod e_object_validator;
+
+/// `FeatureMap` / `BasicFeatureMap`: ordered `(feature, value)` entry list.
+pub mod feature_map;
+
+/// `ECrossReferenceAdapter`: collect non-containment references of a subtree.
+pub mod e_cross_reference_adapter;
+
 pub mod extended_metadata {
     //! Port target: C++ source unit for `extended_metadata`.
     /// Placeholder marker so the module compiles until the real port lands.
     pub fn api_surface() -> &'static str {
         "emf-ecore-util::extended_metadata"
-    }
-}
-
-pub mod feature_map {
-    //! Port target: C++ source unit for `feature_map`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-ecore-util::feature_map"
     }
 }
 
@@ -42,14 +43,6 @@ pub mod e_contents_elist {
     /// Placeholder marker so the module compiles until the real port lands.
     pub fn api_surface() -> &'static str {
         "emf-ecore-util::e_contents_elist"
-    }
-}
-
-pub mod e_cross_reference_adapter {
-    //! Port target: C++ source unit for `e_cross_reference_adapter`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-ecore-util::e_cross_reference_adapter"
     }
 }
 
@@ -82,14 +75,6 @@ pub mod eobject_resolving_elist {
     /// Placeholder marker so the module compiles until the real port lands.
     pub fn api_surface() -> &'static str {
         "emf-ecore-util::eobject_resolving_elist"
-    }
-}
-
-pub mod eobject_validator {
-    //! Port target: C++ source unit for `eobject_validator`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-ecore-util::eobject_validator"
     }
 }
 

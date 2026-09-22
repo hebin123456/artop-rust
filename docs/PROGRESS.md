@@ -54,7 +54,7 @@ examples/
 | `emf-common` | ✅ 工作 | URI / EList / Notifier / Notification / FeatureMap / Resource / ResourceSet / EPackageRegistry / Command / EMap / Val / Diagnostic / SegmentSequence / URIConverter |
 | `emf-ecore` | ✅ 工作 | EClass / EStructuralFeature / EAttribute / EReference / EOperation / EParameter / EPackage / EFactory / EEnum / EDataType / DynamicEObject / EcorePackage / FeatureID 常量 |
 | `emf-artop/autosar448-model` | ✅ 工作 | 生成的 AUTOSAR 4.4.8 注册表 + 反射查询（eAllFeatures / isSuperTypeOf / eGet） |
-| `emf-ecore-util` | ⬜ 骨架 | EcoreUtil / Copier / EMap / validator 等 |
+| `emf-ecore-util` | ✅ 工作 | EcoreUtil / Copier / **EObjectValidator** / **FeatureMap** / **ECrossReferenceAdapter**；其余含 extended_metadata / EList 家族骨架 |
 | `emf-ecore-codegen` | ✅ 工作 | GenModel→代码生成：ecore loader（XMI→`EPackage`）+ TypeMapper + generator（struct / `match` 反射表 / `register_package`）+ 顶层 `GenModel` API 与 CLI（`.ecore` → 落盘可独立编译 crate），生成的 crate 可脱离 `.ecore` 编译运行 |
 | `emf-xmi` | ✅ 工作 | saver + loader + 真实 `XMIResource` + `ResourceSet` 按需加载集成（`ResourceHandle` / `ResourceFactory` / `XMIResourceFactory`）已实现并测试通过；`XMILoadImpl` / `XMIHelper` 接口待做 |
 | `emf-xsd` | ⬜ 骨架 | XSD 元模型 |
@@ -158,6 +158,12 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - 新增 `samples/library.ecore` 样例文件；集成测试 `tests/static_modeling.rs` 用公开 API 从磁盘加载 → 落盘生成 crate → 独立 `cargo build` + 消费者二进制跑通反射 API。
   - 生成源码收紧 lint：`#![allow(dead_code, unused_imports, unused_mut, non_snake_case, clippy::too_many_arguments)]` 并去掉未用的 `RefCell`/`Rc` 导入，生成的 crate 独立编译零告警。
   - 质量门禁：`emf-ecore-codegen` 全部单测 + 集成测试 + CLI 端到端全绿（19 单测 + 3 集成）。注：本轮会话中 sandbox 的 Rust 工具链曾消失，已用 rustup + static.rust-lang.org 重建（cargo/rustc 1.98.1 与旧指纹一致），并把 `~/.cargo/bin` 写入 `/etc/profile.d/work-env.sh`。
+
+- **Milestone 8 — emf-ecore-util 底盘模块落地（本轮新增）**：把 `emf-ecore-util` 从骨架推进为一组真实可用模块。
+  - `EObjectValidator`：结构校验（对齐 C++ `EObjectValidator`），`validate_epackage` / `validate_eclass` / `validate_eattribute` / `validate_ereference` / `validate_eoperation` 覆盖包 / 类 / 特征号语义；含 `validate_every_default_constraint` 折叠入口与 `codes` 诊断码常量。
+  - `FeatureMap` / `BasicFeatureMap`：有序 `(feature, value)` 条目表（对齐 C++ `FeatureMap`），支持 `add` / `entries_for` / `size_for` / `get_for` / `set_for` / `remove`，为 XSD/XML 的 group/choice/sequence 序列化铺路。
+  - `ECrossReferenceAdapter`：收集子树内所有非 containment 跨引用目标（对齐 C++ `ECrossReferenceAdapter` 的 `getNonContainmentReferences`），`add_adapter_to` / `remove_adapter_from` / `contains`；Rust 反射层暂为快照式扫描实现，`ObjectRefKey` 作为不透明引用键对外。
+  - 质量门禁：`emf-ecore-util` 13 条单测 + fmt + clippy（0 告警）全绿，全工作区 test 无回归。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 
