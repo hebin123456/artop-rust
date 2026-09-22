@@ -29,8 +29,9 @@
 | DynamicEObjectImplTests.cpp | ⬜ |
 | EClassImplTests.cpp | ✅ cpp_parity_ecore_eclass（12；create/featureID/abstract·interface/get-by-ID/isSuperTypeOf/eAllSuperTypes·Attributes·References·StructuralFeatures·featureCount/ID-marked 全对齐；
    按签名对 C++ 差异：is_super_type_of 严格不自反（C++ 自反 true）、eAllOperations 继承聚合缺、getEIDAttribute 全层查找缺（Rust id_feature 仅本类）） |
-| EPackageImplTests.cpp | ⬜ |
-| ETypedElementImplTests.cpp | ⬜ |
+| EPackageImplTests.cpp | ✅ cpp_parity_ecore_epackage（3；create/get-classifier/registry put·get·remove/accessors 全对齐） |
+| ETypedElementImplTests.cpp | 🔶 cpp_parity_ecore_etyped_element（4；默认值 lower0·upper1·ordered·unique / isMany / setType→type_name / kind）；
+   ⏳ eGet·eSet·eIsSet·eUnset 反射、bounds·ordered·unique setter、EGenericType（union/wildcard/懒加载同步）Rust 无对应 |
 | EObjectEInvokeTests.cpp | 🔶 cpp_parity_ecore_einvoke（4；EOperation 元数据 operation_id/get-by-name/count 全对齐）；
    ⏳ eInvoke + EInvocationDelegate 派发机制 Rust 尚无对应（需对象级 invocation-delegate 注册表）|
 | EcorePackageTests.cpp | ⬜ |
