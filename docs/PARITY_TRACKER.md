@@ -24,7 +24,8 @@
 ## emf-ecore
 | C++ 测试 | Rust 状态 |
 |---|---|
-| BasicEObjectTests.cpp | ⬜ |
+| BasicEObjectTests.cpp | 🔶 cpp_parity_ecore_basic_eobject（9；eDynamic* 值存储 get/set/is_set/unset+double-feature 全对齐）；
+   ⏳ eContainer / eRegisterInverseList·eInverseAdd·Remove / eSet·eUnset 触发 SET/UNSET 通知 / eNotificationRequired —— 需 Rust 层补 EObject 容器字段、inverse-list 注册表、DynamicEObject 作为 Notifier 后才可对照 |
 | DynamicEObjectImplTests.cpp | ⬜ |
 | EClassImplTests.cpp | ⬜ |
 | EPackageImplTests.cpp | ⬜ |
