@@ -58,7 +58,8 @@
    Rust 在 `XMIResource` 补齐 id 双向映射（Rc 指针键）+ 片段导航，`loader::load_from_str_with_ids` 导出 xmi:id 表；C++ 走 ecore:EPackage 元模型、Rust 以 DynamicEObject 文档承载同一 ID/href 契约） |
 | P3_XMLSaveLoadUUIDTests.cpp | ✅ cpp_parity_xml_save_load_uuid（9；generateUUID v4 格式 36 字符·8-4-4-4-12·第14位'4'·第19位[89ab]/1000 次唯一/ensureID：useUUIDs=false 不分配·true 自动分 UUID·幂等·写入 idToEObjectMap 且可反查/XMLSave 注入自定义实现被 save 调用/XMLoad 注入自定义实现被 load 调用/默认 getXMLSave·getXMLLoad 非空·缓存同一实例·端到端默认保存出真实 XMI 全对齐。
    Rust 在 `XMIResource` 补齐 v4 UUID 生成（splitmix64+单调序号）、`use_uuids`/`ensure_id`，并新增 `emf_xmi::xml_save_impl` 模块（XMLSave/XMLSaveImpl + XMLLoader/XMLoaderImpl 注入抽象），`save_to_string`/`load_from_string` 经当前激活实现分派） |
-| resourceset_multi_file_test.cpp | ⬜ |
+| resourceset_multi_file_test.cpp | ✅ cpp_parity_resourceset_multi_file（1；场景A：a.xmi(EPackage pkgA+EClass A)·b.xmi(pkgB+EClass B, eSuperTypes="a.xmi#//A") 分别 load_ecore_package→EPackage，共注册入同一 PackageRegistry 后 B.eSuperTypes 解析为真实 EClass A（非 proxy，相当于 EMF 跨包物件解析）全对齐。
+   差异：场景B（arxml AutosarResourceSet）属 artop 侧按门线禁止；场景A 的 ResourceSet 自动 demand-load 由 object-proxy 触发，Rust 元模型层无持久 proxy 对象，以「跨包按名解析到已注册真实 classifier」等价表达） |
 | E2E_MultiFileEcoreTests.cpp | ⬜ |
 | E2E_ProxyModelTests.cpp | ⬜ |
 | StaticVsDynamicXmiTests.cpp | ⬜ |
