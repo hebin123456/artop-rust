@@ -201,6 +201,12 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - `emf-sphinx`：`headless_core` 提供 `Node`（attrs/children + fluent builder）、`Root`/`Model`（全路径索引 + O(1) `resolve`/`require`）、`WalkControl`（Continue/Prune/Stop）深度遍历，4 条单测全绿。
   - 质量门禁：新增 22 条单测全绿，三个 crate fmt + clippy（0 告警）通过，全工作区 test 无回归。
 
+- **Milestone 15 — 复用 artop-cpp 测试用例做 C++ 对照（本轮新增）**：不再自说自话，直接移植 C++ 侧的测试断言到 Rust，统一走 artop-cpp `cpp/emf-cpp/emf-*` 下 `tests/samples/library.ecore` 这份**逐字节相同**的权威样本。
+  - 把 `emf-ecore-codegen/samples/library.ecore` 替换为 C++ 权威版（标准 `ecore:EDataType http://.../Ecore#//EString` 写法），并核对逐字节一致。
+  - 新增 `emf-ecore-codegen/tests/cpp_parity_static_modeling.rs`（7 条）：对照片 `GenModelLoaderTests.cpp`（wrapEcore 构建 Library/Book/Writer 元数据、attribute vs reference、containment、EString/EInt 类型映射、`recognizesReference`）+ `RuntimeBehaviorTests.cpp`（动态 eClass/eSet/eGet/eIsSet/eUnset）。
+  - 新增 `emf-ecore-codegen/tests/cpp_parity_xmi_serialization.rs`（2 条）：对照片 `RoundtripTests.cpp` / `E2E_GenModelXmi*` —— 加载同份 `library.ecore` → 按元模型实例化 `Library{books→Book{author→Writer}}` → emf-xmi `save_to_string` → `load_from_string` → 校验对象图（类名、属性值、containment 子树）完整还原；含 `XMILoaderTests` 的元模型断言。
+  - 全工作区 fmt / clippy / test 全绿；9 条对照测试全部通过，无回归。
+
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 
 | 提交 | 内容 |
