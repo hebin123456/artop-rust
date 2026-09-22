@@ -26,7 +26,8 @@
 |---|---|
 | BasicEObjectTests.cpp | 🔶 cpp_parity_ecore_basic_eobject（9；eDynamic* 值存储 get/set/is_set/unset+double-feature 全对齐）；
    ⏳ eContainer / eRegisterInverseList·eInverseAdd·Remove / eSet·eUnset 触发 SET/UNSET 通知 / eNotificationRequired —— 需 Rust 层补 EObject 容器字段、inverse-list 注册表、DynamicEObject 作为 Notifier 后才可对照 |
-| DynamicEObjectImplTests.cpp | ⬜ |
+| DynamicEObjectImplTests.cpp | ✅ cpp_parity_ecore_dyn_eobject（24；eClass / 属性 get·set·isSet·unset / 单值 containment：adopt 设 child eContainer·feature / 多值 containment：eGet 空表·增后 isSet·unset 清空 / eContents 单·多·混合收集 / 覆盖属性·child 全对齐。
+   Rust 以 `DynamicEObject` 值存储 + `Weak<parent>` 容器回链 + `adopt_single`/`adopt_many` 助手模拟 C++ 指针式 `eSet(containment, child)`；差异：feature 按名访问、eContents 按 featureID 序） |
 | EClassImplTests.cpp | ✅ cpp_parity_ecore_eclass（12；create/featureID/abstract·interface/get-by-ID/isSuperTypeOf/eAllSuperTypes·Attributes·References·StructuralFeatures·featureCount/ID-marked 全对齐；
    按签名对 C++ 差异：is_super_type_of 严格不自反（C++ 自反 true）、eAllOperations 继承聚合缺、getEIDAttribute 全层查找缺（Rust id_feature 仅本类）） |
 | EPackageImplTests.cpp | ✅ cpp_parity_ecore_epackage（3；create/get-classifier/registry put·get·remove/accessors 全对齐） |

@@ -47,7 +47,7 @@ pub mod datatype;
 pub mod ecore_package;
 
 pub use classifier::{EClass, EClassKind, EClassifier, EDataType, EEnum, EEnumLiteral};
-pub use dynamic::DynamicEObject;
+pub use dynamic::{adopt_many, adopt_single, node_to_object, DynNode, DynamicEObject};
 pub use ecore_package::{ECORE_NS_PREFIX, ECORE_NS_URI};
 pub use feature_id::FeatureID;
 pub use package::{make_package_ref, EFactory, EPackage, PackageRef, PackageRegistry};

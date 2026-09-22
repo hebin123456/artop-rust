@@ -23,6 +23,10 @@ pub trait EObject: std::fmt::Debug {
     /// Structural `as_any`, enabling downcast to concrete types.
     fn as_any(&self) -> &dyn std::any::Any;
 
+    /// Detach this object from any container (used when a containment parent
+    /// replaces or unsets it). No-op unless an object tracks a container.
+    fn clear_container(&mut self) {}
+
     /// The owning resource (if any), as a type-erased identifier.
     fn e_resource(&self) -> Option<ObjectRef> {
         None
