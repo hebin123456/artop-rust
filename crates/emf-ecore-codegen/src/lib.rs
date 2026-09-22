@@ -1,42 +1,29 @@
-//! GenModel-driven code generator (port of C++ `emf-ecore-codegen`).
+//! Port of C++ `emf-ecore-codegen`'s model-loading + code-generation layer.
 //!
-//! Port target: C++ `emf-ecore-codegen` module of `hebin123456/artop-cpp`.
+//! Pipeline (mirrors `emf-ecore-codegen`'s `GenModel` / `CppGenerator`):
 //!
-//! This file is *skeleton*: each module below is a compile placeholder that
-//! will be filled with the port of the corresponding C++ translation unit.
-//! Filled by GitHub Actions; see `.github/workflows/ci.yml`.
+//! 1. [`loader::load_ecore_package`] parses an `.ecore` document — which is
+//!    itself an XMI instance of the Ecore metamodel — into an owned
+//!    [`emf_ecore::EPackage`] (registering classes, data types and enums).
+//! 2. [`generator::generate`] walks that `EPackage` and emits idiomatic Rust
+//!    source: one statically-typed struct per `EClass`, a `match`-based EObject
+//!    reflection table per class (compile-time dispatch, no dynamic string
+//!    lookup), plus a `Package`/`EFactory` block — so the generated code
+//!    compiles independently of the original `.ecore` file.
+//!
+//! # Compile-time strategy for large models
+//!
+//! Unlike C++ (one `.cpp` per class, `-O0` per unit) and Java (one `.java` per
+//! class), Rust compiles a *crate* as its unit. To keep type-checking time
+//! acceptable when a model grows large, this port:
+//! - keeps each generated class a plain `struct` with concrete field types
+//!   (no macros, no blanket generic impls, no derive-stacking);
+//! - uses a `match feature_name` reflection table per class — a flat compile
+//!   time dispatch equivalent to C++'s `switch (featureID)` — never a linear
+//!   string scan at runtime;
+//! - splits generated output per package into an independent thin crate, so
+//!   the workspace can compile many packages in parallel and incrementally.
 
-pub mod genmodel {
-    //! Port target: C++ source unit for `genmodel`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-ecore-codegen::genmodel"
-    }
-}
-
-pub mod generator {
-    //! Port target: C++ source unit for `generator`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-ecore-codegen::generator"
-    }
-}
-
-pub mod templates {
-    //! Port target: C++ source unit for `templates`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-ecore-codegen::templates"
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn skeleton_compiles() {
-        assert_eq!(
-            super::genmodel::api_surface(),
-            "emf-ecore-codegen::genmodel"
-        );
-    }
-}
+pub mod generator;
+pub mod loader;
+pub mod typing;

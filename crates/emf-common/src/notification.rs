@@ -11,7 +11,7 @@
 
 use std::rc::Rc;
 
-use crate::value::{ObjectRef, Val};
+use crate::value::Val;
 
 /// Notification event kind (EMF `Notification.EventType`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,11 +175,13 @@ impl Notifier {
     /// *remaining* adapters are first sent a `REMOVING_ADAPTER` notification
     /// (aligned to C++ `removeAdapter`), then the matched adapters are dropped.
     pub fn remove_adapter(&mut self, mut predicate: impl FnMut(&dyn Adapter) -> bool) {
-        let removing: Vec<*const dyn Adapter> = self
+        // Identity by thin data pointer: two adapters are "the same" iff their
+        // object address matches (metadata/vtable is ignored).
+        let removing: Vec<*const ()> = self
             .adapters
             .iter()
             .filter(|a| predicate(a.as_ref()))
-            .map(|a| a.as_ref() as *const dyn Adapter)
+            .map(|a| a.as_ref() as *const dyn Adapter as *const ())
             .collect();
         if removing.is_empty() {
             return;
@@ -194,7 +196,7 @@ impl Notifier {
                 false,
             );
             for a in &mut self.adapters {
-                let ptr = a.as_ref() as *const dyn Adapter;
+                let ptr = a.as_ref() as *const dyn Adapter as *const ();
                 if !removing.contains(&ptr) {
                     a.notify_changed(&evt);
                 }
@@ -206,13 +208,13 @@ impl Notifier {
             if let Some(a) = self
                 .adapters
                 .iter_mut()
-                .find(|a| (a.as_ref() as *const dyn Adapter) == *ptr)
+                .find(|a| (a.as_ref() as *const dyn Adapter as *const ()) == *ptr)
             {
                 a.set_target(None);
             }
         }
         self.adapters
-            .retain(|a| !removing.contains(&(a.as_ref() as *const dyn Adapter)));
+            .retain(|a| !removing.contains(&(a.as_ref() as *const dyn Adapter as *const ())));
     }
 
     /// The adapters (EMF `eAdapters`).
@@ -351,6 +353,7 @@ fn obj_key(v: &Val) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::value::ObjectRef;
     use std::cell::RefCell;
     use std::rc::Rc;
 

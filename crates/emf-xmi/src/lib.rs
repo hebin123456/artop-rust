@@ -13,7 +13,11 @@ pub mod options;
 pub mod parser;
 pub mod saver;
 pub mod xmi_resource;
+pub mod xmi_resource_factory;
 pub mod xml_escape;
+
+pub use xmi_resource::XMIResource;
+pub use xmi_resource_factory::XMIResourceFactory;
 
 pub mod xml_base_handler {
     //! Port target: C++ source unit for `xml_base_handler`.
@@ -60,14 +64,6 @@ pub mod xmi_loader {
     /// Placeholder marker so the module compiles until the real port lands.
     pub fn api_surface() -> &'static str {
         "emf-xmi::xmi_loader"
-    }
-}
-
-pub mod xmi_resource_factory {
-    //! Port target: C++ source unit for `xmi_resource_factory`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-xmi::xmi_resource_factory"
     }
 }
 

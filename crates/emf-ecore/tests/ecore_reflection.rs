@@ -361,7 +361,6 @@ fn eclass_get_all_generic_super_types_transitive() {
     // C++ 仅验证不崩且 size >= 0；Rust 简化为 super-types 闭包。
     let reg = store_library_registry();
     let library = reg.find_class("Library").unwrap();
-    assert!(library.e_all_super_types(&reg).len() >= 0);
     assert_eq!(library.e_all_super_types(&reg).len(), 1);
 }
 
@@ -596,9 +595,9 @@ fn datatype_eboolean_from_to() {
 #[test]
 fn datatype_edouble_from_to() {
     let f = EFactory::new();
-    let v = f.create_from_string("EDouble", "3.14");
-    assert_eq!(v, Val::Double(3.14));
-    assert_eq!(f.convert_to_string("EDouble", &v), "3.14");
+    let v = f.create_from_string("EDouble", "3.5");
+    assert_eq!(v, Val::Double(3.5));
+    assert_eq!(f.convert_to_string("EDouble", &v), "3.5");
 }
 
 #[test]

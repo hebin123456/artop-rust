@@ -11,7 +11,7 @@
 //! Being part of the generic EMF XMI layer it has no knowledge of any domain
 //! metamodel; the registry drives all class/feature resolution.
 
-use emf_common::resource::Resource;
+use emf_common::resource::{Resource, ResourceHandle};
 use emf_common::uri::Uri;
 use emf_common::value::ObjectRef;
 use emf_ecore::PackageRegistry;
@@ -120,6 +120,39 @@ impl XMIResource {
         let text = std::fs::read_to_string(&path)
             .map_err(|e| format!("Cannot open file: {} ({e})", path))?;
         self.load_from_string(&text)
+    }
+}
+
+/// Present an [`XMIResource`] through the abstract [`ResourceHandle`] surface so a
+/// [`ResourceSet`] can hold it alongside other resource kinds and load it on
+/// demand (EMF `Resource` / `ResourceSet.getResource(uri, loadOnDemand)`).
+impl ResourceHandle for XMIResource {
+    fn uri(&self) -> &Uri {
+        self.resource.uri()
+    }
+    fn is_loaded(&self) -> bool {
+        self.resource.is_loaded()
+    }
+    fn set_loaded(&mut self, loaded: bool) {
+        self.resource.set_loaded(loaded);
+    }
+    fn contents(&self) -> &[ObjectRef] {
+        self.resource.contents()
+    }
+    fn set_contents(&mut self, contents: Vec<ObjectRef>) {
+        self.resource.set_contents(contents);
+    }
+    fn load(&mut self) -> Result<(), String> {
+        self.load()
+    }
+    fn save(&mut self) -> Result<(), String> {
+        self.save()
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 

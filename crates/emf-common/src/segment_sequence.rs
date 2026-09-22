@@ -213,16 +213,14 @@ impl SegmentSequenceBuilder {
         self.strings.reverse();
         self
     }
-
-    /// Semi-joined rendering of the appended strings.
-    pub fn to_string(&self) -> String {
-        self.strings.join(&self.delimiter)
-    }
 }
 
 impl std::fmt::Display for SegmentSequenceBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.to_string())
+        // Semi-joined rendering of the appended strings. Implemented directly
+        // in `Display` (rather than an inherent `to_string`) so it does not
+        // shadow the blanket `ToString` impl.
+        f.write_str(&self.strings.join(&self.delimiter))
     }
 }
 

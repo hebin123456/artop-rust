@@ -64,6 +64,8 @@ name = "emf-ecore-codegen"
 version = "0.1.0"
 dependencies = [
  "emf-common",
+ "emf-ecore",
+ "emf-xmi",
 ]
 
 [[package]]

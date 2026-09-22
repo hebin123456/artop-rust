@@ -55,8 +55,8 @@ examples/
 | `emf-ecore` | ✅ 工作 | EClass / EStructuralFeature / EAttribute / EReference / EOperation / EParameter / EPackage / EFactory / EEnum / EDataType / DynamicEObject / EcorePackage / FeatureID 常量 |
 | `emf-artop/autosar448-model` | ✅ 工作 | 生成的 AUTOSAR 4.4.8 注册表 + 反射查询（eAllFeatures / isSuperTypeOf / eGet） |
 | `emf-ecore-util` | ⬜ 骨架 | EcoreUtil / Copier / EMap / validator 等 |
-| `emf-ecore-codegen` | ⬜ 骨架 | GenModel → 代码生成 |
-| `emf-xmi` | 🟡 进行中 | saver + loader（`DynamicEObject` ↔ `.xmi`，含 roundtrip / href / XMI wrapper）已实现并测试通过；handler（XMILoadImpl/XMIHelper 接口）待做 |
+| `emf-ecore-codegen` | ✅ 工作 | GenModel→代码生成：ecore loader（XMI→`EPackage`）+ TypeMapper + generator（struct / `match` 反射表 / `register_package`），生成的 crate 可脱离 `.ecore` 独立编译运行 |
+| `emf-xmi` | ✅ 工作 | saver + loader + 真实 `XMIResource` + `ResourceSet` 按需加载集成（`ResourceHandle` / `ResourceFactory` / `XMIResourceFactory`）已实现并测试通过；`XMILoadImpl` / `XMIHelper` 接口待做 |
 | `emf-xsd` | ⬜ 骨架 | XSD 元模型 |
 | `emf-edit` | ⬜ 骨架 | 命令 / 编辑域 |
 | `emf-compare` | ⬜ 骨架 | match + diff + merge |
@@ -113,7 +113,7 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 已完成：emf-common/ecore 核心、EcoreUtil/Copier、XMI saver+loader、Resource/XMI 持久化集成、一致性测试 193 组中 188 条映射 PASS（含 command 模块 / NotifyingList / SegmentSequence / UniqueEList / ENotifier / EAdapter）；一致性框架已多 crate 化并建立 emf-ecore oracle（153 条），映射 62 条 PASS。
 
 1. 扩展 oracle 到 emf-xmi 的 C++ tests 逐模块收敛；继续补 emf-ecore 未映射的 91 条（EGenericType / EInvoke / 指针身份类）。
-2. `emf-xmi` handler 落地：`XMILoadImpl` / `XMIHelper` / `XMIResourceFactory`，把 `XMIResource` 挂进 `ResourceSet`（`getResource` 按需加载）。
+2. `emf-xmi` 进一步落地：`XMILoadImpl` / `XMIHelper` 接口（`XMIResourceFactory` + `ResourceSet.getResource` 按需加载已在本轮完成）。
 3. `emf-ecore-util` 剩余：Adapter / ECrossReferenceAdapter / containment 遍历到 `all_contents` 的流式实现。
 4. `artop-runtime`：AUTOSAR 序列化/反序列化（届时才引入 artop 相关内容）。
 
@@ -144,6 +144,13 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - 新增 `build_ecore_oracle.sh`：编译并运行 `emf-ecore` 的 C++ 单测二进制（链接 emf-common 符号），产出 `build/ecore_oracle.json`，当前 **153 条、0 失败**。
   - 新增集成测试：`crates/emf-ecore/tests/ecore_reflection.rs`（移植 EClassImpl / ETypedElementImpl / EPackageImpl / EcorePackage / DataTypeUtil，39 条）+ `crates/emf-ecore/tests/dynamic_eobject.rs`（移植 DynamicEObjectImpl + BasicEObject 动态部分，27 条）。
   - 映射：新增 `cases_ecore.tsv`，**62 条全部 PASS**，0 REGRESSION。未映射 91 条多为指针身份 / `nullptr` / EGenericType / EInvoke 等 Rust 类型系统暂无法如实表达者，保留为 PENDING。
+
+- **Milestone 6 — XMIResource 挂进 ResourceSet + 静态建模代码生成完善（本轮新增）**：
+  - `emf-common::resource` 增加序列化器无关的抽象：`ResourceHandle` trait（uri/loaded/contents/load/save/下转型）与 `ResourceFactory` trait；`ResourceSet` 改持 `Box<dyn ResourceHandle>` + 可选工厂，新增 EMF 对齐的 `get_resource(uri, loadOnDemand)` 按需创建并加载、`create_resource` 走工厂（无工厂退化为内存 `Resource`）。单元测试覆盖工厂分派、按需加载只触发一次、缺失 URI 不创建。
+  - `emf-xmi` 落地 `XMIResourceFactory`（持有 `PackageRegistry`）并为 `XMIResource` 实现 `ResourceHandle`，把 XMI 真正挂进 `ResourceSet`；`lib.rs` 移除 `xmi_resource_factory` 占位模块并导出真实工厂。
+  - 端到端（`emf-xmi/tests/resource_set_xmi.rs`）：用 `ResourceSet`+工厂落到真实 `.xmi` 文件，换一个 set 用 `getResource(uri, true)` 按需读回，验证类名 / 属性 / containment 子对象图一致。
+  - `emf-ecore-codegen` 完善：多值属性 `e_set` 所需的 `scalar_as_i64` helper 移入生成源码（保证含多值属性的模型也能脱离 `.ecore` 编译）；端到端测试确认生成 crate 可 `cargo run` 跑通反射 API。
+  - 顺带修复 clippy 质量门禁告警：适配器身份比较改用薄数据指针、移除 `SegmentSequenceBuilder` 固有 `to_string`（改经 `Display`）、清理 `absurd_extreme_comparisons` / `approx_constant` 等测试 lint。全工作区 fmt / clippy / test / release 全绿，一致性 193 条全 PASS（188 等价 + 5 语义无法表达）。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 

@@ -192,10 +192,110 @@ impl Resource {
     }
 }
 
-/// A `ResourceSet` owns a shared URI converter and a set of resources.
+/// A load/save-capable resource handle. This is the abstract persistence unit a
+/// [`ResourceSet`] can create (via a [`ResourceFactory`]) and load on demand.
+///
+/// `emf-common` stays serializer-agnostic: it defines the *surface* here but
+/// never knows how a concrete implementation persists. A serializing crate
+/// (e.g. `emf-xmi`'s `XMIResourceFactory`) implements the trait and hands a
+/// factory to the set.
+pub trait ResourceHandle: std::fmt::Debug {
+    /// The resource URI.
+    fn uri(&self) -> &Uri;
+    /// Whether the resource has been loaded.
+    fn is_loaded(&self) -> bool;
+    /// Mark the resource loaded/unloaded.
+    fn set_loaded(&mut self, loaded: bool);
+    /// Root objects.
+    fn contents(&self) -> &[ObjectRef];
+    /// Replace the root objects.
+    fn set_contents(&mut self, contents: Vec<ObjectRef>);
+    /// Load contents from the resource URI.
+    fn load(&mut self) -> Result<(), String>;
+    /// Persist contents to the resource URI.
+    fn save(&mut self) -> Result<(), String>;
+    /// Downcast to the concrete type.
+    fn as_any(&self) -> &dyn std::any::Any;
+    /// Mutable downcast to the concrete type.
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+}
+
+/// Creates resources on demand for a [`ResourceSet`]. Mirrors EMF
+/// `Resource.Factory` / `Resource.Factory.Registry` (the canonical
+/// implementation is `emf-xmi::XMIResourceFactory`); the set falls back to
+/// plain in-memory [`Resource`]s when no factory is registered.
+pub trait ResourceFactory: std::fmt::Debug {
+    /// Build a resource bound to `uri`.
+    fn create(&self, uri: Uri) -> Box<dyn ResourceHandle>;
+}
+
+impl ResourceHandle for Resource {
+    fn uri(&self) -> &Uri {
+        &self.uri
+    }
+    fn is_loaded(&self) -> bool {
+        self.loaded
+    }
+    fn set_loaded(&mut self, loaded: bool) {
+        self.loaded = loaded;
+    }
+    fn contents(&self) -> &[ObjectRef] {
+        &self.contents
+    }
+    fn set_contents(&mut self, contents: Vec<ObjectRef>) {
+        self.contents = contents;
+        self.modified = true;
+    }
+    fn load(&mut self) -> Result<(), String> {
+        if self.uri.is_file() {
+            let path = self.uri.to_file_path();
+            if path.is_empty() {
+                return Err("cannot load from empty file path".to_string());
+            }
+            let text = std::fs::read_to_string(&path)
+                .map_err(|e| format!("Cannot open file: {} ({e})", path))?;
+            self.load_from_string(&text);
+            self.loaded = true;
+            Ok(())
+        } else {
+            Err(format!(
+                "no stream available for scheme '{}'",
+                self.uri.scheme()
+            ))
+        }
+    }
+    fn save(&mut self) -> Result<(), String> {
+        if self.uri.is_file() {
+            let path = self.uri.to_file_path();
+            if path.is_empty() {
+                return Err("cannot save to empty file path".to_string());
+            }
+            let text = self.to_xmi_string();
+            std::fs::write(&path, text)
+                .map_err(|e| format!("Cannot write file: {} ({e})", path))?;
+            self.modified = false;
+            Ok(())
+        } else {
+            Err(format!(
+                "no stream available for scheme '{}'",
+                self.uri.scheme()
+            ))
+        }
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+/// A `ResourceSet` owns resources and produces new ones on demand from a
+/// [`ResourceFactory`] (EMF `ResourceSet` + `Resource.Factory.Registry`).
 #[derive(Debug, Default)]
 pub struct ResourceSet {
-    resources: Vec<Resource>,
+    resources: Vec<Box<dyn ResourceHandle>>,
+    factory: Option<Box<dyn ResourceFactory>>,
 }
 
 impl ResourceSet {
@@ -204,20 +304,65 @@ impl ResourceSet {
         Self::default()
     }
 
-    /// Create a resource at the URI, adding it to the set.
-    pub fn create_resource(&mut self, uri: Uri) -> &mut Resource {
-        self.resources.push(Resource::new(uri));
-        self.resources.last_mut().unwrap()
+    /// Register the factory used to produce resources for URIs the set does
+    /// not already hold (EMF `ResourceSet.setResourceFactoryRegistry`).
+    pub fn set_resource_factory(&mut self, factory: Box<dyn ResourceFactory>) {
+        self.factory = Some(factory);
     }
 
-    /// All resources.
-    pub fn resources(&self) -> &[Resource] {
+    /// The registered factory, if any.
+    pub fn resource_factory(&self) -> Option<&dyn ResourceFactory> {
+        self.factory.as_deref()
+    }
+
+    /// All resources held by the set, in creation order.
+    pub fn resources(&self) -> &[Box<dyn ResourceHandle>] {
         &self.resources
     }
 
-    /// Look up a resource by URI.
-    pub fn get_resource(&self, uri: &Uri) -> Option<&Resource> {
-        self.resources.iter().find(|r| &r.uri == uri)
+    /// EMF `createResource(uri)`: create a resource for `uri` (via the factory,
+    /// falling back to an in-memory [`Resource`]) and add it to the set.
+    pub fn create_resource(&mut self, uri: Uri) -> &mut Box<dyn ResourceHandle> {
+        self.resources.push(self.make(uri));
+        self.resources.last_mut().unwrap()
+    }
+
+    /// EMF `getResource(uri, loadOnDemand)`: return the resource at `uri`,
+    /// loading it first when `load_on_demand` and it is not yet loaded. When
+    /// the URI is absent and `load_on_demand`, the factory creates it, adds it
+    /// to the set and loads it. A load failure surfaces as `Err`.
+    pub fn get_resource(
+        &mut self,
+        uri: &Uri,
+        load_on_demand: bool,
+    ) -> Result<Option<&Box<dyn ResourceHandle>>, String> {
+        let idx = self.resources.iter().position(|r| r.uri() == uri);
+        match idx {
+            Some(i) => {
+                if load_on_demand && !self.resources[i].is_loaded() {
+                    self.resources[i].load()?;
+                }
+                Ok(Some(&self.resources[i]))
+            }
+            None => {
+                if !load_on_demand {
+                    return Ok(None);
+                }
+                let mut created = self.make(uri.clone());
+                created.load()?;
+                self.resources.push(created);
+                Ok(self.resources.last())
+            }
+        }
+    }
+
+    /// Produce a resource for `uri` via the factory, or a plain in-memory
+    /// [`Resource`] when none is registered.
+    fn make(&self, uri: Uri) -> Box<dyn ResourceHandle> {
+        match &self.factory {
+            Some(f) => f.create(uri),
+            None => Box::new(Resource::new(uri)),
+        }
     }
 }
 
@@ -312,8 +457,127 @@ mod tests {
         set.create_resource(Uri::parse("file:///r1.xmi"));
         set.create_resource(Uri::parse("file:///r2.xmi"));
         assert_eq!(set.resources().len(), 2);
-        assert!(set.get_resource(&Uri::parse("file:///r1.xmi")).is_some());
-        assert!(set.get_resource(&Uri::parse("file:///nope.xmi")).is_none());
+        assert!(set
+            .get_resource(&Uri::parse("file:///r1.xmi"), false)
+            .unwrap()
+            .is_some());
+        assert!(set
+            .get_resource(&Uri::parse("file:///nope.xmi"), false)
+            .unwrap()
+            .is_none());
+    }
+
+    /// A handle whose `load()` merely records the call and flips `is_loaded`,
+    /// so we can verify factory dispatch and load-on-demand without touching
+    /// the file system.
+    #[derive(Debug)]
+    struct DummyResource {
+        uri: Uri,
+        loaded: bool,
+        contents: Vec<ObjectRef>,
+        loads: usize,
+    }
+
+    impl ResourceHandle for DummyResource {
+        fn uri(&self) -> &Uri {
+            &self.uri
+        }
+        fn is_loaded(&self) -> bool {
+            self.loaded
+        }
+        fn set_loaded(&mut self, loaded: bool) {
+            self.loaded = loaded;
+        }
+        fn contents(&self) -> &[ObjectRef] {
+            &self.contents
+        }
+        fn set_contents(&mut self, contents: Vec<ObjectRef>) {
+            self.contents = contents;
+        }
+        fn load(&mut self) -> Result<(), String> {
+            self.loaded = true;
+            self.loads += 1;
+            Ok(())
+        }
+        fn save(&mut self) -> Result<(), String> {
+            Ok(())
+        }
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+        fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
+    }
+
+    #[derive(Debug)]
+    struct DummyFactory;
+
+    impl ResourceFactory for DummyFactory {
+        fn create(&self, uri: Uri) -> Box<dyn ResourceHandle> {
+            Box::new(DummyResource {
+                uri,
+                loaded: false,
+                contents: Vec::new(),
+                loads: 0,
+            })
+        }
+    }
+
+    #[test]
+    fn resource_set_uses_factory_on_create() {
+        let mut set = ResourceSet::new();
+        set.set_resource_factory(Box::new(DummyFactory));
+        let r = set.create_resource(Uri::parse("file:///d.xmi"));
+        let dummy = r.as_any().downcast_ref::<DummyResource>().unwrap();
+        assert!(!dummy.is_loaded());
+    }
+
+    #[test]
+    fn resource_set_loads_on_demand_via_factory() {
+        let mut set = ResourceSet::new();
+        set.set_resource_factory(Box::new(DummyFactory));
+        let d = Uri::parse("file:///d.xmi");
+
+        // Absent URI + loadOnDemand => factory creates it and load() runs once.
+        {
+            let got = set
+                .get_resource(&d, true)
+                .unwrap()
+                .expect("created on demand");
+            assert!(got.is_loaded());
+        } // release the mutable borrow taken by get_resource
+        assert_eq!(set.resources().len(), 1);
+        {
+            let dummy = set.resources()[0]
+                .as_any()
+                .downcast_ref::<DummyResource>()
+                .unwrap();
+            assert_eq!(dummy.loads, 1);
+        }
+
+        // Re-reading returns the same resource without a second load.
+        {
+            let _again = set
+                .get_resource(&d, true)
+                .unwrap()
+                .expect("already present");
+        }
+        assert_eq!(set.resources().len(), 1);
+        {
+            let dummy = set.resources()[0]
+                .as_any()
+                .downcast_ref::<DummyResource>()
+                .unwrap();
+            assert_eq!(dummy.loads, 1);
+        }
+
+        // loadOnDemand=false on an absent URI returns None without creating.
+        assert!(set
+            .get_resource(&Uri::parse("file:///absent.xmi"), false)
+            .unwrap()
+            .is_none());
+        assert_eq!(set.resources().len(), 1);
     }
 
     #[test]
