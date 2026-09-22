@@ -7,11 +7,12 @@
 按 `docs/EMF_PARITY_GATE.md`：**底座全部 ✅ 之前，严禁 artop。**
 
 ## emf-common（基础，最优先）
+> 已移植核心数据结构：`cpp_parity_common_core.rs`（25 通过 + 1 忽略）。EList / BasicEMap 全对齐；UniqueEList 语义用 BasicEList+add_unique 对齐，唯 `set` 时重复值拒绝（C++ 抛异常）记为**待补**：Rust 需专用 `UniqueEList` 类型。
 | C++ 测试 | Rust 状态 |
 |---|---|
-| EListTests.cpp | ⬜ |
-| UniqueEListTests.cpp | ⬜ |
-| BasicEMapTests.cpp | ⬜ |
+| EListTests.cpp | ✅ cpp_parity_common_core |
+| UniqueEListTests.cpp | 🔶 基本对齐；`set` 重复拒绝待补 |
+| BasicEMapTests.cpp | ✅ cpp_parity_common_core |
 | NotifyingListTests.cpp | ⬜ |
 | SegmentSequenceTests.cpp | ⬜ |
 | ENotifierTests.cpp | ⬜ |
