@@ -67,6 +67,10 @@ python3 tools/gen-autosar448-model.py path/to/autosar448.ecore \
 
 MIT (matching `artop-cpp`).
 
+## Progress
+
+Detailed, per-module port progress lives in [`docs/PROGRESS.md`](docs/PROGRESS.md).
+
 ## Module map / port tracking
 
 Each `artop-*` *skeleton* crate contains one placeholder module per C++
