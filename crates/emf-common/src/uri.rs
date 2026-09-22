@@ -550,4 +550,19 @@ mod tests {
         assert!(!u.is_file());
         assert!(!u.is_platform());
     }
+
+    #[test]
+    fn platform_uri_from_create_platform() {
+        let u = Uri::create_platform_uri("/resource/foo");
+        assert!(u.is_platform());
+        assert_eq!(u.scheme(), "platform");
+        assert_eq!(u.path(), "/resource/foo");
+    }
+
+    #[test]
+    fn plain_file_uri_is_not_archive() {
+        let u = Uri::parse("file://host/path");
+        assert!(u.is_file());
+        assert!(!u.is_archive());
+    }
 }

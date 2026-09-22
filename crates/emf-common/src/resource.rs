@@ -48,6 +48,12 @@ impl Resource {
         self.contents.first()
     }
 
+    /// Set the single root object (EMF `Resource.setRoot`).
+    pub fn set_root(&mut self, obj: ObjectRef) {
+        self.contents = vec![obj];
+        self.modified = true;
+    }
+
     /// Append a root object.
     pub fn add_to_contents(&mut self, obj: ObjectRef) {
         self.contents.push(obj);
@@ -257,6 +263,16 @@ mod tests {
         assert!(r.errors().is_empty());
         assert!(r.warnings().is_empty());
         assert!(r.uri().to_string().is_empty() || r.uri().to_string() == "");
+    }
+
+    #[test]
+    fn set_root_returns_same() {
+        let mut r = Resource::new(Uri::parse("file:///a.xmi"));
+        let rc: ObjectRef = Rc::new(RefCell::new(R {}));
+        r.set_root(Rc::clone(&rc));
+        assert_eq!(r.contents().len(), 1);
+        let got = r.root().expect("root set");
+        assert!(Rc::ptr_eq(got, &rc));
     }
 
     #[test]

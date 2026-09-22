@@ -13,6 +13,7 @@
 //! Inheritance stays *data* (see `autosar448-model`), following the established
 //! porting strategy in this workspace.
 
+pub mod command;
 pub mod diagnostic;
 pub mod elist;
 pub mod emap;

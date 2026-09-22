@@ -108,6 +108,39 @@ impl SegmentSequence {
         s.extend(other.segments.iter().cloned());
         intern(&self.delimiter, s)
     }
+
+    /// Append multiple segments, each split on the delimiter, returning a new sequence.
+    pub fn append_segments(&self, segments: &[&str]) -> SegmentSequence {
+        let mut s = self.segments.clone();
+        if self.delimiter.is_empty() {
+            for seg in segments {
+                if !seg.is_empty() {
+                    s.push(seg.to_string());
+                }
+            }
+        } else {
+            for seg in segments {
+                s.extend(split_segments(&self.delimiter, seg));
+            }
+        }
+        intern(&self.delimiter, s)
+    }
+
+    /// Sub-range of segments, half-open `[from, to)` as a view.
+    pub fn sub_segments(&self, from: usize, to: usize) -> &[String] {
+        &self.segments[from..to]
+    }
+
+    /// Character at `index` in the joined representation.
+    pub fn char_at(&self, index: usize) -> Option<char> {
+        self.to_string().chars().nth(index)
+    }
+
+    /// Sub-sequence of the joined representation, `[from, to)` as a string.
+    pub fn sub_sequence(&self, from: usize, to: usize) -> String {
+        let s = self.to_string();
+        s.get(from..to).unwrap_or("").to_string()
+    }
 }
 
 impl std::fmt::Display for SegmentSequence {
@@ -173,6 +206,23 @@ impl SegmentSequenceBuilder {
     /// Build and intern.
     pub fn build(self) -> SegmentSequence {
         SegmentSequence::create_from_segments(&self.delimiter, self.strings)
+    }
+
+    /// Reverse the order of appended strings.
+    pub fn reverse(mut self) -> Self {
+        self.strings.reverse();
+        self
+    }
+
+    /// Semi-joined rendering of the appended strings.
+    pub fn to_string(&self) -> String {
+        self.strings.join(&self.delimiter)
+    }
+}
+
+impl std::fmt::Display for SegmentSequenceBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.to_string())
     }
 }
 
@@ -278,5 +328,141 @@ mod tests {
         let s2 = SegmentSequence::create("/", "a/b/c");
         // Interned: equal sequences are the same value (structural eq).
         assert_eq!(s1, s2);
+    }
+
+    #[test]
+    fn append_chain() {
+        let seq = SegmentSequence::empty("/");
+        let seq = seq.append_segment("a").append_segment("b").append_segment("c");
+        assert_eq!(seq.segment_count(), 3);
+        assert_eq!(seq.to_string(), "a/b/c");
+    }
+
+    #[test]
+    fn append_different_delimiter() {
+        let a = SegmentSequence::create("/", "a/b");
+        let b = SegmentSequence::create(".", "c.d");
+        let c = a.append(&b);
+        // a's delimiter is "/"; b's segments have no "/", so no extra split -> a/b/c/d
+        assert_eq!(c.delimiter(), "/");
+        assert_eq!(c.to_string(), "a/b/c/d");
+    }
+
+    #[test]
+    fn append_segment_sequence() {
+        let a = SegmentSequence::create("/", "a/b");
+        let b = SegmentSequence::create("/", "c/d");
+        let c = a.append(&b);
+        assert_eq!(c.segment_count(), 4);
+        assert_eq!(c.to_string(), "a/b/c/d");
+    }
+
+    #[test]
+    fn append_vector() {
+        let seq = SegmentSequence::create("/", "a");
+        let seq2 = seq.append_segments(&["b", "c", "d"]);
+        assert_eq!(seq2.segment_count(), 4);
+        assert_eq!(seq2.to_string(), "a/b/c/d");
+    }
+
+    #[test]
+    fn builder_append_char() {
+        let b = SegmentSequenceBuilder::new(".");
+        let b = b.append('a').append('b').append('c');
+        assert_eq!(b.to_string(), "a.b.c");
+    }
+
+    #[test]
+    fn builder_basic() {
+        let b = SegmentSequenceBuilder::new("/");
+        let seq = b.append("a").append("b").append("c").build();
+        assert_eq!(seq.segment_count(), 3);
+        assert_eq!(seq.to_string(), "a/b/c");
+    }
+
+    #[test]
+    fn builder_reverse() {
+        let b = SegmentSequenceBuilder::new("/");
+        let seq = b.append("a").append("b").append("c").reverse().build();
+        assert_eq!(seq.to_string(), "c/b/a");
+    }
+
+    #[test]
+    fn char_sequence() {
+        let seq = SegmentSequence::create("/", "foo/bar");
+        assert_eq!(seq.char_at(0), Some('f'));
+        assert_eq!(seq.char_at(3), Some('/'));
+        assert_eq!(seq.char_at(4), Some('b'));
+        assert_eq!(seq.char_at(100), None);
+        assert_eq!(seq.sub_sequence(0, 3), "foo");
+        assert_eq!(seq.sub_sequence(4, 7), "bar");
+    }
+
+    #[test]
+    fn create_empty_has_zero_count() {
+        let seq = SegmentSequence::empty("/");
+        assert_eq!(seq.segment_count(), 0);
+        assert_eq!(seq.to_string(), "");
+        assert_eq!(seq.length(), 0);
+    }
+
+    #[test]
+    fn create_split_segment() {
+        let seq = SegmentSequence::create_from_segments("/", vec!["foo/bar".into(), "baz".into()]);
+        assert_eq!(seq.segment_count(), 3);
+        assert_eq!(seq.to_string(), "foo/bar/baz");
+    }
+
+    #[test]
+    fn create_vararg() {
+        let seq = SegmentSequence::create_from_segments("/", vec!["alpha".into(), "beta".into(), "gamma".into()]);
+        assert_eq!(seq.segment_count(), 3);
+        assert_eq!(seq.segment(1), Some("beta"));
+        assert_eq!(seq.to_string(), "alpha/beta/gamma");
+    }
+
+    #[test]
+    fn pool_intern() {
+        let a = SegmentSequence::create("/", "foo/bar");
+        let b = SegmentSequence::create("/", "foo/bar");
+        // Interned pool: identical (delimiter, segments) yield the same structural value.
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn segments_copy() {
+        let seq = SegmentSequence::create("/", "x/y/z");
+        let segs: Vec<String> = seq.segments().to_vec();
+        assert_eq!(segs.len(), 3);
+        assert_eq!(segs[0], "x");
+        assert_eq!(segs[1], "y");
+        assert_eq!(segs[2], "z");
+    }
+
+    #[test]
+    fn segments_list_view() {
+        let seq = SegmentSequence::create("/", "p/q/r");
+        let list = seq.segments();
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0], "p");
+        assert_eq!(list[2], "r");
+    }
+
+    #[test]
+    fn sub_segments() {
+        let seq = SegmentSequence::create("/", "a/b/c/d");
+        let sub = seq.sub_segments(1, 3);
+        assert_eq!(sub.len(), 2);
+        assert_eq!(sub[0], "b");
+        assert_eq!(sub[1], "c");
+    }
+
+    #[test]
+    fn sub_segments_list_view() {
+        let seq = SegmentSequence::create("/", "a/b/c/d");
+        let list = seq.sub_segments(1, 3);
+        assert_eq!(list.len(), 2);
+        assert_eq!(list.get(0).map(String::as_str), Some("b"));
+        assert_eq!(list.get(1).map(String::as_str), Some("c"));
     }
 }

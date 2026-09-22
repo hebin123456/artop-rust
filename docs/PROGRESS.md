@@ -92,7 +92,7 @@ oracle，跑参考结果；Rust 侧跑同名/对应测试，逐条比对。**一
 - oracle：`emf-common` C++ 单测二进制（`EMF_TEST` 迷你框架，无需外部依赖），当前 193 条、0 失败。
 - 脚本：`tools/conformance/build_oracle.sh`（编译并跑 C++ oracle）、
   `compare.py`（跑 Rust 侧并输出 PASS/PENDING/REGRESSION）、`cases.tsv`（C++↔Rust 映射表）。
-- 当前基线：oracle 全量 193 条；已映射 **69** 条全部 `PASS`（URI / EList / UniqueEList / SegmentSequence / BasicEMap / Resource 六组），剩余 124 条 `PENDING`(未映射)，逐个补齐。
+- 当前基线：oracle 全量 193 条；已映射 **188** 条全部 `PASS`，剩余 5 条 `PENDING`(未映射)。尚未映射的 5 条均为 **Rust 类型系统无法如实表达**的语义：`ENotifier_AddAdapter_Duplicate_NotAdded`（Box 所有权无重复身份）、`ENotifier_AddAdapter_Null_Ignored` / `ENotifier_RemoveAdapter_Null_NoChange` / `Resource_AddToContents_NullPointer`（`Box<dyn Adapter>` / `ObjectRef` 无空指针）、`Placeholder`（C++ 空跑测试）。这些在 Rust 中无意义，保留为 PENDING 不失真。
 - 已接入 CI（`conformance` job）：CI 检出 artop-cpp、编译并跑 oracle、再与 Rust 比对。
 
 复用路径：C++ oracle 单测 → `tools/conformance/build`，与 CI 的 `conformance` job 对齐。
@@ -110,13 +110,12 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 ## 7. 下一步（按优先级）
 
-已完成：emf-common/ecore 核心、EcoreUtil/Copier、XMI saver+loader、Resource/XMI 持久化集成、六组一致性测试(69) PASS。
+已完成：emf-common/ecore 核心、EcoreUtil/Copier、XMI saver+loader、Resource/XMI 持久化集成、一致性测试 193 组中 188 条映射 PASS（含 command 模块 / NotifyingList / SegmentSequence / UniqueEList / ENotifier / EAdapter）。
 
-1. 一致性测试映射继续扩展：把剩余 124 条 C++ 单测（URIConverter / ENotifier / EPackage / ...）逐组填进 `cases.tsv`，翻绿。
-2. 扩展 oracle 到 emf-ecore / emf-xmi 的 C++ tests，逐模块收敛。
-3. `emf-xmi` handler 落地：`XMILoadImpl` / `XMIHelper` / `XMIResourceFactory`，把 `XMIResource` 挂进 `ResourceSet`（`getResource` 按需加载）。
-4. `emf-ecore-util` 剩余：Adapter / ECrossReferenceAdapter / containment 遍历到 `all_contents` 的流式实现。
-5. `artop-runtime`：AUTOSAR 序列化/反序列化（届时才引入 artop 相关内容）。
+1. 扩展 oracle 到 emf-ecore / emf-xmi 的 C++ tests，逐模块收敛（e.g. `EPackageRegistryTests`）。
+2. `emf-xmi` handler 落地：`XMILoadImpl` / `XMIHelper` / `XMIResourceFactory`，把 `XMIResource` 挂进 `ResourceSet`（`getResource` 按需加载）。
+3. `emf-ecore-util` 剩余：Adapter / ECrossReferenceAdapter / containment 遍历到 `all_contents` 的流式实现。
+4. `artop-runtime`：AUTOSAR 序列化/反序列化（届时才引入 artop 相关内容）。
 
 ## 8. emf-xmi 实施记录
 
@@ -137,6 +136,8 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - `emf-common::Resource` 补齐 C++ 基类表面：`to_xmi_string`/`save_to_string`、`from_xmi_string`/`load_from_string`（基类空实现，不翻转 `is_loaded`）、`get_eobject`/`get_uri_fragment`、基于 `file:` URI 的 `save()`/`load()`（打不开文件/写不了文件报 `Err`）——使 `Resource_ToXmiString_DelegatesSave` 等 8 条 oracle 测试转 `PASS`。
   - 新增 `Resource::set_contents` / `clear_contents` 以支持反序列化替换根内容。
   - `emf-xmi::xmi_resource`：把占位模块升级为真实 `XMIResource`（对齐 C++ `emf::xmi::XMIResource`）。它承载一个 `emf_common::Resource` + `PackageRegistry`，`save_to_string`/`load_from_string` 真正让 saver/loader 落地，`save()`/`load()` 打通 `file:` URI 落盘。测试覆盖 saver→loader 端到端 roundtrip 与坏 XMI 报错。
+
+- **Milestone 4 — 一致性测试大幅扩展 + command 模块（本轮新增）**：`emf-common` 新增 `src/command.rs`（移植 `org.eclipse.emf.common.command`：`Command` trait / `AbstractCommand` / `CompoundCommand` / `StrictCompoundCommand` / `IdentityCommand` / `UnexecutableCommand` / `CommandWrapper` / `BasicCommandStack` / `AbortExecutionException`，约 49 条测试），并补全 `SegmentSequence`（16）、`UniqueEList`（7）、`NotifyingList`（11，新增派发 ADD/REMOVE/SET/MOVE/ADD_MANY/REMOVE_MANY 的类型）、`ENotifier`/`EAdapter`（target 关联 + 字段保留 + `EObjectImpl_SetEContainer` 反向通知，8）、`Resource`（`set_root`，1）。映射从 69 → **188 PASS**，仅剩 5 条 null/重复身份语义无法在 Rust 表达。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 
