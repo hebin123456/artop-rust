@@ -52,7 +52,8 @@
    loader 侧同步补齐：EEnum literal 缺省 value 按序取值、iD/resolveProxies 属性解析） |
 | XMLHelperTests.cpp | ✅ cpp_parity_xml_helper（32；XMIHelper 工具函数 splitQName/splitHref/stripFragmentSlash、escapeXmlAttr（`& < "`·`\n\r\t`→`&#xA;/&#xD;/&#x9;`·`>`与`'`不转义·非 ASCII→`&#xNNNN;` 小写、mappableLimit 默认 0x7F/passthrough 0x10FFFF）、escapeXmlText（保留 `\n \t`，转义 `\r`）、四个命名空间常量 kEcore·kXmi·kXmi2·kXsi/XMLHelperImpl 命名空间上下文 getURI·getPrefix·getNamespaceURI·pop 清除·嵌套作用域/getXMLEncoding·getJavaEncoding 编码映射/setResource·setNoNamespacePackage·setBaseURI/FeatureKind 常量 1-5 全对齐。
    Rust 新增 `emf_xmi::xmi_helper` 模块并扩展 `XMLHelper` 补齐 resource·base_uri·编码映射与 get_namespace_uri） |
-| XMIResourceFactoryTests.cpp | ⬜ |
+| XMIResourceFactoryTests.cpp | ✅ cpp_parity_xmi_resource_factory（4；registerDefaults 使 .xmi/.ecore 可创建/未知扩展回退 XMIResource（不抛异常）/registerFactory 自定义扩展·大小写不敏感/direct createResource 返回具体 XMIResource 全对齐。
+   Rust 在 `XMIResourceFactory` 补齐静态扩展分派 API：thread_local 扩展注册表·register_defaults·register_factory·create_resource_for·create_resource） |
 | P3_5_GetEObjectByIDHrefTests.cpp | ⬜ |
 | P3_XMLSaveLoadUUIDTests.cpp | ⬜ |
 | resourceset_multi_file_test.cpp | ⬜ |
