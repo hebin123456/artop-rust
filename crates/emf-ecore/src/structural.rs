@@ -49,6 +49,9 @@ pub struct EStructuralFeature {
     ordered: bool,
     /// Whether `unique`.
     unique: bool,
+    /// Whether a containment reference (EMF `EReference.containment`).
+    /// Only meaningful when `kind == Reference`.
+    containment: bool,
 }
 
 impl EStructuralFeature {
@@ -76,6 +79,7 @@ impl EStructuralFeature {
             type_name: None,
             ordered: true,
             unique: true,
+            containment: false,
         }
     }
 
@@ -102,6 +106,14 @@ impl EStructuralFeature {
     /// Whether an attribute or reference.
     pub fn is_reference(&self) -> bool {
         self.kind == FeatureKind::Reference
+    }
+    /// Whether a containment reference (portal to `EReference.containment`).
+    pub fn is_containment(&self) -> bool {
+        self.kind == FeatureKind::Reference && self.containment
+    }
+    /// Set the containment flag (only meaningful for references).
+    pub fn set_containment(&mut self, containment: bool) {
+        self.containment = containment;
     }
     /// The kind.
     pub fn kind(&self) -> FeatureKind {

@@ -121,6 +121,33 @@ impl DynamicEObject {
 
     /// All structural features (own + inherited), using the bound registry or
     /// the global registry as fallback.
+    pub fn all_structural_features(&self) -> Vec<crate::structural::EStructuralFeature> {
+        self.e_all()
+    }
+
+    /// All reference features (own + inherited), for cross-reference / serialization.
+    pub fn all_references(&self) -> Vec<crate::structural::EStructuralFeature> {
+        self.e_all()
+            .into_iter()
+            .filter(|f| f.is_reference())
+            .collect()
+    }
+
+    /// All containment reference features (own + inherited), for serialization.
+    pub fn all_containments(&self) -> Vec<crate::structural::EStructuralFeature> {
+        self.e_all()
+            .into_iter()
+            .filter(|f| f.is_containment())
+            .collect()
+    }
+
+    /// The bound registry used to resolve inheritance, if any.
+    pub fn registry(&self) -> Option<&crate::package::PackageRegistry> {
+        self.registry.as_ref()
+    }
+
+    /// All structural features (own + inherited), using the bound registry or
+    /// the global registry as fallback.
     fn e_all(&self) -> Vec<crate::structural::EStructuralFeature> {
         let registry = self
             .registry

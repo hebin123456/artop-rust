@@ -7,7 +7,14 @@
 
 - 目标：把每个 `emf-*` C++ 模块做成**行为等价**的 Rust crate；artop（AUTOSAR）专属层在此基础上叠加。
 - 反射与继承：用**元数据**（`eSuperTypes` 图 + FeatureID）表达继承，而非 Rust 类型继承。这样 1925 类的 AUTOSAR 元模型也能秒级编译。通用算法通过 `&dyn` / 枚举分派。
-- 行为等价：Rust 与 C++ 用同一套输入（`.arxml`），产出可对比的结果（诊断、序列化、反射查询）。见 §5 的一致性测试框架。
+- 行为等价：Rust 与 C++ 用同一套测试用例，产出可对比的结果（诊断、序列化、反射查询）。见 §5 的一致性测试框架。
+
+### 分层与解耦原则（务必遵守）
+
+- `emf-common` / `emf-ecore` / `emf-xmi` 等 **EMF 底层仓库是通用底座，与 artop / AUTOSAR 完全无关**。它们操作的是 `EObject` / `EPackage` / `DynamicEObject` 反射，不感知"这是不是 AUTOSAR"。
+- 因此**开发任何一个 `emf-*` 模块时，不得牵涉 autosar / arxml / artop-runtime 等任何 artop 独有的内容**——注释、文档、导出符号都保持通用。不要在本层写 `.arxml`。
+- artop 与 AUTOSAR 的关系**只在 `crates/emf-artop/` 下的 artop 专属层里**才建立：`autosar448-model`（元模型）、`artop-runtime`（ARXML 序列化，构建在 `emf-xmi` 之上）、`artop-codegen`。
+- 进度顺序固定：**先把全部 `emf-*` 通用底座做完，此刻完全不碰 artop；等进入 artop 阶段再谈关联**。
 
 ## 2. 目录与命名（已对齐 C++ 布局）
 
@@ -49,7 +56,7 @@ examples/
 | `emf-artop/autosar448-model` | ✅ 工作 | 生成的 AUTOSAR 4.4.8 注册表 + 反射查询（eAllFeatures / isSuperTypeOf / eGet） |
 | `emf-ecore-util` | ⬜ 骨架 | EcoreUtil / Copier / EMap / validator 等 |
 | `emf-ecore-codegen` | ⬜ 骨架 | GenModel → 代码生成 |
-| `emf-xmi` | ⬜ 骨架 | XMI/XML 序列化、代理、UUID（核心，优先推进） |
+| `emf-xmi` | 🟡 进行中 | saver（实例文档序列化 `DynamicEObject` → `.xmi`）已实现并测试通过；loader / handler 待做 |
 | `emf-xsd` | ⬜ 骨架 | XSD 元模型 |
 | `emf-edit` | ⬜ 骨架 | 命令 / 编辑域 |
 | `emf-compare` | ⬜ 骨架 | match + diff + merge |
@@ -103,13 +110,23 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 ## 7. 下一步（按优先级）
 
-1. `emf-xmi`：XMI/XML load/save（解析 `.arxml` 的核心依赖），先做 loader + saver roundtrip + 诊断。
+1. `emf-xmi` loader：XML 解析 → 反射建 `DynamicEObject`；handler（`XMILoadImpl` / `XMIHelper`）随后落地。
 2. 一致性测试映射扩展到 EList / SegmentSequence / EMap / Resource：在 `cases.tsv` 补行，翻绿现有 Rust 行为。
 3. `emf-ecore-util`：Copier / EcoreUtil / eContents / eCrossReferences。
 4. 扩展 oracle 到 emf-ecore / emf-xmi 的 C++ tests，逐模块收敛。
 5. `artop-runtime`：AUTOSAR 序列化/反序列化。
 
-## 8. 提交记录（与本仓库进度相关的近期提交）
+## 8. emf-xmi 实施记录
+
+- **Milestone 1（已完成）— saver**：`emf-xmi` 实例文档序列化器（`XmiSaver` → `save_to_string`）。
+  - 单个根元素裸输出，多个根包在 `<xmi:XMI>` 中；根元素带 `xmi:version` + `xmlns:xmi/xsi/<prefix>`。
+  - 属性 → XML 属性；containment 引用 → 子元素（标签为 feature 名，类型不一致时写 `xsi:type`）；非 containment 引用 → `href`。
+  - 每个对象分配合成 `xmi:id`（`Rc::as_ptr` 作键去重），跨引用用 `//<id>`。
+  - 为此在 `emf-ecore` 扩展元数据：`EStructuralFeature.containment` + `set_containment`；暴露 `DynamicEObject::all_structural_features/all_references/all_containments/registry`；`PackageRegistry::find_package_of_class`。
+  - 测试：`xml_escape`（3）+ `saver` 黄金输出（2），全部通过。
+  - 纯通用 EMF 序列化，未牵涉任何 artop / AUTOSAR 内容。
+
+## 9. 提交记录（与本仓库进度相关的近期提交）
 
 | 提交 | 内容 |
 |---|---|

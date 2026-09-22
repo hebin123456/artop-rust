@@ -214,6 +214,15 @@ impl PackageRegistry {
         let pkg = self.package(pkg_name)?;
         Some(pkg.borrow().classes().to_vec())
     }
+
+    /// Find the package that declares a class by name (for nsPrefix/nsURI in
+    /// XML/XMI serialization). Returns an owned `PackageRef`.
+    pub fn find_package_of_class(&self, cls_name: &str) -> Option<PackageRef> {
+        self.packages
+            .iter()
+            .find(|p| p.borrow().find_class(cls_name).is_some())
+            .cloned()
+    }
 }
 
 impl std::fmt::Display for EPackage {

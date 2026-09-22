@@ -2,9 +2,15 @@
 //!
 //! Port target: C++ `emf-xmi` module of `hebin123456/artop-cpp`.
 //!
-//! This file is *skeleton*: each module below is a compile placeholder that
-//! will be filled with the port of the corresponding C++ translation unit.
-//! Filled by GitHub Actions; see `.github/workflows/ci.yml`.
+//! This is the *generic EMF* XMI/XML layer — a pure common base with no
+//! knowledge of any domain metamodel (see the decoupling principle in
+//! `docs/PROGRESS.md`). The [`saver`] module is a working instance-document
+//! serializer; the remaining `*_handler` / load modules below are placeholders
+//! that will be filled by subsequent milestones.
+
+pub mod options;
+pub mod saver;
+pub mod xml_escape;
 
 pub mod xml_base_handler {
     //! Port target: C++ source unit for `xml_base_handler`.
