@@ -8,7 +8,9 @@
 //! serializer; the remaining `*_handler` / load modules below are placeholders
 //! that will be filled by subsequent milestones.
 
+pub mod loader;
 pub mod options;
+pub mod parser;
 pub mod saver;
 pub mod xml_escape;
 

@@ -56,7 +56,7 @@ examples/
 | `emf-artop/autosar448-model` | ✅ 工作 | 生成的 AUTOSAR 4.4.8 注册表 + 反射查询（eAllFeatures / isSuperTypeOf / eGet） |
 | `emf-ecore-util` | ⬜ 骨架 | EcoreUtil / Copier / EMap / validator 等 |
 | `emf-ecore-codegen` | ⬜ 骨架 | GenModel → 代码生成 |
-| `emf-xmi` | 🟡 进行中 | saver（实例文档序列化 `DynamicEObject` → `.xmi`）已实现并测试通过；loader / handler 待做 |
+| `emf-xmi` | 🟡 进行中 | saver + loader（`DynamicEObject` ↔ `.xmi`，含 roundtrip / href / XMI wrapper）已实现并测试通过；handler（XMILoadImpl/XMIHelper 接口）待做 |
 | `emf-xsd` | ⬜ 骨架 | XSD 元模型 |
 | `emf-edit` | ⬜ 骨架 | 命令 / 编辑域 |
 | `emf-compare` | ⬜ 骨架 | match + diff + merge |
@@ -118,13 +118,18 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 ## 8. emf-xmi 实施记录
 
-- **Milestone 1（已完成）— saver**：`emf-xmi` 实例文档序列化器（`XmiSaver` → `save_to_string`）。
+- **Milestone 1 — saver**：`emf-xmi` 实例文档序列化器（`XmiSaver` → `save_to_string`）。
   - 单个根元素裸输出，多个根包在 `<xmi:XMI>` 中；根元素带 `xmi:version` + `xmlns:xmi/xsi/<prefix>`。
   - 属性 → XML 属性；containment 引用 → 子元素（标签为 feature 名，类型不一致时写 `xsi:type`）；非 containment 引用 → `href`。
   - 每个对象分配合成 `xmi:id`（`Rc::as_ptr` 作键去重），跨引用用 `//<id>`。
   - 为此在 `emf-ecore` 扩展元数据：`EStructuralFeature.containment` + `set_containment`；暴露 `DynamicEObject::all_structural_features/all_references/all_containments/registry`；`PackageRegistry::find_package_of_class`。
-  - 测试：`xml_escape`（3）+ `saver` 黄金输出（2），全部通过。
-  - 纯通用 EMF 序列化，未牵涉任何 artop / AUTOSAR 内容。
+
+- **Milestone 2 — loader（本轮新增）**：`emf-xmi` 反射加载器 `load_from_str`（XML → `DynamicEObject`）。
+  - 自研零依赖 XML 解析器（`parser.rs`）：`XmlNode` 元素树，支持属/子元素/文本/**实体解码**(含数值)、CDATA、注释、PI、DOCTYPE 跳过。
+  - 反射建对象：根元素 `<prefix:Class>` 按 local 定类型；containment 子元素按 feature 声明类型、`xsi:type` 覆盖；属性经 `datatype::from_string` 解析；`xmlns*`/`xmi:id`/`xmi:version`/`xsi:type` 作结构元数据跳过。
+  - `<xmi:XMI>` 文档包装元素解包，其子元素即根。
+  - 本地 `href="//<id>"` 跨引用在全部对象构建后按 `xmi:id` 表解析（`append_reference` 区分 single/many）。
+  - 测试：saver→loader **roundtrip**（类名/属性/containment 结构一致）+ 属性加载 + XMI wrapper + 未知特征容错，全绿。纯通用 EMF，未牵涉任何 artop / AUTOSAR 内容。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 
