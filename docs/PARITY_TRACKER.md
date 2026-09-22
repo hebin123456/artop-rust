@@ -27,7 +27,8 @@
 | BasicEObjectTests.cpp | 🔶 cpp_parity_ecore_basic_eobject（9；eDynamic* 值存储 get/set/is_set/unset+double-feature 全对齐）；
    ⏳ eContainer / eRegisterInverseList·eInverseAdd·Remove / eSet·eUnset 触发 SET/UNSET 通知 / eNotificationRequired —— 需 Rust 层补 EObject 容器字段、inverse-list 注册表、DynamicEObject 作为 Notifier 后才可对照 |
 | DynamicEObjectImplTests.cpp | ⬜ |
-| EClassImplTests.cpp | ⬜ |
+| EClassImplTests.cpp | ✅ cpp_parity_ecore_eclass（12；create/featureID/abstract·interface/get-by-ID/isSuperTypeOf/eAllSuperTypes·Attributes·References·StructuralFeatures·featureCount/ID-marked 全对齐；
+   按签名对 C++ 差异：is_super_type_of 严格不自反（C++ 自反 true）、eAllOperations 继承聚合缺、getEIDAttribute 全层查找缺（Rust id_feature 仅本类）） |
 | EPackageImplTests.cpp | ⬜ |
 | ETypedElementImplTests.cpp | ⬜ |
 | EObjectEInvokeTests.cpp | 🔶 cpp_parity_ecore_einvoke（4；EOperation 元数据 operation_id/get-by-name/count 全对齐）；
