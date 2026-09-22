@@ -1,0 +1,8 @@
+[package]
+name = "arxml-validate"
+version = "0.1.0"
+edition = "2021"
+published = false
+
+[dependencies]
+artop-common = { workspace = true }

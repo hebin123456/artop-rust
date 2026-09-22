@@ -1,0 +1,11 @@
+[package]
+name = "artop-sphinx"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "See README: artop-rust skeleton crate."
+
+[dependencies]
+artop-common = { workspace = true }
+
+[lints.rust]

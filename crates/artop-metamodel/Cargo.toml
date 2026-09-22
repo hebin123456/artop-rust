@@ -1,0 +1,8 @@
+[package]
+name = "artop-metamodel"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Generated AUTOSAR 4.4.8 metamodel registry + EMF reflection algorithms."
+
+[dependencies]
