@@ -56,7 +56,8 @@
    Rust 在 `XMIResourceFactory` 补齐静态扩展分派 API：thread_local 扩展注册表·register_defaults·register_factory·create_resource_for·create_resource） |
 | P3_5_GetEObjectByIDHrefTests.cpp | ✅ cpp_parity_get_eobject_by_id（13；setID/getID/getEObjectByID 双向映射·覆盖旧 id·未知 id→None·未注册→""/xmi:id 加载自动注册/getEObject 三种形态 "?id"·"Name"·"//Name"/空·未知 fragment→None/resolvePositionPath "@feat.index"（含多值 containment 取首个/次个）·无 @ 按名/getIDToEObjectMap 全部注册 id 全对齐。
    Rust 在 `XMIResource` 补齐 id 双向映射（Rc 指针键）+ 片段导航，`loader::load_from_str_with_ids` 导出 xmi:id 表；C++ 走 ecore:EPackage 元模型、Rust 以 DynamicEObject 文档承载同一 ID/href 契约） |
-| P3_XMLSaveLoadUUIDTests.cpp | ⬜ |
+| P3_XMLSaveLoadUUIDTests.cpp | ✅ cpp_parity_xml_save_load_uuid（9；generateUUID v4 格式 36 字符·8-4-4-4-12·第14位'4'·第19位[89ab]/1000 次唯一/ensureID：useUUIDs=false 不分配·true 自动分 UUID·幂等·写入 idToEObjectMap 且可反查/XMLSave 注入自定义实现被 save 调用/XMLoad 注入自定义实现被 load 调用/默认 getXMLSave·getXMLLoad 非空·缓存同一实例·端到端默认保存出真实 XMI 全对齐。
+   Rust 在 `XMIResource` 补齐 v4 UUID 生成（splitmix64+单调序号）、`use_uuids`/`ensure_id`，并新增 `emf_xmi::xml_save_impl` 模块（XMLSave/XMLSaveImpl + XMLLoader/XMLoaderImpl 注入抽象），`save_to_string`/`load_from_string` 经当前激活实现分派） |
 | resourceset_multi_file_test.cpp | ⬜ |
 | E2E_MultiFileEcoreTests.cpp | ⬜ |
 | E2E_ProxyModelTests.cpp | ⬜ |

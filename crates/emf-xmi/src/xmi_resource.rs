@@ -21,9 +21,9 @@ use emf_ecore::PackageRegistry;
 use super::loader::load_from_str_with_ids;
 use super::options::XmiOptions;
 use super::saver::save_to_string;
+use super::xml_save_impl::{XMLLoader, XMLSave, XMLSaveImpl, XMLoaderImpl};
 
 /// An XMI-serializable [`Resource`] bound to a [`PackageRegistry`].
-#[derive(Debug)]
 pub struct XMIResource {
     resource: Resource,
     registry: PackageRegistry,
@@ -32,6 +32,25 @@ pub struct XMIResource {
     id_to_eobject: std::collections::HashMap<String, ObjectRef>,
     /// Object identity (pointer) -> id, for the reverse `get_id` lookup.
     eobject_to_id: std::collections::HashMap<usize, String>,
+    /// Whether [`ensure_id`](Self::ensure_id) auto-assigns a UUID.
+    use_uuids: bool,
+    /// Active serializer (defaults to [`XMLSaveImpl`]; injectable).
+    xml_save: Rc<dyn XMLSave>,
+    /// Active deserializer (defaults to [`XMLoaderImpl`]; injectable).
+    xml_load: Rc<dyn XMLLoader>,
+}
+
+impl std::fmt::Debug for XMIResource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Trait-object handles have no stable Debug, so summarize the durable
+        // shape (uri/loaded/id tables) instead of the plugin handles.
+        f.debug_struct("XMIResource")
+            .field("uri", &self.resource.uri())
+            .field("loaded", &self.resource.is_loaded())
+            .field("contents", &self.resource.contents().len())
+            .field("use_uuids", &self.use_uuids)
+            .finish()
+    }
 }
 
 impl XMIResource {
@@ -43,6 +62,9 @@ impl XMIResource {
             opts: XmiOptions::default(),
             id_to_eobject: std::collections::HashMap::new(),
             eobject_to_id: std::collections::HashMap::new(),
+            use_uuids: false,
+            xml_save: Rc::new(XMLSaveImpl),
+            xml_load: Rc::new(XMLoaderImpl),
         }
     }
 
@@ -54,12 +76,20 @@ impl XMIResource {
             opts: XmiOptions::default(),
             id_to_eobject: std::collections::HashMap::new(),
             eobject_to_id: std::collections::HashMap::new(),
+            use_uuids: false,
+            xml_save: Rc::new(XMLSaveImpl),
+            xml_load: Rc::new(XMLoaderImpl),
         }
     }
 
     /// The serialization options (mutable for customization).
     pub fn options_mut(&mut self) -> &mut XmiOptions {
         &mut self.opts
+    }
+
+    /// The serialization options (read-only).
+    pub fn options(&self) -> &XmiOptions {
+        &self.opts
     }
 
     /// Access the underlying abstract resource.
@@ -77,8 +107,14 @@ impl XMIResource {
         &mut self.resource
     }
 
-    /// Serialize the current contents to an XMI/XML string.
+    /// Serialize the current contents to an XMI/XML string, routed through the
+    /// active [`XMLSave`] (custom or the default real serializer).
     pub fn save_to_string(&self) -> String {
+        self.xml_save.save(self)
+    }
+
+    /// The real XMI serializer (used by the default [`XMLSaveImpl`]).
+    pub(crate) fn save_inner(&self) -> String {
         save_to_string(self.resource.contents(), &self.opts)
     }
 
@@ -87,9 +123,16 @@ impl XMIResource {
         self.save_to_string()
     }
 
-    /// Parse XMI/XML text into the resource, replacing its root contents and
-    /// marking it loaded. Any parse/registry error surfaces as `Err`.
+    /// Parse XMI/XML text into the resource, routed through the active
+    /// [`XMLLoader`] (custom or the default real parser).
     pub fn load_from_string(&mut self, src: &str) -> Result<(), String> {
+        let loader = self.xml_load.clone();
+        loader.load(self, src)
+    }
+
+    /// The real XMI parser into this resource (used by the default
+    /// [`XMLoaderImpl`]); replaces roots, marks it loaded, adopts `xmi:id`s.
+    pub(crate) fn load_inner(&mut self, src: &str) -> Result<(), String> {
         let (roots, id_map) = load_from_str_with_ids(src, &self.registry)?;
         self.resource.set_contents(roots);
         self.resource.set_loaded(true);
@@ -106,6 +149,77 @@ impl XMIResource {
     /// `fromXmiString` — delegate to [`Self::load_from_string`].
     pub fn from_xmi_string(&mut self, src: &str) -> Result<(), String> {
         self.load_from_string(src)
+    }
+
+    // ---- UUID generation & auto-ID (EMF `XMIResource.generateUUID/ensureID`)
+
+    /// Whether [`ensure_id`](Self::ensure_id) auto-assigns UUIDs
+    /// (EMF `useUUIDs`). Defaults to `false`.
+    pub fn use_uuids(&self) -> bool {
+        self.use_uuids
+    }
+
+    /// Set whether [`ensure_id`](Self::ensure_id) auto-assigns UUIDs.
+    pub fn set_use_uuids(&mut self, enabled: bool) {
+        self.use_uuids = enabled;
+    }
+
+    /// Generate a version-4 UUID string: 36 chars, `8-4-4-4-12`, with the
+    /// version nibble `4` at index 14 and variant nibble `{8,9,a,b}` at index
+    /// 19 (EMF `XMIResource.generateUUID`).
+    pub fn generate_uuid(&self) -> String {
+        generate_v4_uuid()
+    }
+
+    /// Ensure `obj` has an id. With `useUUIDs` off, returns `""` and does not
+    /// touch the id maps; with it on, generates a UUID the first time and
+    /// returns the same id on subsequent calls (idempotent, EMF `ensureID`).
+    pub fn ensure_id(&mut self, obj: &ObjectRef) -> String {
+        if !self.use_uuids {
+            return String::new();
+        }
+        let existing = self.get_id(obj);
+        if !existing.is_empty() {
+            return existing;
+        }
+        let id = generate_v4_uuid();
+        self.set_id(obj, id.clone());
+        id
+    }
+
+    // ---- save/load injection (EMF `XMLSave` / `XMLLoad` abstractions) ----
+
+    /// The active [`XMLSave`]; the default [`XMLSaveImpl`] unless replaced.
+    /// The returned handle is cached, so repeated calls yield the same
+    /// instance (mirrors C++ `getXMLSave` lazy caching).
+    pub fn get_xml_save(&self) -> Rc<dyn XMLSave> {
+        self.xml_save.clone()
+    }
+
+    /// Inject a custom serializer (EMF `setXMLSave`).
+    pub fn set_xml_save<S: XMLSave + 'static>(&mut self, save: S) {
+        self.xml_save = Rc::new(save);
+    }
+
+    /// Inject a custom serializer by shared handle.
+    pub fn set_xml_save_rc(&mut self, save: Rc<dyn XMLSave>) {
+        self.xml_save = save;
+    }
+
+    /// The active [`XMLLoader`]; the default [`XMLoaderImpl`] unless replaced.
+    /// Cached so repeated calls yield the same instance.
+    pub fn get_xml_load(&self) -> Rc<dyn XMLLoader> {
+        self.xml_load.clone()
+    }
+
+    /// Inject a custom deserializer (EMF `setXMLLoad`).
+    pub fn set_xml_load<L: XMLLoader + 'static>(&mut self, load: L) {
+        self.xml_load = Rc::new(load);
+    }
+
+    /// Inject a custom deserializer by shared handle.
+    pub fn set_xml_load_rc(&mut self, load: Rc<dyn XMLLoader>) {
+        self.xml_load = load;
     }
 
     // ---- ID / href navigation (EMF `XMIResource.getID/getEObject` etc.) ----
@@ -251,6 +365,47 @@ impl ResourceHandle for XMIResource {
 /// as the reverse `object -> id` map key.
 fn object_key(obj: &ObjectRef) -> usize {
     Rc::as_ptr(obj) as *const () as usize
+}
+
+/// A monotonic source of per-call uniqueness fused into the UUID, so even two
+/// UUIDs generated within the same nanosecond never collide.
+static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// SplitMix64 step: turns one state word into a well-mixed 64-bit value.
+fn splitmix64(x: u64) -> u64 {
+    let mut z = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// Generate a version-4 UUID string (RFC 4122): 36 chars in `8-4-4-4-12`
+/// layout, version nibble `4`, variant nibble in `{8,9,a,b}`.
+fn generate_v4_uuid() -> String {
+    let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0) as u64;
+    let a = splitmix64(nanos ^ (seq.wrapping_mul(2_654_435_761)));
+    let b = splitmix64(seq ^ nanos.rotate_left(17) ^ 0xA24B_AED9_6376_C9C2);
+
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&a.to_be_bytes());
+    bytes[8..].copy_from_slice(&b.to_be_bytes());
+    bytes[6] = (bytes[6] & 0x0F) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3F) | 0x80; // variant 10xx
+
+    let hex: String = bytes.iter().map(|x| format!("{x:02x}")).collect();
+    // Re-assemble with the hyphens: 8-4-4-4-12.
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..32]
+    )
 }
 
 /// Depth-first search for the first reachable object (including roots) whose
