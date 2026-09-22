@@ -3,6 +3,8 @@
 > 本文档跟踪把一个 C++ 实现的 EMF + ARTOP 模型平台（[`hebin123456/artop-cpp`](https://github.com/hebin123456/artop-cpp)）1:1 移植到 Rust 的整体进度。
 > 更新策略：每个可验证的里程碑（模块可用 / 测试全绿 / 提交）在此登记。
 
+> ⛔ **硬门线**：EMF 底座必须全部与 artop-cpp 的 C++ 测试逐条对齐（见 `docs/EMF_PARITY_GATE.md` 与 `docs/PARITY_TRACKER.md`）之后，才有资格动手 artop。底座对齐完成前**严禁任何 artop 相关工作**。
+
 ## 1. 目标与底层思路
 
 - 目标：把每个 `emf-*` C++ 模块做成**行为等价**的 Rust crate；artop（AUTOSAR）专属层在此基础上叠加。
