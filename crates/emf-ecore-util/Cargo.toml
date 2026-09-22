@@ -1,0 +1,12 @@
+[package]
+name = "emf-ecore-util"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "See README: artop-rust skeleton crate."
+
+[dependencies]
+emf-common = { workspace = true }
+emf-ecore = { workspace = true }
+
+[lints.rust]

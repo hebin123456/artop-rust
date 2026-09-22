@@ -10,7 +10,7 @@ ROOT = "/workspace/artop-rust"
 
 # crate -> (package name inside, desc, [module names])
 CRATES = {
-    "artop-ecore-util": (
+    "emf-ecore-util": (
         "Extra Ecore utility layer (port of C++ `emf-ecore-util`).",
         ["extended_metadata","feature_map","conversion_delegate","copier",
          "e_contents_elist","e_cross_reference_adapter","eobject_containment_elist",
@@ -18,47 +18,47 @@ CRATES = {
          "eobject_validator","eobject_inverse_elist","eobject_inverse_resolving_elist",
          "validator_registry","ecore_adapter_factory","ecore_emap","ecore_switch",
          "ecore_util","ecore_validator","equality_helper","feature_map_util"]),
-    "artop-ecore-codegen": (
+    "emf-ecore-codegen": (
         "GenModel-driven code generator (port of C++ `emf-ecore-codegen`).",
         ["genmodel","generator","templates"]),
-    "artop-xmi": (
+    "emf-xmi": (
         "XMI/XML serialization (port of C++ `emf-xmi`).",
         ["xml_base_handler","sax_mi_handler","sax_xml_handler","xmi_handler",
          "xmi_helper","xmi_loader","xmi_resource","xmi_resource_factory","xmi_saver",
          "xml_handler","xml_helper","xml_load_impl","xml_save_impl"]),
-    "artop-xsd": (
+    "emf-xsd": (
         "XSD metamodel (port of C++ `emf-xsd`).",
         ["xsd_metamodel"]),
-    "artop-edit": (
+    "emf-edit": (
         "Editing / Command framework (port of C++ `emf-edit`).",
         ["adapter_factory_editing_domain","add_command","command_helper",
          "composed_adapter_factory","edit_plugin","edit_util","editing_domain",
          "move_command","remove_command","replace_command","set_command",
          "transactional_editing_domain","tree_node"]),
-    "artop-compare": (
+    "emf-compare": (
         "Model comparison (match+diff) (port of C++ `emf-compare`).",
         ["comparison","conflict_detector","diff_engine","diff_filter",
          "equivalence_engine","match_engine","merge_engine","requirement_engine"]),
-    "artop-validation": (
+    "emf-validation": (
         "Model validation, batch + live (port of C++ `emf-validation`).",
         ["annotation_constraint_loader","autosar_constraints","constraint_descriptor",
          "constraint_parser","diagnostician","e_validator","live_validator",
          "validation_service"]),
-    "artop-xcore": (
+    "emf-xcore": (
         "Xcore DSL parser (port of C++ `emf-xcore`).",
         ["parser","dsl"]),
-    "artop-acceleo": (
+    "emf-acceleo": (
         "Acceleo MTL templates / M2T engine (port of C++ `emf-acceleo`).",
         ["mtl_parser","template","m2t_engine"]),
-    "artop-sphinx": (
+    "emf-sphinx": (
         "Headless core subset (port of C++ `emf-sphinx`).",
         ["headless_core"]),
-    "artop-artop-runtime": (
+    "artop-runtime": (
         "AUTOSAR serialization/deserialization, resource/factory/version metadata "
         "(port of C++ `emf-artop/emf-artop-runtime`).",
         ["serialization","deserialization","resource_factory","version_metadata",
          "autosar_metamodel"]),
-    "artop-artop-codegen": (
+    "artop-codegen": (
         "Generate static models from .ecore (port of C++ `emf-artop/emf-artop-codegen`).",
         ["generator","ecore_to_model"]),
 }
@@ -104,15 +104,23 @@ def stub_cargo(name, deps):
         f"\n[lints.rust]\n"
     )
 
+# artop-specific crates live under crates/emf-artop/ (matches C++ emf-artop/).
+GROUP = {"artop-runtime", "artop-codegen"}
+
+def crate_dir(crate):
+    sub = "emf-artop/" if crate in GROUP else ""
+    return f"{ROOT}/crates/{sub}{crate}"
+
 def main():
     for crate, (desc, mods) in CRATES.items():
-        d = f"{ROOT}/crates/{crate}/src"
+        base = crate_dir(crate)
+        d = f"{base}/src"
         os.makedirs(d, exist_ok=True)
-        # dependency: always depend on artop-common; ecore-util additionally on ecore
-        deps = ["artop-common"]
-        if crate in ("artop-ecore-util",):
-            deps.append("artop-ecore")
-        with open(f"{ROOT}/crates/{crate}/Cargo.toml", "w") as f:
+        # dependency: always depend on emf-common; ecore-util additionally on ecore
+        deps = ["emf-common"]
+        if crate in ("emf-ecore-util",):
+            deps.append("emf-ecore")
+        with open(f"{base}/Cargo.toml", "w") as f:
             f.write(stub_cargo(crate, deps))
         with open(f"{d}/lib.rs", "w") as f:
             f.write(stub_lib(crate, desc, mods, deps))
@@ -125,12 +133,12 @@ def main():
         with open(f"{ROOT}/examples/{ex}/Cargo.toml", "w") as f:
             f.write(
                 f"[package]\nname = \"{ex}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n"
-                f"publish = false\n\n[dependencies]\nartop-common = {{ workspace = true }}\n")
+                f"publish = false\n\n[dependencies]\nemf-common = {{ workspace = true }}\n")
         name = ex.replace("-", " ")
         with open(f"{d}/main.rs", "w") as f:
             f.write(
                 f"//! Example binary `{ex}` (stub). Port of the same-named C++ example.\n"
-                f"use artop_common::diagnostic::{{Diagnostic, Severity}};\n\n"
+                f"use emf_common::diagnostic::{{Diagnostic, Severity}};\n\n"
                 f"fn main() {{\n"
                 f"    let msg = String::from(\"{name}\");\n"
                 f"    let d = Diagnostic::new(Severity::Info, \"{ex}\", 0, msg);\n"

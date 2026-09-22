@@ -5,4 +5,4 @@ edition = "2021"
 publish = false
 
 [dependencies]
-artop-common = { workspace = true }
+emf-common = { workspace = true }

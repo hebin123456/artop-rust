@@ -1,7 +1,7 @@
 //! Example binary `arxml-roundtrip`. Port of the same-named C++ example.
-//! Currently a stub: demonstrates the `artop-common` diagnostic API while the
+//! Currently a stub: demonstrates the `emf-common` diagnostic API while the
 //! XMI/ARXML reader-writer pipeline is completed.
-use artop_common::diagnostic::{Diagnostic, Severity};
+use emf_common::diagnostic::{Diagnostic, Severity};
 
 fn main() {
     let msg = String::from("arxml roundtrip");

@@ -1,0 +1,9 @@
+[package]
+name = "emf-ecore"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Ecore metamodel types (EClass/EPackage/EFactory), port of C++ emf-ecore."
+
+[dependencies]
+emf-common = { workspace = true }

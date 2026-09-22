@@ -1,7 +1,7 @@
 //! Example binary `arxml-validate`. Port of the same-named C++ example.
-//! Currently a stub: demonstrates the `artop-common` diagnostic chain while the
+//! Currently a stub: demonstrates the `emf-common` diagnostic chain while the
 //! ARXML validation passes are completed.
-use artop_common::diagnostic::{Diagnostic, DiagnosticChain, Severity};
+use emf_common::diagnostic::{Diagnostic, DiagnosticChain, Severity};
 
 fn main() {
     let mut chain = DiagnosticChain::new();

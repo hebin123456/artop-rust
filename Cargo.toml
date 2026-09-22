@@ -1,41 +1,41 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/artop-common",
-    "crates/artop-ecore",
-    "crates/artop-metamodel",
-    "crates/artop-ecore-util",
-    "crates/artop-ecore-codegen",
-    "crates/artop-xmi",
-    "crates/artop-xsd",
-    "crates/artop-edit",
-    "crates/artop-compare",
-    "crates/artop-validation",
-    "crates/artop-xcore",
-    "crates/artop-acceleo",
-    "crates/artop-sphinx",
-    "crates/artop-artop-runtime",
-    "crates/artop-artop-codegen",
+    "crates/emf-common",
+    "crates/emf-ecore",
+    "crates/emf-artop/autosar448-model",
+    "crates/emf-ecore-util",
+    "crates/emf-ecore-codegen",
+    "crates/emf-xmi",
+    "crates/emf-xsd",
+    "crates/emf-edit",
+    "crates/emf-compare",
+    "crates/emf-validation",
+    "crates/emf-xcore",
+    "crates/emf-acceleo",
+    "crates/emf-sphinx",
+    "crates/emf-artop/artop-runtime",
+    "crates/emf-artop/artop-codegen",
     "examples/arxml-roundtrip",
     "examples/arxml-validate",
 ]
 
 [workspace.dependencies]
-artop-common = { path = "crates/artop-common" }
-artop-ecore = { path = "crates/artop-ecore" }
-artop-metamodel = { path = "crates/artop-metamodel" }
-artop-ecore-util = { path = "crates/artop-ecore-util" }
-artop-ecore-codegen = { path = "crates/artop-ecore-codegen" }
-artop-xmi = { path = "crates/artop-xmi" }
-artop-xsd = { path = "crates/artop-xsd" }
-artop-edit = { path = "crates/artop-edit" }
-artop-compare = { path = "crates/artop-compare" }
-artop-validation = { path = "crates/artop-validation" }
-artop-xcore = { path = "crates/artop-xcore" }
-artop-acceleo = { path = "crates/artop-acceleo" }
-artop-sphinx = { path = "crates/artop-sphinx" }
-artop-artop-runtime = { path = "crates/artop-artop-runtime" }
-artop-artop-codegen = { path = "crates/artop-artop-codegen" }
+emf-common = { path = "crates/emf-common" }
+emf-ecore = { path = "crates/emf-ecore" }
+autosar448-model = { path = "crates/emf-artop/autosar448-model" }
+emf-ecore-util = { path = "crates/emf-ecore-util" }
+emf-ecore-codegen = { path = "crates/emf-ecore-codegen" }
+emf-xmi = { path = "crates/emf-xmi" }
+emf-xsd = { path = "crates/emf-xsd" }
+emf-edit = { path = "crates/emf-edit" }
+emf-compare = { path = "crates/emf-compare" }
+emf-validation = { path = "crates/emf-validation" }
+emf-xcore = { path = "crates/emf-xcore" }
+emf-acceleo = { path = "crates/emf-acceleo" }
+emf-sphinx = { path = "crates/emf-sphinx" }
+artop-runtime = { path = "crates/emf-artop/artop-runtime" }
+artop-codegen = { path = "crates/emf-artop/artop-codegen" }
 
 [profile.release]
 opt-level = 2
