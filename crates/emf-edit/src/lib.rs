@@ -2,9 +2,12 @@
 //!
 //! Port target: C++ `emf-edit` module of `hebin123456/artop-cpp`.
 //!
-//! This file is *skeleton*: each module below is a compile placeholder that
-//! will be filled with the port of the corresponding C++ translation unit.
-//! Filled by GitHub Actions; see `.github/workflows/ci.yml`.
+//! The editing-domain and the standard commands (`set` / `add` / `remove` /
+//! `move`) are implemented over the EMF reflection surface, so they operate on
+//! any reflective `EObject` and remain artop-agnostic.
+
+/// Re-exported command handle from `emf-common`.
+pub use emf_common::command::CommandRef;
 
 pub mod adapter_factory_editing_domain {
     //! Port target: C++ source unit for `adapter_factory_editing_domain`.
@@ -14,13 +17,7 @@ pub mod adapter_factory_editing_domain {
     }
 }
 
-pub mod add_command {
-    //! Port target: C++ source unit for `add_command`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-edit::add_command"
-    }
-}
+pub mod add_command;
 
 pub mod command_helper {
     //! Port target: C++ source unit for `command_helper`.
@@ -54,29 +51,11 @@ pub mod edit_util {
     }
 }
 
-pub mod editing_domain {
-    //! Port target: C++ source unit for `editing_domain`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-edit::editing_domain"
-    }
-}
+pub mod editing_domain;
 
-pub mod move_command {
-    //! Port target: C++ source unit for `move_command`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-edit::move_command"
-    }
-}
+pub mod move_command;
 
-pub mod remove_command {
-    //! Port target: C++ source unit for `remove_command`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-edit::remove_command"
-    }
-}
+pub mod remove_command;
 
 pub mod replace_command {
     //! Port target: C++ source unit for `replace_command`.
@@ -86,13 +65,11 @@ pub mod replace_command {
     }
 }
 
-pub mod set_command {
-    //! Port target: C++ source unit for `set_command`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-edit::set_command"
-    }
-}
+pub mod set_command;
+
+/// Alias so the editing domain's `create_command` can build a Set command via a
+/// plain value bundle. Re-exported from `set_command`.
+pub use set_command::SetCommandRequest as CommandRequest;
 
 pub mod transactional_editing_domain {
     //! Port target: C++ source unit for `transactional_editing_domain`.

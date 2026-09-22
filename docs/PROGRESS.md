@@ -58,7 +58,7 @@ examples/
 | `emf-ecore-codegen` | ✅ 工作 | GenModel→代码生成：ecore loader（XMI→`EPackage`）+ TypeMapper + generator（struct / `match` 反射表 / `register_package`）+ 顶层 `GenModel` API 与 CLI（`.ecore` → 落盘可独立编译 crate），生成的 crate 可脱离 `.ecore` 编译运行 |
 | `emf-xmi` | ✅ 工作 | saver + loader + 真实 `XMIResource` + `ResourceSet` 按需加载集成（`ResourceHandle` / `ResourceFactory` / `XMIResourceFactory`）；**`XMLHelper`**（命名空间上下文栈 + feature kind 分类 + 按名查询）+ **`XMLLoadImpl`**（`XMLLoad` trait + 默认实现委托资源加载器）已实现并测试通过 |
 | `emf-xsd` | ⬜ 骨架 | XSD 元模型 |
-| `emf-edit` | ⬜ 骨架 | 命令 / 编辑域 |
+| `emf-edit` | ✅ 工作 | `EditingDomain` + `SetCommand` / `AddCommand` / `RemoveCommand` / `MoveCommand`（经 `BasicCommandStack` undo/redo）；其余含 adapter_factory_editing_domain / command_helper / replace_command 等骨架 |
 | `emf-compare` | ⬜ 骨架 | match + diff + merge |
 | `emf-validation` | ⬜ 骨架 | 批量 + 实时校验 |
 | `emf-xcore` | ⬜ 骨架 | Xcore DSL |
@@ -169,6 +169,13 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - `XMLHelper`：命名空间上下文栈（`push_context` / `pop_context` / `add_prefix` / `get_uri` / `get_prefix` / `record_prefix_to_uri_mapping`）+ feature kind 分类（`DatatypeSingle` / `IsManyAdd` / `DatatypeMany` / `Other`）+ 按 `(class, namespaceURI, name)` 查询 feature，为序列化器提供配置基座。
   - `XMLLoadImpl`：`XMLLoad` trait + 默认实现（`load(request)` 委托给资源自身的 registry 驱动加载器），外加 `parse_only` 只校验不落盘入口。
   - 质量门禁：`emf-xmi`（新增单元测试后）24 条测试全绿，`fmt --check` 通过、新模块 clippy 0 告警；全工作区 test 无回归。
+
+- **Milestone 10 — emf-edit `EditingDomain` + 标准编辑命令（本轮新增）**：把 `emf-edit` 从骨架推进为可用的命令框架。
+  - `SetCommand`：为单个 owner 的某个 feature 设置/取消值（`SetCommandRequest`），undo/redo 在首次执行时对 is-set 状态与旧值做快照（经 `e_is_set` / `e_get`），undo 恢复旧态、redo 重放新值；值通过反射面写入，与元模型无关。
+  - `AddCommand` / `RemoveCommand` / `MoveCommand`：操作多值 feature 的集合——add 追加、remove 按值移除、move 在集合内移动元素到指定 index；各自带 undo/redo 快照恢复。
+  - `EditingDomain`：持有 `BasicCommandStack`，`create_command`/`create_commands_for_set` 统一构造 set/add/remove/move 命令（对齐 C++ `createCommand` 编排入口）。
+  - `lib.rs` 移除 add/remove/move/set/editing_domain 占位模块并挂载真实实现（`CommandRequest` 作为 `SetCommandRequest` 的别名对外）。
+  - 质量门禁：`emf-edit` 9 条单测全绿（含经 `BasicCommandStack` 的 execute/undo/redo/redo 端到端），fmt + clippy（0 告警）通过，全工作区 test 无回归。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 
