@@ -211,7 +211,8 @@ impl Notifier {
                 a.set_target(None);
             }
         }
-        self.adapters.retain(|a| !removing.contains(&(a.as_ref() as *const dyn Adapter)));
+        self.adapters
+            .retain(|a| !removing.contains(&(a.as_ref() as *const dyn Adapter)));
     }
 
     /// The adapters (EMF `eAdapters`).
@@ -344,8 +345,7 @@ impl NotificationChain {
 
 /// Object-identity key for a `Val` that holds an `ObjectRef`.
 fn obj_key(v: &Val) -> Option<usize> {
-    v.as_object()
-        .map(|o| Rc::as_ptr(o) as *const () as usize)
+    v.as_object().map(|o| Rc::as_ptr(o) as *const () as usize)
 }
 
 #[cfg(test)]
@@ -542,11 +542,7 @@ mod tests {
         n.remove_adapter(|a| a.as_any().downcast_ref::<Rec>().is_some_and(|r| r.id == 1));
         // a2 (remaining) got exactly one REMOVING_ADAPTER.
         let rec = out.borrow();
-        let ids: Vec<(u32, EventType)> = rec
-            .iter()
-            .filter(|(i, _)| *i == 2)
-            .cloned()
-            .collect();
+        let ids: Vec<(u32, EventType)> = rec.iter().filter(|(i, _)| *i == 2).cloned().collect();
         assert_eq!(ids, vec![(2, EventType::RemovingAdapter)]);
     }
 
@@ -828,7 +824,14 @@ mod tests {
             }
             let old = self.container.borrow_mut().replace(new.clone());
             if let Some(o) = old {
-                let r = Notification::new(EventType::Remove, None, Val::Object(o), Val::Null, -1, false);
+                let r = Notification::new(
+                    EventType::Remove,
+                    None,
+                    Val::Object(o),
+                    Val::Null,
+                    -1,
+                    false,
+                );
                 self.notifier.e_notify(&r);
             }
             let a = Notification::new(EventType::Add, None, Val::Null, Val::Object(new), -1, false);

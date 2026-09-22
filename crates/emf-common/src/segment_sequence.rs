@@ -333,7 +333,10 @@ mod tests {
     #[test]
     fn append_chain() {
         let seq = SegmentSequence::empty("/");
-        let seq = seq.append_segment("a").append_segment("b").append_segment("c");
+        let seq = seq
+            .append_segment("a")
+            .append_segment("b")
+            .append_segment("c");
         assert_eq!(seq.segment_count(), 3);
         assert_eq!(seq.to_string(), "a/b/c");
     }
@@ -415,7 +418,10 @@ mod tests {
 
     #[test]
     fn create_vararg() {
-        let seq = SegmentSequence::create_from_segments("/", vec!["alpha".into(), "beta".into(), "gamma".into()]);
+        let seq = SegmentSequence::create_from_segments(
+            "/",
+            vec!["alpha".into(), "beta".into(), "gamma".into()],
+        );
         assert_eq!(seq.segment_count(), 3);
         assert_eq!(seq.segment(1), Some("beta"));
         assert_eq!(seq.to_string(), "alpha/beta/gamma");

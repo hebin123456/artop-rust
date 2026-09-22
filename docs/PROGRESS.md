@@ -110,9 +110,9 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 ## 7. 下一步（按优先级）
 
-已完成：emf-common/ecore 核心、EcoreUtil/Copier、XMI saver+loader、Resource/XMI 持久化集成、一致性测试 193 组中 188 条映射 PASS（含 command 模块 / NotifyingList / SegmentSequence / UniqueEList / ENotifier / EAdapter）。
+已完成：emf-common/ecore 核心、EcoreUtil/Copier、XMI saver+loader、Resource/XMI 持久化集成、一致性测试 193 组中 188 条映射 PASS（含 command 模块 / NotifyingList / SegmentSequence / UniqueEList / ENotifier / EAdapter）；一致性框架已多 crate 化并建立 emf-ecore oracle（153 条），映射 62 条 PASS。
 
-1. 扩展 oracle 到 emf-ecore / emf-xmi 的 C++ tests，逐模块收敛（e.g. `EPackageRegistryTests`）。
+1. 扩展 oracle 到 emf-xmi 的 C++ tests 逐模块收敛；继续补 emf-ecore 未映射的 91 条（EGenericType / EInvoke / 指针身份类）。
 2. `emf-xmi` handler 落地：`XMILoadImpl` / `XMIHelper` / `XMIResourceFactory`，把 `XMIResource` 挂进 `ResourceSet`（`getResource` 按需加载）。
 3. `emf-ecore-util` 剩余：Adapter / ECrossReferenceAdapter / containment 遍历到 `all_contents` 的流式实现。
 4. `artop-runtime`：AUTOSAR 序列化/反序列化（届时才引入 artop 相关内容）。
@@ -138,6 +138,12 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - `emf-xmi::xmi_resource`：把占位模块升级为真实 `XMIResource`（对齐 C++ `emf::xmi::XMIResource`）。它承载一个 `emf_common::Resource` + `PackageRegistry`，`save_to_string`/`load_from_string` 真正让 saver/loader 落地，`save()`/`load()` 打通 `file:` URI 落盘。测试覆盖 saver→loader 端到端 roundtrip 与坏 XMI 报错。
 
 - **Milestone 4 — 一致性测试大幅扩展 + command 模块（本轮新增）**：`emf-common` 新增 `src/command.rs`（移植 `org.eclipse.emf.common.command`：`Command` trait / `AbstractCommand` / `CompoundCommand` / `StrictCompoundCommand` / `IdentityCommand` / `UnexecutableCommand` / `CommandWrapper` / `BasicCommandStack` / `AbortExecutionException`，约 49 条测试），并补全 `SegmentSequence`（16）、`UniqueEList`（7）、`NotifyingList`（11，新增派发 ADD/REMOVE/SET/MOVE/ADD_MANY/REMOVE_MANY 的类型）、`ENotifier`/`EAdapter`（target 关联 + 字段保留 + `EObjectImpl_SetEContainer` 反向通知，8）、`Resource`（`set_root`，1）。映射从 69 → **188 PASS**，仅剩 5 条 null/重复身份语义无法在 Rust 表达。
+
+- **Milestone 5 — 一致性框架多 crate 化 + emf-ecore oracle（本轮新增）**：
+  - 工具链改造：`cases.tsv` 新增可选第 4 列 `pkg`（默认 `emf-common`）；`compare.py` 支持合并多个 oracle（`--oracle a.json,b.json`），并按行独立解析 Rust 测试所属 crate 与名字。
+  - 新增 `build_ecore_oracle.sh`：编译并运行 `emf-ecore` 的 C++ 单测二进制（链接 emf-common 符号），产出 `build/ecore_oracle.json`，当前 **153 条、0 失败**。
+  - 新增集成测试：`crates/emf-ecore/tests/ecore_reflection.rs`（移植 EClassImpl / ETypedElementImpl / EPackageImpl / EcorePackage / DataTypeUtil，39 条）+ `crates/emf-ecore/tests/dynamic_eobject.rs`（移植 DynamicEObjectImpl + BasicEObject 动态部分，27 条）。
+  - 映射：新增 `cases_ecore.tsv`，**62 条全部 PASS**，0 REGRESSION。未映射 91 条多为指针身份 / `nullptr` / EGenericType / EInvoke 等 Rust 类型系统暂无法如实表达者，保留为 PENDING。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 

@@ -689,7 +689,10 @@ mod tests {
         let mut list: UniqueEList<i32> = UniqueEList::new();
         list.add(10);
         list.add(20);
-        assert_eq!(list.try_add_at_index(1, 20), Err(UniqueDuplicateError::Duplicate));
+        assert_eq!(
+            list.try_add_at_index(1, 20),
+            Err(UniqueDuplicateError::Duplicate)
+        );
         assert_eq!(list.len(), 2);
     }
 
@@ -776,8 +779,9 @@ mod tests {
     fn recording_env() -> (Rc<RefCell<Notifier>>, Rc<RefCell<Vec<Notification>>>) {
         let n = Rc::new(RefCell::new(Notifier::new()));
         let events = Rc::new(RefCell::new(Vec::new()));
-        n.borrow_mut()
-            .add_adapter(Box::new(RecordingCb { events: Rc::clone(&events) }));
+        n.borrow_mut().add_adapter(Box::new(RecordingCb {
+            events: Rc::clone(&events),
+        }));
         (n, events)
     }
 

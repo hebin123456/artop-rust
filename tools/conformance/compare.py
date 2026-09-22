@@ -27,16 +27,20 @@ CARGO = os.environ.get("CARGO", "cargo")
 
 
 def parse_tsv(path):
+    """Parse cases.tsv. Columns: group<TAB>cpp_test<TAB>rust_test[<TAB>pkg].
+    A 4th `pkg` column (default `emf-common`) selects the crate for this row."""
     rows = []
     for line in open(path, encoding="utf-8"):
         line = line.strip()
         if not line or line.startswith("#"):
             continue
         parts = line.split("\t")
-        if len(parts) == 3 and parts[0] == "group":
+        if parts[0] == "group":
             continue  # header
-        if len(parts) == 3:
-            rows.append(tuple(parts))
+        if len(parts) == 4:  # group cpp_test rust_test pkg
+            rows.append((parts[0], parts[1], parts[2], parts[3]))
+        elif len(parts) == 3:  # group cpp_test rust_test (pkg defaults)
+            rows.append((parts[0], parts[1], parts[2], "emf-common"))
     return rows
 
 
@@ -44,8 +48,12 @@ def run(cmd, cwd=None):
     return subprocess.run(cmd, cwd=cwd or ROOT, capture_output=True, text=True)
 
 
-def oracle(path):
-    return json.load(open(path, encoding="utf-8"))
+def oracle(paths):
+    """Merge one or more oracle JSON files (later files override dup keys)."""
+    merged = {}
+    for p in paths:
+        merged.update(json.load(open(p, encoding="utf-8")))
+    return merged
 
 
 def rust_names(pkg):
@@ -69,15 +77,26 @@ def main():
     ap.add_argument("--cases", default=os.path.join(HERE, "cases.tsv"))
     args = ap.parse_args()
 
-    if not os.path.exists(args.oracle):
-        sys.exit(f"oracle 缺失: {args.oracle}\n先运行 tools/conformance/build_oracle.sh")
+    oracle_paths = [p for p in args.oracle.split(",") if p]
+    missing = [p for p in oracle_paths if not os.path.exists(p)]
+    if missing:
+        sys.exit(f"oracle 缺失: {', '.join(missing)}\n先运行 build_oracle.sh")
 
-    o = oracle(args.oracle)
+    o = oracle(oracle_paths)
     rows = parse_tsv(args.cases)
-    names = rust_names(args.pkg)
+    names_cache = {}
 
-    mapped = [(g, c, rt) for g, c, rt in rows if rt]
-    by_cpp = {(c): (g, rt) for g, c, rt in mapped}
+    def rust_names_of(pkg):
+        r = run([CARGO, "test", "-p", pkg, "--", "--list"])
+        return {line[: -len(": test")] for line in r.stdout.splitlines() if line.endswith(": test")}
+
+    def rust_names(pkg):
+        if pkg not in names_cache:
+            names_cache[pkg] = rust_names_of(pkg)
+        return names_cache[pkg]
+
+    mapped = [(g, c, rt, pk) for g, c, rt, pk in rows if rt]
+    by_cpp = {(c): (g, rt, pk) for g, c, rt, pk in mapped}
 
     pending = 0
     passed = 0
@@ -85,18 +104,18 @@ def main():
 
     for cpp, status in sorted(o.items()):
         if cpp in by_cpp:
-            g, rt = by_cpp[cpp]
-            if status != "pass" or rt not in names:
+            g, rt, pk = by_cpp[cpp]
+            if status != "pass" or rt not in rust_names(pk):
                 pending += 1
                 verdict = "PENDING"
-                note = "oracle未通过" if status != "pass" else f"Rust测试缺失: {rt}"
+                note = "oracle未通过" if status != "pass" else f"Rust测试缺失: {rt} ({pk})"
             else:
-                if rust_pass_any(args.pkg, rt):
+                if rust_pass_any(pk, rt):
                     passed += 1
                     verdict = "PASS"
-                    note = rt
+                    note = f"{rt} ({pk})"
                 else:
-                    regress.append((g, cpp, rt))
+                    regress.append((g, cpp, rt, pk))
                     verdict = "REGRESSION"
                     note = rt
             print(f"[{verdict:10}] {g:<18} {cpp:<42} {note}")
@@ -113,8 +132,8 @@ def main():
         print("未映射示例(首 8 个):", ", ".join(unmapped[:8]))
     if regress:
         print("REGRESSION(必须修复):")
-        for g, c, rt in regress:
-            print(f"  {g} :: {c}  <- Rust {rt} 失败")
+        for g, c, rt, pk in regress:
+            print(f"  {g} :: {c}  <- Rust {rt} ({pk}) 失败")
         return 1
     return 0
 

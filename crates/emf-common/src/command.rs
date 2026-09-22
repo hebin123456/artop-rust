@@ -219,8 +219,7 @@ impl CompoundCommand {
 
     /// Build a compound from pre-populated commands (used by `chain`).
     pub fn from_commands(commands: Vec<CommandRef>) -> CommandRef {
-        Self::intern(MERGE_COMMAND_ALL, None, None, commands)
-            as Rc<RefCell<dyn Command>>
+        Self::intern(MERGE_COMMAND_ALL, None, None, commands) as Rc<RefCell<dyn Command>>
     }
 
     pub fn is_empty(&self) -> bool {
@@ -240,8 +239,7 @@ impl CompoundCommand {
         if list.is_empty() {
             return false;
         }
-        list.iter()
-            .all(|c| c.borrow().can_execute())
+        list.iter().all(|c| c.borrow().can_execute())
     }
 
     pub fn append(&self, command: CommandRef) {
@@ -351,7 +349,9 @@ impl Command for CompoundCommand {
                 }
                 r
             }
-            i if i >= 0 && (i as usize) < list.len() => list[i as usize].borrow().get_affected_objects(),
+            i if i >= 0 && (i as usize) < list.len() => {
+                list[i as usize].borrow().get_affected_objects()
+            }
             _ => Vec::new(),
         }
     }
@@ -598,7 +598,8 @@ impl Command for StrictCompoundCommand {
         self.common.default_label(COMPOUND_DEFAULT_LABEL)
     }
     fn get_description(&self) -> String {
-        self.common.default_description(COMPOUND_DEFAULT_DESCRIPTION)
+        self.common
+            .default_description(COMPOUND_DEFAULT_DESCRIPTION)
     }
     fn dispose(&self) {
         let list = self.commands.borrow();
@@ -621,7 +622,11 @@ pub struct IdentityCommand {
 }
 
 impl IdentityCommand {
-    fn make(result: Vec<Val>, label: Option<String>, description: Option<String>) -> IdentityCommand {
+    fn make(
+        result: Vec<Val>,
+        label: Option<String>,
+        description: Option<String>,
+    ) -> IdentityCommand {
         IdentityCommand {
             common: AbstractBase {
                 label: RefCell::new(label.unwrap_or_default()),
@@ -656,12 +661,12 @@ impl IdentityCommand {
         Self::build(Vec::new(), Some(label.into()), None)
     }
 
-    fn build(
-        result: Vec<Val>,
-        label: Option<String>,
-        description: Option<String>,
-    ) -> CommandRef {
-        let concrete = Rc::new(RefCell::new(IdentityCommand::make(result, label, description)));
+    fn build(result: Vec<Val>, label: Option<String>, description: Option<String>) -> CommandRef {
+        let concrete = Rc::new(RefCell::new(IdentityCommand::make(
+            result,
+            label,
+            description,
+        )));
         let cr: CommandRef = concrete.clone() as CommandRef;
         *concrete.borrow().common.self_ref.borrow_mut() = Some(cr.clone());
         cr
@@ -688,7 +693,8 @@ impl Command for IdentityCommand {
         self.common.default_label(IDENTITY_DEFAULT_LABEL)
     }
     fn get_description(&self) -> String {
-        self.common.default_description(IDENTITY_DEFAULT_DESCRIPTION)
+        self.common
+            .default_description(IDENTITY_DEFAULT_DESCRIPTION)
     }
     fn dispose(&self) {}
     fn chain(&self, command: CommandRef) -> CommandRef {
@@ -739,7 +745,8 @@ impl Command for UnexecutableCommand {
         self.common.default_label(UNEXECUTABLE_DEFAULT_LABEL)
     }
     fn get_description(&self) -> String {
-        self.common.default_description(UNEXECUTABLE_DEFAULT_DESCRIPTION)
+        self.common
+            .default_description(UNEXECUTABLE_DEFAULT_DESCRIPTION)
     }
     fn dispose(&self) {}
     fn chain(&self, command: CommandRef) -> CommandRef {
@@ -773,7 +780,10 @@ impl CommandWrapper {
         }))
     }
 
-    pub fn with_label(label: impl Into<String>, command: CommandRef) -> Rc<RefCell<CommandWrapper>> {
+    pub fn with_label(
+        label: impl Into<String>,
+        command: CommandRef,
+    ) -> Rc<RefCell<CommandWrapper>> {
         let description = command.borrow().get_description();
         Rc::new(RefCell::new(CommandWrapper {
             common: AbstractBase {
@@ -1053,8 +1063,7 @@ impl BasicCommandStack {
 // ---------------------------------------------------------------------------
 
 fn make_identity_singleton() -> CommandRef {
-    Rc::new(RefCell::new(IdentityCommand::make(Vec::new(), None, None)))
-        as CommandRef
+    Rc::new(RefCell::new(IdentityCommand::make(Vec::new(), None, None))) as CommandRef
 }
 
 fn make_unexecutable_singleton() -> CommandRef {
@@ -1071,7 +1080,7 @@ fn make_unexecutable_singleton() -> CommandRef {
 mod tests {
     use super::*;
     use crate::value::Val;
-    use std::panic::{catch_unwind, AssertUnwindSafe, panic_any};
+    use std::panic::{catch_unwind, panic_any, AssertUnwindSafe};
 
     // ---- Test fixture ----------------------------------------------------
     #[derive(Default)]
@@ -1141,7 +1150,8 @@ mod tests {
             self.common.default_label(ABSTRACT_DEFAULT_LABEL)
         }
         fn get_description(&self) -> String {
-            self.common.default_description(ABSTRACT_DEFAULT_DESCRIPTION)
+            self.common
+                .default_description(ABSTRACT_DEFAULT_DESCRIPTION)
         }
         fn dispose(&self) {}
         fn chain(&self, c: CommandRef) -> CommandRef {
@@ -1201,7 +1211,8 @@ mod tests {
             self.common.default_label(ABSTRACT_DEFAULT_LABEL)
         }
         fn get_description(&self) -> String {
-            self.common.default_description(ABSTRACT_DEFAULT_DESCRIPTION)
+            self.common
+                .default_description(ABSTRACT_DEFAULT_DESCRIPTION)
         }
         fn dispose(&self) {}
         fn chain(&self, c: CommandRef) -> CommandRef {
@@ -1426,10 +1437,7 @@ mod tests {
 
     #[test]
     fn identity_command_result_collection() {
-        let cmd = IdentityCommand::with_result(vec![
-            Val::String("a".into()),
-            Val::Int(42),
-        ]);
+        let cmd = IdentityCommand::with_result(vec![Val::String("a".into()), Val::Int(42)]);
         let res = cmd.borrow().get_result();
         assert_eq!(res.len(), 2);
     }
