@@ -19,7 +19,7 @@
 | URITests.cpp | ✅ cpp_parity_common_path |
 | ResourceTests.cpp | 🔶 cpp_parity_common_resource（19）；setResourceSet 关联待补 |
 | CommandTests.cpp | ✅ cpp_parity_common_command（39，覆盖全命令类） |
-| EPackageRegistryTests.cpp | ⬜ |
+| EPackageRegistryTests.cpp | 🔶 需先扩展 Rust `PackageRegistry`（现仅 register/find_class，缺按 nsURI/name/prefix 的 get/put/contains_key/remove/keys + Ecore 预注册）再移植 |
 
 ## emf-ecore
 | C++ 测试 | Rust 状态 |
