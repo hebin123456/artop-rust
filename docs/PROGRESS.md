@@ -213,3 +213,4 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 |---|---|
 | `70ff898` | 命名重构：EMF 基础库 `emf-*`，artop 专属入 `crates/emf-artop/` |
 | `df146ec` | 完成 `emf-common` + `emf-ecore` EMF 基础层（完整实现 + 集成测试） |
+| `c8a71f7` | 复用 artop-cpp 权威样本做 C++ 对照：静态建模 + XMI roundtrip 9 条对照测试（Milestone 15） |
