@@ -109,7 +109,7 @@ def gen(ecore_path):
     out.append("];")
     out.append(
         '\npub fn name_to_id(name: &str) -> Option<u32> {\n'
-        "    NAME_TO_ID.binary_search_by(|(n, _)| n.cmp(name))\n"
+        "    NAME_TO_ID.binary_search_by(|(n, _)| n.cmp(&name))\n"
         "        .ok().map(|i| NAME_TO_ID[i].1)\n"
         "}\n"
     )

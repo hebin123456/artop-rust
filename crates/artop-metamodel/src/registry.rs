@@ -7450,8 +7450,6 @@ pub static ECLASS: [EClassMeta; 1925] = [
 ];
 
 pub fn name_to_id(name: &str) -> Option<u32> {
-    NAME_TO_ID
-        .binary_search_by(|(n, _)| n.cmp(name))
-        .ok()
-        .map(|i| NAME_TO_ID[i].1)
+    NAME_TO_ID.binary_search_by(|(n, _)| n.cmp(&name))
+        .ok().map(|i| NAME_TO_ID[i].1)
 }

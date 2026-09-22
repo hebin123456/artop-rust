@@ -2,7 +2,7 @@
 name = "arxml-roundtrip"
 version = "0.1.0"
 edition = "2021"
-published = false
+publish = false
 
 [dependencies]
 artop-common = { workspace = true }

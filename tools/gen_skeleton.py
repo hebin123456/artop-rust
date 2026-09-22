@@ -125,7 +125,7 @@ def main():
         with open(f"{ROOT}/examples/{ex}/Cargo.toml", "w") as f:
             f.write(
                 f"[package]\nname = \"{ex}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n"
-                f"published = false\n\n[dependencies]\nartop-common = {{ workspace = true }}\n")
+                f"publish = false\n\n[dependencies]\nartop-common = {{ workspace = true }}\n")
         name = ex.replace("-", " ")
         with open(f"{d}/main.rs", "w") as f:
             f.write(
