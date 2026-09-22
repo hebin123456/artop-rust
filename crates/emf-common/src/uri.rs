@@ -188,7 +188,7 @@ impl Uri {
         self.scheme.is_empty() && self.path.is_empty() && self.opaque.is_empty()
     }
     pub fn is_file(&self) -> bool {
-        self.scheme == "file" || self.scheme.is_empty()
+        self.scheme == "file"
     }
     pub fn is_platform(&self) -> bool {
         self.scheme == "platform"
@@ -540,5 +540,14 @@ mod tests {
         let u = Uri::parse("/a/b/c.xmi");
         let t = u.trim_segments(1);
         assert_eq!(t.path(), "/a/b");
+    }
+
+    #[test]
+    fn default_uri_empty() {
+        let u = Uri::default();
+        assert_eq!(u.to_string(), "");
+        assert!(u.is_empty());
+        assert!(!u.is_file());
+        assert!(!u.is_platform());
     }
 }

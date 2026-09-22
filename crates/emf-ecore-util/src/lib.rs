@@ -1,10 +1,17 @@
 //! Extra Ecore utility layer (port of C++ `emf-ecore-util`).
 //!
-//! Port target: C++ `emf-ecore-util` module of `hebin123456/artop-cpp`.
+//! Port target: C++ `emf-ecore-util` module of `hebin123456/artop-cpp`
+//! (aligned to Java `org.eclipse.emf.ecore.util`).
 //!
-//! This file is *skeleton*: each module below is a compile placeholder that
-//! will be filled with the port of the corresponding C++ translation unit.
-//! Filled by GitHub Actions; see `.github/workflows/ci.yml`.
+//! Generic EMF utilities over `DynamicEObject` reflection — no domain
+//! metamodel (e.g. AUTOSAR) knowledge is allowed here; see the decoupling
+//! principle in `docs/PROGRESS.md`.
+
+/// `EcoreUtil`: containment-tree and cross-reference helpers.
+pub mod ecore_util;
+
+/// `EcoreUtil.Copier`: deep copy of an `EObject` graph.
+pub mod copier;
 
 pub mod extended_metadata {
     //! Port target: C++ source unit for `extended_metadata`.
@@ -27,14 +34,6 @@ pub mod conversion_delegate {
     /// Placeholder marker so the module compiles until the real port lands.
     pub fn api_surface() -> &'static str {
         "emf-ecore-util::conversion_delegate"
-    }
-}
-
-pub mod copier {
-    //! Port target: C++ source unit for `copier`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-ecore-util::copier"
     }
 }
 
@@ -142,14 +141,6 @@ pub mod ecore_switch {
     }
 }
 
-pub mod ecore_util {
-    //! Port target: C++ source unit for `ecore_util`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-ecore-util::ecore_util"
-    }
-}
-
 pub mod ecore_validator {
     //! Port target: C++ source unit for `ecore_validator`.
     /// Placeholder marker so the module compiles until the real port lands.
@@ -177,10 +168,9 @@ pub mod feature_map_util {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn skeleton_compiles() {
-        assert_eq!(
-            super::extended_metadata::api_surface(),
-            "emf-ecore-util::extended_metadata"
-        );
+    fn created_real_modules_exist() {
+        // Smoke: the real utility modules are wired in and compile as pub.
+        let _ = super::ecore_util::ptr;
+        let _ = super::copier::Copier::new();
     }
 }

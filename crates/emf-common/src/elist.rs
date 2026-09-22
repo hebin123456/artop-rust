@@ -205,6 +205,19 @@ impl<T> UniqueEList<T> {
             inner: BasicEList::new(),
         }
     }
+
+    /// Build from an iterator, dropping duplicates (EMF `UniqueEList` ctor
+    /// from a collection).
+    pub fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self
+    where
+        T: PartialEq,
+    {
+        let mut l = UniqueEList::new();
+        for v in iter {
+            l.add(v);
+        }
+        l
+    }
 }
 
 impl<T> EList<T> for UniqueEList<T>
@@ -279,5 +292,104 @@ mod tests {
         l.add_unique(1);
         assert!(!l.add_unique(1));
         assert_eq!(l.len(), 1);
+    }
+
+    #[test]
+    fn operator_bracket_get_by_index() {
+        let mut l = BasicEList::new();
+        l.add(10);
+        l.add(20);
+        l.add(30);
+        assert_eq!(l.get(0), Some(&10));
+        assert_eq!(l.get(2), Some(&30));
+        // Out of range yields None (the Rust port models "throws" as `None`).
+        assert_eq!(l.get(3), None);
+    }
+
+    #[test]
+    fn set_replaces_element() {
+        let mut l = BasicEList::new();
+        l.add(1);
+        l.add(2);
+        l.add(3);
+        assert_eq!(l.set(1, 99), Some(2));
+        assert_eq!(l.get(1), Some(&99));
+        assert_eq!(l.len(), 3); // set does not change size
+        assert_eq!(l.set(5, 0), None); // out of range
+    }
+
+    #[test]
+    fn remove_by_index_and_value() {
+        let mut l = BasicEList::new();
+        l.add(1);
+        l.add(2);
+        l.add(1);
+        assert_eq!(l.remove(0), Some(1)); // by index
+        assert!(l.remove_value(&1)); // removes first occurrence by value
+        assert_eq!(l.as_slice(), [2]);
+        assert!(!l.remove_value(&1)); // no further occurrence
+        assert_eq!(l.as_slice(), [2]);
+        assert!(!l.remove_value(&999)); // absent
+    }
+
+    #[test]
+    fn clear_empties_list() {
+        let mut l = BasicEList::new();
+        l.add(1);
+        l.add(2);
+        l.clear();
+        assert!(l.is_empty());
+        assert_eq!(l.len(), 0);
+        l.clear(); // clearing an already-empty list is a no-op
+        assert!(l.is_empty());
+    }
+
+    #[test]
+    fn iteration_yields_elements_in_order() {
+        let mut l = BasicEList::new();
+        l.add(5);
+        l.add(6);
+        l.add(7);
+        let collected: Vec<i32> = l.iter().copied().collect();
+        assert_eq!(collected, [5, 6, 7]);
+    }
+
+    #[test]
+    fn contains_and_index_of() {
+        let mut l = BasicEList::new();
+        l.add(1);
+        l.add(2);
+        l.add(3);
+        assert!(l.contains(&2));
+        assert!(!l.contains(&9));
+        assert_eq!(l.index_of(&2), Some(1));
+        assert_eq!(l.index_of(&9), None);
+    }
+
+    #[test]
+    fn unique_elist_add_deduplicates() {
+        let mut l: UniqueEList<i32> = UniqueEList::new();
+        l.add(1);
+        l.add(2);
+        l.add(1); // duplicate ignored
+        assert_eq!(l.len(), 2);
+        assert_eq!(l.get(0), Some(&1));
+        assert_eq!(l.get(1), Some(&2));
+        // Add-all style: from an iterator with duplicates drops duplicates.
+        let from = UniqueEList::from_iter(vec![3, 4, 3, 5]);
+        assert_eq!(from.len(), 3);
+    }
+
+    #[test]
+    fn unique_elist_remove_and_clear() {
+        let mut l: UniqueEList<i32> = UniqueEList::new();
+        l.add(1);
+        l.add(2);
+        l.add(3);
+        assert_eq!(l.remove(1), Some(2));
+        assert_eq!(l.len(), 2);
+        assert!(l.contains(&3));
+        l.clear();
+        assert!(l.is_empty());
     }
 }

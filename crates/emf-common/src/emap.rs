@@ -160,4 +160,84 @@ mod tests {
         assert_eq!(m.get(&"k42".to_string()), Some(&42));
         assert_eq!(m.index_of_key(&"k99".to_string()), Some(99));
     }
+
+    #[test]
+    fn index_of_key_finds_position() {
+        let mut m = BasicEMap::new();
+        m.put("a".to_string(), 1);
+        m.put("b".to_string(), 2);
+        m.put("c".to_string(), 3);
+        assert_eq!(m.index_of_key(&"a".to_string()), Some(0));
+        assert_eq!(m.index_of_key(&"c".to_string()), Some(2));
+        assert_eq!(m.index_of_key(&"z".to_string()), None);
+    }
+
+    #[test]
+    fn contains_key_and_value() {
+        let mut m = BasicEMap::new();
+        m.put("x".to_string(), 10);
+        m.put("y".to_string(), 20);
+        assert!(m.contains_key(&"x".to_string()));
+        assert!(!m.contains_key(&"missing".to_string()));
+        assert!(m.contains_value(&20));
+        assert!(!m.contains_value(&99));
+    }
+
+    #[test]
+    fn iteration_preserves_insertion_order() {
+        let mut m = BasicEMap::new();
+        m.put("a".to_string(), 1);
+        m.put("b".to_string(), 2);
+        m.put("c".to_string(), 3);
+        let keys: Vec<String> = m.keys().cloned().collect();
+        let vals: Vec<i32> = m.values().cloned().collect();
+        assert_eq!(keys, ["a", "b", "c"]);
+        assert_eq!(vals, [1, 2, 3]);
+        assert_eq!(m.entries().len(), 3);
+    }
+
+    #[test]
+    fn foreach_key_value() {
+        let mut m = BasicEMap::new();
+        m.put("k1".to_string(), 1);
+        m.put("k2".to_string(), 2);
+        let mut sum = 0;
+        for e in m.entries() {
+            if e.key.starts_with('k') {
+                sum += e.value;
+            }
+        }
+        assert_eq!(sum, 3);
+    }
+
+    #[test]
+    fn update_existing_key_replaces_value() {
+        let mut m = BasicEMap::new();
+        assert!(m.put("k".to_string(), 1).is_none());
+        assert_eq!(m.put("k".to_string(), 42), Some(1));
+        assert_eq!(m.get(&"k".to_string()), Some(&42));
+        assert_eq!(m.len(), 1); // no new entry
+    }
+
+    #[test]
+    fn remove_key_removes_entry() {
+        let mut m = BasicEMap::new();
+        m.put("a".to_string(), 1);
+        m.put("b".to_string(), 2);
+        assert_eq!(m.remove_key(&"a".to_string()), Some(1));
+        assert!(!m.contains_key(&"a".to_string()));
+        assert_eq!(m.len(), 1);
+        assert_eq!(m.remove_key(&"missing".to_string()), None);
+    }
+
+    #[test]
+    fn clear_wipes_all_entries() {
+        let mut m = BasicEMap::new();
+        m.put("a".to_string(), 1);
+        m.put("b".to_string(), 2);
+        m.clear();
+        assert!(m.is_empty());
+        assert_eq!(m.len(), 0);
+        assert!(!m.contains_key(&"a".to_string()));
+    }
 }

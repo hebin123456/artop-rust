@@ -196,4 +196,87 @@ mod tests {
             .build();
         assert_eq!(s.to_string(), "x/y");
     }
+
+    #[test]
+    fn to_string_simple() {
+        let s = SegmentSequence::create("/", "a/b/c");
+        assert_eq!(s.to_string(), "a/b/c");
+    }
+
+    #[test]
+    fn empty_has_zero_count() {
+        let s = SegmentSequence::empty("/");
+        assert_eq!(s.segment_count(), 0);
+        assert_eq!(s.to_string(), "");
+    }
+
+    #[test]
+    fn append_string_produces_new_sequence() {
+        let s = SegmentSequence::create("/", "a").append_segment("b");
+        assert_eq!(s.to_string(), "a/b");
+        assert_eq!(s.segment_count(), 2);
+    }
+
+    #[test]
+    fn append_string_with_delimiter() {
+        let s = SegmentSequence::create("/", "a/b");
+        assert_eq!(s.to_string(), "a/b");
+    }
+
+    #[test]
+    fn single_segment_sequence() {
+        let s = SegmentSequence::create("/", "only");
+        assert_eq!(s.segment_count(), 1);
+        assert_eq!(s.first_segment(), Some("only"));
+        assert_eq!(s.last_segment(), Some("only"));
+    }
+
+    #[test]
+    fn length_and_count() {
+        let s = SegmentSequence::create("/", "a/b/c");
+        assert_eq!(s.segment_count(), 3);
+        assert_eq!(s.length(), "a/b/c".len());
+    }
+
+    #[test]
+    fn segment_access() {
+        let s = SegmentSequence::create("/", "a/b/c");
+        assert_eq!(s.segment(0), Some("a"));
+        assert_eq!(s.segment(1), Some("b"));
+        assert_eq!(s.segment(2), Some("c"));
+        assert_eq!(s.segment(3), None);
+    }
+
+    #[test]
+    fn no_delimiter_is_character_sequence() {
+        let s = SegmentSequence::create("", "abc");
+        assert_eq!(s.segment_count(), 3);
+        assert_eq!(s.segments(), ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn empty_delimiter_single() {
+        let s = SegmentSequence::create("", "z");
+        assert_eq!(s.segment_count(), 1);
+        assert_eq!(s.to_string(), "z");
+    }
+
+    #[test]
+    fn different_delimiters_are_distinct() {
+        let slash = SegmentSequence::create("/", "a/b");
+        let dot = SegmentSequence::create(".", "a/b");
+        assert_eq!(slash.to_string(), "a/b");
+        assert_eq!(dot.to_string(), "a/b");
+        assert_eq!(slash.delimiter(), "/");
+        assert_eq!(dot.delimiter(), ".");
+        assert_ne!(slash, dot); // hash-consing keeps them separate by delimiter
+    }
+
+    #[test]
+    fn hashcode_consistent() {
+        let s1 = SegmentSequence::create("/", "a/b/c");
+        let s2 = SegmentSequence::create("/", "a/b/c");
+        // Interned: equal sequences are the same value (structural eq).
+        assert_eq!(s1, s2);
+    }
 }

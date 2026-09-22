@@ -155,4 +155,59 @@ mod tests {
         assert_eq!(r.contents().len(), 1);
         assert_eq!(r.root().unwrap().borrow().e_class(), "Root");
     }
+
+    #[test]
+    fn default_resource_state() {
+        let r = Resource::new(Uri::default());
+        assert!(r.contents().is_empty());
+        assert!(r.root().is_none());
+        assert!(!r.is_loaded());
+        assert!(!r.is_modified());
+        assert!(r.errors().is_empty());
+        assert!(r.warnings().is_empty());
+        assert!(r.uri().to_string().is_empty() || r.uri().to_string() == "");
+    }
+
+    #[test]
+    fn set_uri_updates_resource() {
+        let mut r = Resource::new(Uri::parse("file:///before.xmi"));
+        assert!(r.uri().is_file());
+        r.set_uri(Uri::parse("platform:/resource/m/after.xmi"));
+        assert!(!r.uri().is_file());
+        assert!(r.uri().is_platform());
+    }
+
+    #[test]
+    fn set_loaded_and_modified_flags() {
+        let mut r = Resource::new(Uri::default());
+        r.set_loaded(true);
+        assert!(r.is_loaded());
+        r.set_modified(true);
+        assert!(r.is_modified());
+        r.set_loaded(false);
+        r.set_modified(false);
+        assert!(!r.is_loaded());
+        assert!(!r.is_modified());
+    }
+
+    #[test]
+    fn errors_and_warnings_persist() {
+        let mut r = Resource::new(Uri::default());
+        r.set_errors(vec!["boom".into()]);
+        r.set_warnings(vec!["careful".into()]);
+        assert_eq!(r.errors(), ["boom"]);
+        assert_eq!(r.warnings(), ["careful"]);
+    }
+
+    #[test]
+    fn resource_set_creates_and_looks_up() {
+        let mut set = ResourceSet::new();
+        set.create_resource(Uri::parse("file:///r1.xmi"));
+        set.create_resource(Uri::parse("file:///r2.xmi"));
+        assert_eq!(set.resources().len(), 2);
+        assert!(set
+            .get_resource(&Uri::parse("file:///r1.xmi"))
+            .is_some());
+        assert!(set.get_resource(&Uri::parse("file:///nope.xmi")).is_none());
+    }
 }
