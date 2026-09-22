@@ -145,8 +145,16 @@ impl<'a> MetamodelWriter<'a> {
                 ECORE_NS_PREFIX,
                 escape_attr(cls.name())
             );
-            if cls.is_abstract() {
+            if cls.is_interface() {
+                open.push_str(" interface=\"true\"");
+            } else if cls.is_abstract() {
                 open.push_str(" abstract=\"true\"");
+            }
+            if !cls.instance_class_name().is_empty() {
+                open.push_str(&format!(
+                    " instanceClassName=\"{}\"",
+                    escape_attr(cls.instance_class_name())
+                ));
             }
             if !cls.e_super_types().is_empty() {
                 let supers: Vec<String> = cls
@@ -190,10 +198,12 @@ impl<'a> MetamodelWriter<'a> {
         };
         let mut s = base;
         s.push_str(&format!(" name=\"{}\"", escape_attr(f.name())));
-        if f.is_many() {
+        if f.upper_bound() == -1 {
             s.push_str(" upperBound=\"-1\"");
+        } else if f.upper_bound() != 1 {
+            s.push_str(&format!(" upperBound=\"{}\"", f.upper_bound()));
         }
-        if f.is_required() && f.lower_bound() != 0 {
+        if f.lower_bound() != 0 {
             s.push_str(&format!(" lowerBound=\"{}\"", f.lower_bound()));
         }
         if f.is_id() {

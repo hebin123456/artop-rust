@@ -43,12 +43,19 @@ pub fn load_ecore_package(src: &str) -> Result<EPackage, String> {
         let name = classifier.attr("name").unwrap_or("unnamed");
         match xsi_type {
             t if t.ends_with("EClass") => {
-                let kind = if classifier.attr("abstract") == Some("true") {
+                let is_int = classifier.attr("interface") == Some("true");
+                let is_abstract = classifier.attr("abstract") == Some("true");
+                let kind = if is_int {
+                    EClassKind::Interface
+                } else if is_abstract {
                     EClassKind::AbstractClass
                 } else {
                     EClassKind::Class
                 };
                 let mut cls = EClass::new(name, kind);
+                if let Some(icn) = classifier.attr("instanceClassName") {
+                    cls.set_instance_class_name(icn);
+                }
                 load_class_features(classifier, &mut cls);
                 // Super types (EMF eSuperTypes, usually a comma-separated href list).
                 if let Some(supers) = classifier.attr("eSuperTypes") {
@@ -119,17 +126,18 @@ fn load_class_features(classifier: &emf_xmi::parser::XmlNode, cls: &mut EClass) 
             .map(href_tail)
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "EString".to_string());
-        let many = feat.attr("upperBound") == Some("-1");
+        let upper: i32 = feat
+            .attr("upperBound")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1);
         let lower: i32 = feat
             .attr("lowerBound")
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
 
         if xsi_type.ends_with("EReference") {
-            let mut f = match (many, lower) {
-                (true, _) => EStructuralFeature::new(name, FeatureKind::Reference, 0, -1),
-                (false, l) => EStructuralFeature::new(name, FeatureKind::Reference, l, 1),
-            };
+            let mut f =
+                EStructuralFeature::new(name, FeatureKind::Reference, lower, upper);
             f.set_type_name(et.clone());
             if feat.attr("containment") == Some("true") {
                 f.set_containment(true);
@@ -140,10 +148,7 @@ fn load_class_features(classifier: &emf_xmi::parser::XmlNode, cls: &mut EClass) 
             cls.add_feature(f);
         } else {
             // EAttribute
-            let mut f = match (many, lower) {
-                (true, _) => EStructuralFeature::new(name, FeatureKind::Attribute, 0, -1),
-                (false, l) => EStructuralFeature::new(name, FeatureKind::Attribute, l, 1),
-            };
+            let mut f = EStructuralFeature::new(name, FeatureKind::Attribute, lower, upper);
             f.set_type_name(et.clone());
             if let Some(dv) = feat.attr("defaultValueLiteral") {
                 f.set_default_value_literal(dv);

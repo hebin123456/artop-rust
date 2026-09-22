@@ -198,6 +198,8 @@ impl EDataType {
 pub struct EClass {
     name: String,
     kind: EClassKind,
+    /// Java/instance class name (EClassifier.instanceClassName).
+    instance_class_name: String,
     /// Parent class names (EMF `eSuperTypes`, may be several).
     super_types: Vec<String>,
     /// Locally declared structural features (own features).
@@ -251,6 +253,14 @@ impl EClass {
         } else if !self.kind.is_concrete() && !abstract_ {
             self.kind = EClassKind::Class;
         }
+    }
+    /// `instanceClassName` (EClassifier.instanceClassName).
+    pub fn instance_class_name(&self) -> &str {
+        &self.instance_class_name
+    }
+    /// Set `instanceClassName`.
+    pub fn set_instance_class_name(&mut self, name: impl Into<String>) {
+        self.instance_class_name = name.into();
     }
 
     /// `eSuperTypes`: parent class names.
