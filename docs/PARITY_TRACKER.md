@@ -18,7 +18,7 @@
 | ENotifierTests.cpp | ⬜ |
 | URITests.cpp | ✅ cpp_parity_common_path |
 | ResourceTests.cpp | 🔶 cpp_parity_common_resource（19）；setResourceSet 关联待补 |
-| CommandTests.cpp | ⬜ |
+| CommandTests.cpp | ✅ cpp_parity_common_command（39，覆盖全命令类） |
 | EPackageRegistryTests.cpp | ⬜ |
 
 ## emf-ecore
