@@ -9,6 +9,7 @@
 //! that will be filled by subsequent milestones.
 
 pub mod loader;
+pub mod metamodel_saver;
 pub mod options;
 pub mod parser;
 pub mod saver;
@@ -22,6 +23,7 @@ pub use xmi_resource::XMIResource;
 pub use xmi_resource_factory::XMIResourceFactory;
 pub use xml_helper::{FeatureKind, XMLHelper};
 pub use xml_load_impl::{XMLLoad, XMLLoadImpl};
+pub use metamodel_saver::save_ecore_package;
 
 pub mod xml_base_handler {
     //! Port target: C++ source unit for `xml_base_handler`.

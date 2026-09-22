@@ -72,17 +72,25 @@ pub fn load_ecore_package(src: &str) -> Result<EPackage, String> {
             }
             t if t.ends_with("EEnum") => {
                 let mut e = EEnum::new(name);
+                let mut idx = 0;
                 for lit in classifier
                     .children
                     .iter()
                     .filter(|c| c.local == "eLiterals")
                 {
                     let lname = lit.attr("name").unwrap_or("unnamed");
-                    let value = lit.attr("value").and_then(|v| v.parse().ok()).unwrap_or(0);
+                    // When `value` is absent the literal takes its ordinal
+                    // index (aligns Java EEnumLiteralSerializer, which omits
+                    // the auto-incremented value on save).
+                    let value = lit
+                        .attr("value")
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(idx);
                     let literal = e.add_literal(lname, value);
                     if let Some(litstr) = lit.attr("literal") {
                         literal.set_literal(litstr);
                     }
+                    idx += 1;
                 }
                 pkg.add_enum(e);
             }
@@ -126,6 +134,9 @@ fn load_class_features(classifier: &emf_xmi::parser::XmlNode, cls: &mut EClass) 
             if feat.attr("containment") == Some("true") {
                 f.set_containment(true);
             }
+            if feat.attr("resolveProxies") == Some("false") {
+                f.set_resolve_proxies(false);
+            }
             cls.add_feature(f);
         } else {
             // EAttribute
@@ -136,6 +147,9 @@ fn load_class_features(classifier: &emf_xmi::parser::XmlNode, cls: &mut EClass) 
             f.set_type_name(et.clone());
             if let Some(dv) = feat.attr("defaultValueLiteral") {
                 f.set_default_value_literal(dv);
+            }
+            if feat.attr("iD") == Some("true") {
+                f.set_id(true);
             }
             cls.add_feature(f);
         }

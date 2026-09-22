@@ -52,6 +52,11 @@ pub struct EStructuralFeature {
     /// Whether a containment reference (EMF `EReference.containment`).
     /// Only meaningful when `kind == Reference`.
     containment: bool,
+    /// Whether this attribute is the ID (EMF `EAttribute.iD`).
+    id: bool,
+    /// Whether proxies are resolved for this reference (EMF
+    /// `EReference.resolveProxies`, default `true`). Only meaningful for refs.
+    resolve_proxies: bool,
 }
 
 impl EStructuralFeature {
@@ -80,6 +85,8 @@ impl EStructuralFeature {
             ordered: true,
             unique: true,
             containment: false,
+            id: false,
+            resolve_proxies: true,
         }
     }
 
@@ -114,6 +121,22 @@ impl EStructuralFeature {
     /// Set the containment flag (only meaningful for references).
     pub fn set_containment(&mut self, containment: bool) {
         self.containment = containment;
+    }
+    /// Whether this attribute is an ID (`EAttribute.iD`).
+    pub fn is_id(&self) -> bool {
+        self.id
+    }
+    /// Set the ID flag (`EAttribute.iD`).
+    pub fn set_id(&mut self, v: bool) {
+        self.id = v;
+    }
+    /// Whether proxies are resolved for this reference (`EReference.resolveProxies`).
+    pub fn is_resolve_proxies(&self) -> bool {
+        self.resolve_proxies
+    }
+    /// Set the resolve-proxies flag (`EReference.resolveProxies`).
+    pub fn set_resolve_proxies(&mut self, v: bool) {
+        self.resolve_proxies = v;
     }
     /// The kind.
     pub fn kind(&self) -> FeatureKind {

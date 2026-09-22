@@ -35,17 +35,21 @@
    ⏳ eGet·eSet·eIsSet·eUnset 反射、bounds·ordered·unique setter、EGenericType（union/wildcard/懒加载同步）Rust 无对应 |
 | EObjectEInvokeTests.cpp | 🔶 cpp_parity_ecore_einvoke（4；EOperation 元数据 operation_id/get-by-name/count 全对齐）；
    ⏳ eInvoke + EInvocationDelegate 派发机制 Rust 尚无对应（需对象级 invocation-delegate 注册表）|
-| EcorePackageTests.cpp | ⬜ |
-| DataTypeUtilTests.cpp | ⬜ |
-| ChangeNotificationTests.cpp | ⬜ |
+| EcorePackageTests.cpp | ✅ cpp_parity_ecore_package（6；ePackage 周期初始化/19 元类·18 内建数据类型注册/全局 registry 按 nsURI·prefix 索引/nsURI·prefix·name 常量/FeatureID 常量块（EClass·EPackage）全对齐。
+   差异：Rust 以 find_class·find_data_type 替代 getEClass_EClass 式类型化 getter） |
+| DataTypeUtilTests.cpp | ✅ cpp_parity_ecore_datatype_util（10；EString·EInt·EBoolean·EDouble from/to、默认值 EString""·EInt0·EBooleanfalse·EDouble0.0·ELong0、coerce（string→int / int→string / int→bool）、nsURI 常量 全对齐。
+   Rust 以 `Val` 替代 std::any，coerce 用 from_string(to_string(...)) 表达） |
+| ChangeNotificationTests.cpp | ✅ 已由 emf-common `cpp_parity_common_enotifier`（30 条）覆盖：Notification 构造/访问器/EventType 值·名称/position/touch·wasTouched/NotificationChain 聚合/多 adapter 广播/removeAdapter REMOVING_ADAPTER 隐式通知/target 管理 全部对齐 |
 
 ## emf-xmi（序列化/反序列化）
 | C++ 测试 | Rust 状态 |
 |---|---|
 | XMILoaderTests.cpp | 🔶 部分（元模型断言已入 codegen 对照） |
 | RuntimeBehaviorTests.cpp | 🔶 部分 |
-| XMISaverTests.cpp | ⬜ |
-| RoundtripTests.cpp | 🔶 部分 |
+| XMISaverTests.cpp | ✅ cpp_parity_xmi_saver（13；EPackage 元模型文档：空根/包元数据 name·nsURI·nsPrefix/ecore:EPackage·xmi·xsi 命名空间声明/EClass·EAttribute·EReference·EEnum 输出/eType 内建 href·`#//同包` 形式/upperBound·containment·abstract·iD·resolveProxies/jsonEncoding·xmlDeclaration·xmiVersion 选项/EEnum 自增 value="" 省略 全对齐。
+   Rust 新增 `emf_xmi::metamodel_saver`（EPackage→<ecore:EPackage>）补齐元模型序列化） |
+| RoundtripTests.cpp | ✅ cpp_parity_xmi_roundtrip（9；load→save→reload 后 name·nsURI·nsPrefix/classifier 数·名/feature name·type·containment·upperBound/defaultValueLiteral/两次 save 幂等/EEnum literal name·value·literal/abstract·eSuperTypes/空包幂等/iD·resolveProxies 保持 全对齐。
+   loader 侧同步补齐：EEnum literal 缺省 value 按序取值、iD/resolveProxies 属性解析） |
 | XMLHelperTests.cpp | ⬜ |
 | XMIResourceFactoryTests.cpp | ⬜ |
 | P3_5_GetEObjectByIDHrefTests.cpp | ⬜ |
