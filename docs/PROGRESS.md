@@ -57,7 +57,7 @@ examples/
 | `emf-ecore-util` | ✅ 工作 | EcoreUtil / Copier / **EObjectValidator** / **FeatureMap** / **ECrossReferenceAdapter**；其余含 extended_metadata / EList 家族骨架 |
 | `emf-ecore-codegen` | ✅ 工作 | GenModel→代码生成：ecore loader（XMI→`EPackage`）+ TypeMapper + generator（struct / `match` 反射表 / `register_package`）+ 顶层 `GenModel` API 与 CLI（`.ecore` → 落盘可独立编译 crate），生成的 crate 可脱离 `.ecore` 编译运行 |
 | `emf-xmi` | ✅ 工作 | saver + loader + 真实 `XMIResource` + `ResourceSet` 按需加载集成（`ResourceHandle` / `ResourceFactory` / `XMIResourceFactory`）；**`XMLHelper`**（命名空间上下文栈 + feature kind 分类 + 按名查询）+ **`XMLLoadImpl`**（`XMLLoad` trait + 默认实现委托资源加载器）已实现并测试通过 |
-| `emf-xsd` | ⬜ 骨架 | XSD 元模型 |
+| `emf-xsd` | ✅ 工作 | XSD 元模型：`XSDSchema` / `complexType` / `simpleType` / `element` / `attribute` / `annotation` / compositor（sequence/choice/all）/ facets / import/include/redefine（普通 Rust 类型 + fluent builder）+ `xsd_parser`（基于 `emf-xmi` 的 XML 解析器，按 local name 忽略命名空间前缀，`maxOccurs="unbounded"`→`-1`） |
 | `emf-edit` | ✅ 工作 | `EditingDomain` + `SetCommand` / `AddCommand` / `RemoveCommand` / `MoveCommand`（经 `BasicCommandStack` undo/redo）；其余含 adapter_factory_editing_domain / command_helper / replace_command 等骨架 |
 | `emf-compare` | ✅ 工作 | 两方/三方比较全管线：`MatchEngine`（ID / 就近匹配）+ `DiffEngine`（属性 / 引用 / MOVE 差分）+ `EquivalenceEngine` + `ConflictDetector`（真/伪冲突）+ `RequirementEngine`（依赖排序）+ `MergeEngine`（按依赖拓扑应用并标记 merged）+ `DiffFilter`；模型类型 `Diff` / `Match` / `Conflict` / `Equivalence` / `Dependency` / `Comparison` |
 | `emf-validation` | ✅ 工作 | `Constraint` / `EValidator` / `Diagnostician` / `ConstraintDescriptor`（批量+实时校验） |

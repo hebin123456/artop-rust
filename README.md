@@ -33,7 +33,7 @@ Each directory mirrors one C++ module; module names map 1:1 to C++ translation u
 | `emf-ecore-util` | `emf-ecore-util` (EcoreUtil/Copier/EMap/validator) | **working** |
 | `emf-ecore-codegen` | `emf-ecore-codegen` (GenModel → codegen) | **working** |
 | `emf-xmi` | `emf-xmi` (XMI/XML serialize, proxies, UUID) | **working** |
-| `emf-xsd` | `emf-xsd` (XSD metamodel) | skeleton |
+| `emf-xsd` | `emf-xsd` (XSD metamodel) | **working** |
 | `emf-edit` | `emf-edit` (commands / editing domain) | **working** |
 | `emf-compare` | `emf-compare` (match+diff+merge) | **working** |
 | `emf-validation` | `emf-validation` (batch + live) | **working** |
