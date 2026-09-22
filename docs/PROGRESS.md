@@ -55,7 +55,7 @@ examples/
 | `emf-ecore` | ✅ 工作 | EClass / EStructuralFeature / EAttribute / EReference / EOperation / EParameter / EPackage / EFactory / EEnum / EDataType / DynamicEObject / EcorePackage / FeatureID 常量 |
 | `emf-artop/autosar448-model` | ✅ 工作 | 生成的 AUTOSAR 4.4.8 注册表 + 反射查询（eAllFeatures / isSuperTypeOf / eGet） |
 | `emf-ecore-util` | ⬜ 骨架 | EcoreUtil / Copier / EMap / validator 等 |
-| `emf-ecore-codegen` | ✅ 工作 | GenModel→代码生成：ecore loader（XMI→`EPackage`）+ TypeMapper + generator（struct / `match` 反射表 / `register_package`），生成的 crate 可脱离 `.ecore` 独立编译运行 |
+| `emf-ecore-codegen` | ✅ 工作 | GenModel→代码生成：ecore loader（XMI→`EPackage`）+ TypeMapper + generator（struct / `match` 反射表 / `register_package`）+ 顶层 `GenModel` API 与 CLI（`.ecore` → 落盘可独立编译 crate），生成的 crate 可脱离 `.ecore` 编译运行 |
 | `emf-xmi` | ✅ 工作 | saver + loader + 真实 `XMIResource` + `ResourceSet` 按需加载集成（`ResourceHandle` / `ResourceFactory` / `XMIResourceFactory`）已实现并测试通过；`XMILoadImpl` / `XMIHelper` 接口待做 |
 | `emf-xsd` | ⬜ 骨架 | XSD 元模型 |
 | `emf-edit` | ⬜ 骨架 | 命令 / 编辑域 |
@@ -151,6 +151,13 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - 端到端（`emf-xmi/tests/resource_set_xmi.rs`）：用 `ResourceSet`+工厂落到真实 `.xmi` 文件，换一个 set 用 `getResource(uri, true)` 按需读回，验证类名 / 属性 / containment 子对象图一致。
   - `emf-ecore-codegen` 完善：多值属性 `e_set` 所需的 `scalar_as_i64` helper 移入生成源码（保证含多值属性的模型也能脱离 `.ecore` 编译）；端到端测试确认生成 crate 可 `cargo run` 跑通反射 API。
   - 顺带修复 clippy 质量门禁告警：适配器身份比较改用薄数据指针、移除 `SegmentSequenceBuilder` 固有 `to_string`（改经 `Display`）、清理 `absurd_extreme_comparisons` / `approx_constant` 等测试 lint。全工作区 fmt / clippy / test / release 全绿，一致性 193 条全 PASS（188 等价 + 5 语义无法表达）。
+
+- **Milestone 7 — 顶层 GenModel 对外 API + CLI（本轮新增）**：把静态建模做成可独立复用的入口，对齐 C++ `GenModelLoader` / `GenModel::generateAll` 的对外调用面。
+  - 新增 `emf-ecore-codegen` 顶层 `GenModel`（`load(src)` / `load_path`）+ `CrateSpec`（默认把依赖解析为工作区相邻的 `emf-common`/`emf-ecore` 兄弟 crate）。`generate_source()` 渲染单个 `lib.rs`；`generate_crate(dir, spec)` 落盘一整个自包含 crate（`Cargo.toml` + `src/lib.rs`，`[workspace]` 根、显式 path 依赖），脱离 `.ecore` 即可编译。`register(&mut PackageRegistry)` 供反射直达。
+  - 可选 CLI：`src/main.rs` 二进制 `emf-ecore-codegen <model.ecore> [--out DIR|--name|--common|--ecore]`，手工解析参数无第三方依赖；实测从 `samples/library.ecore` 生成 crate 并独立 `cargo build` 成功。
+  - 新增 `samples/library.ecore` 样例文件；集成测试 `tests/static_modeling.rs` 用公开 API 从磁盘加载 → 落盘生成 crate → 独立 `cargo build` + 消费者二进制跑通反射 API。
+  - 生成源码收紧 lint：`#![allow(dead_code, unused_imports, unused_mut, non_snake_case, clippy::too_many_arguments)]` 并去掉未用的 `RefCell`/`Rc` 导入，生成的 crate 独立编译零告警。
+  - 质量门禁：`emf-ecore-codegen` 全部单测 + 集成测试 + CLI 端到端全绿（19 单测 + 3 集成）。注：本轮会话中 sandbox 的 Rust 工具链曾消失，已用 rustup + static.rust-lang.org 重建（cargo/rustc 1.98.1 与旧指纹一致），并把 `~/.cargo/bin` 写入 `/etc/profile.d/work-env.sh`。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 

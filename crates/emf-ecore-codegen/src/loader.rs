@@ -152,7 +152,7 @@ fn href_tail(href: &str) -> String {
         },
     };
     // Strip any leading "//" or trailing fragment; match only the last segment.
-    let seg = after.split('/').filter(|s| !s.is_empty()).last();
+    let seg = after.split('/').rev().find(|s| !s.is_empty());
     seg.unwrap_or("").to_string()
 }
 

@@ -1,6 +1,19 @@
 //! Port of C++ `emf-ecore-codegen`'s model-loading + code-generation layer.
 //!
-//! Pipeline (mirrors `emf-ecore-codegen`'s `GenModel` / `CppGenerator`):
+//! The convenient entry point is [`GenModel`]: load an `.ecore` document
+//! (string or file) and turn it into a self-contained, compilable Rust crate:
+//!
+//! ```
+//! use emf_ecore_codegen::{CrateSpec, GenModel};
+//! let model = GenModel::load(include_str!("../samples/library.ecore"))?;
+//! # let dir = std::env::temp_dir().join("codegen_doc_example");
+//! model.generate_crate(&dir, &CrateSpec::default())?;
+//! # let _ = std::fs::remove_dir_all(&dir);
+//! # Ok::<(), String>(())
+//! ```
+//!
+//! The pipeline (mirrors `emf-ecore-codegen`'s `GenModel` / `CppGenerator`)
+//! is exposed one layer lower for programmatic use:
 //!
 //! 1. [`loader::load_ecore_package`] parses an `.ecore` document — which is
 //!    itself an XMI instance of the Ecore metamodel — into an owned
@@ -24,6 +37,9 @@
 //! - splits generated output per package into an independent thin crate, so
 //!   the workspace can compile many packages in parallel and incrementally.
 
+pub mod gen_model;
 pub mod generator;
 pub mod loader;
 pub mod typing;
+
+pub use gen_model::{CrateSpec, GenModel};

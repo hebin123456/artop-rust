@@ -20,7 +20,7 @@ pub fn attr_rust_type(type_name: &str, many: bool) -> String {
         | "ELong" | "ELongObject" | "EByte" | "EByteObject" => "i64".to_string(),
         "EDouble" | "EDoubleObject" | "EFloat" | "EFloatObject" => "f64".to_string(),
         "EBoolean" | "EBooleanObject" => "bool".to_string(),
-        other => format!("{other}"),
+        other => other.to_string(),
     };
     if many {
         format!("Vec<{scalar}>")
@@ -78,9 +78,9 @@ pub fn struct_name(name: &str) -> String {
         return "Unnamed".to_string();
     }
     let mut out = String::with_capacity(name.len());
-    let mut chars = name.chars().peekable();
+    let chars = name.chars();
     let mut prev_upper = false;
-    while let Some(c) = chars.next() {
+    for c in chars {
         if c == '_' {
             prev_upper = false;
             continue;

@@ -32,13 +32,18 @@ pub fn generate_source(pkg: &EPackage) -> String {
         pkg.ns_prefix()
     )
     .unwrap();
-    writeln!(out, "#![allow(clippy::too_many_arguments)]").unwrap();
+    writeln!(out, "#![allow(dead_code)]").unwrap();
+    // Generated code is compiled standalone and may be only partially
+    // exercised: suppress lint noise that depends on the consumer's usage.
+    writeln!(
+        out,
+        "#![allow(unused_imports, unused_mut, non_snake_case, clippy::too_many_arguments)]"
+    )
+    .unwrap();
     out.push_str("use emf_common::eobject::EObject;\n");
     out.push_str("use emf_common::value::{ObjectRef, Val};\n");
     out.push_str("use emf_ecore::structural::FeatureKind;\n");
-    out.push_str("use emf_ecore::{make_package_ref, EClass, EClassKind, EStructuralFeature, PackageRegistry};\n");
-    out.push_str("use std::cell::RefCell;\n");
-    out.push_str("use std::rc::Rc;\n\n");
+    out.push_str("use emf_ecore::{make_package_ref, EClass, EClassKind, EStructuralFeature, PackageRegistry};\n\n");
 
     // One struct per concrete class.
     for class in pkg.classes() {
@@ -49,7 +54,7 @@ pub fn generate_source(pkg: &EPackage) -> String {
     out.push_str("/// Register this package's metadata into `reg` for reflection/serialization.\n");
     out.push_str("pub fn register_package(reg: &mut PackageRegistry) {\n");
     out.push_str("    let mut pkg = emf_ecore::EPackage::new(\"");
-    out.push_str(&pkg.name());
+    out.push_str(pkg.name());
     out.push_str("\");\n");
     if let Some(ns) = pkg.ns_uri() {
         out.push_str("    pkg.set_ns_uri(\"");
@@ -57,7 +62,7 @@ pub fn generate_source(pkg: &EPackage) -> String {
         out.push_str("\");\n");
     }
     out.push_str("    pkg.set_ns_prefix(\"");
-    out.push_str(&pkg.ns_prefix());
+    out.push_str(pkg.ns_prefix());
     out.push_str("\");\n");
     for class in pkg.classes() {
         writeln!(
