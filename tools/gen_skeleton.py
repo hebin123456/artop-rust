@@ -129,11 +129,13 @@ def main():
         name = ex.replace("-", " ")
         with open(f"{d}/main.rs", "w") as f:
             f.write(
-                f"//! Example binary `{ex}` (skeleton). Port of the same-named C++ example.\n"
-                f"use artop_common::diagnostic::Severity;\n\n"
+                f"//! Example binary `{ex}` (stub). Port of the same-named C++ example.\n"
+                f"use artop_common::diagnostic::{{Diagnostic, Severity}};\n\n"
                 f"fn main() {{\n"
                 f"    let msg = String::from(\"{name}\");\n"
-                f"    artop_common::diag::report(Severity::Info, &msg);\n"
+                f"    let d = Diagnostic::new(Severity::Info, \"{ex}\", 0, msg);\n"
+                f"    eprintln!(\"{{d}}\");\n"
+                f"    assert_ne!(d.severity(), Severity::Error);\n"
                 f"}}\n")
         print("generated example", ex)
 
