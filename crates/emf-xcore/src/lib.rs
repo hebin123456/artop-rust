@@ -2,30 +2,20 @@
 //!
 //! Port target: C++ `emf-xcore` module of `hebin123456/artop-cpp`.
 //!
-//! This file is *skeleton*: each module below is a compile placeholder that
-//! will be filled with the port of the corresponding C++ translation unit.
-//! Filled by GitHub Actions; see `.github/workflows/ci.yml`.
+//! This crate implements the Xcore domain-specific language: a lightweight,
+//! textual syntax for describing EMF metamodels. It owns two submodules:
+//!
+//! - [`dsl`]: the abstract syntax tree (AST) for an Xcore file, including
+//!   packages, classes (entities), data types, enums, structural features and
+//!   annotations.
+//! - [`parser`]: the recursive-descent parser that turns Xcore source text into
+//!   the AST, with references and validation.
 
-pub mod parser {
-    //! Port target: C++ source unit for `parser`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-xcore::parser"
-    }
-}
+pub mod dsl;
+pub mod parser;
 
-pub mod dsl {
-    //! Port target: C++ source unit for `dsl`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-xcore::dsl"
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn skeleton_compiles() {
-        assert_eq!(super::parser::api_surface(), "emf-xcore::parser");
-    }
-}
+pub use dsl::{
+    Annotation, DataTypeDecl, EClassDecl, EEnumDecl, EEnumLiteralDecl, FeatureDecl, PackageDecl,
+    TypedElement,
+};
+pub use parser::{parse, ParseError, ParsedFile};

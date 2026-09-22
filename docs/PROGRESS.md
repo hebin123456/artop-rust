@@ -61,9 +61,9 @@ examples/
 | `emf-edit` | ✅ 工作 | `EditingDomain` + `SetCommand` / `AddCommand` / `RemoveCommand` / `MoveCommand`（经 `BasicCommandStack` undo/redo）；其余含 adapter_factory_editing_domain / command_helper / replace_command 等骨架 |
 | `emf-compare` | ✅ 工作 | 两方/三方比较全管线：`MatchEngine`（ID / 就近匹配）+ `DiffEngine`（属性 / 引用 / MOVE 差分）+ `EquivalenceEngine` + `ConflictDetector`（真/伪冲突）+ `RequirementEngine`（依赖排序）+ `MergeEngine`（按依赖拓扑应用并标记 merged）+ `DiffFilter`；模型类型 `Diff` / `Match` / `Conflict` / `Equivalence` / `Dependency` / `Comparison` |
 | `emf-validation` | ✅ 工作 | `Constraint` / `EValidator` / `Diagnostician` / `ConstraintDescriptor`（批量+实时校验） |
-| `emf-xcore` | ⬜ 骨架 | Xcore DSL |
-| `emf-acceleo` | ⬜ 骨架 | MTL / M2T |
-| `emf-sphinx` | ⬜ 骨架 | headless 核心 |
+| `emf-xcore` | ✅ 工作 | Xcore DSL 解析器：`dsl`（Package/EClass/EDataType/EEnum/Feature/Annotation AST，Multiplicity 与 kind 判定）+ `parser`（递归下降：注解 `@key[.value]`、`package/class/interface/abstract`、`extends`、`#` containment 引用、`?*/` 多重性、`@DataType`/`@Enum`），23+ 用例覆盖 |
+| `emf-acceleo` | ✅ 工作 | Acceleo MTL/`M2T` 引擎：`mtl_parser`（`template`/`query`、public/private/protected、类型化参数）+ `template`（`TemplateFile`/`TemplateDecl`/`ValueContext` + 变量替换 + 注释剥离）+ `m2t_engine`（entry-point 渲染、`[if]/[else]/[/if]` 条件、`[for]/[/for]` 迭代、具名模板渲染） |
+| `emf-sphinx` | ✅ 工作 | headless 核心：`Node`（attributes/children fluent builder）+ `Root`/`Model`（全路径索引 O(1) `resolve`）+ 深度遍历（`Continue`/`Prune`/`Stop` 控制） |
 | `emf-artop/artop-runtime` | ⬜ 骨架 | AUTOSAR 序列化 / 反序列化 / 版本元数据 |
 | `emf-artop/artop-codegen` | ⬜ 骨架 | `.ecore` → 静态模型 |
 
@@ -183,6 +183,23 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - `Diagnostician`：`map_severity` 把校验严重级映射到通用 `Diagnostic`；`validate_object` 单对象、`validate` 沿 containment 树深度优先遍历（`collect`）并逐对象按包分派；`package_of` 以类名为兜底包键。
   - `ConstraintDescriptorParser`：零依赖解析 `plugin.xml` 风格 `<constraint>`（自闭合 `/>` 与完整 `>` 均支持，含引号内 `>` 处理），`parse_descriptors` / `parse_and_register`；`ConstraintDescriptor::instantiate` 把 `body` 编译为求值器（`==`（值相等）/ `~=`（不得包含）两种 OCL 子集）。
   - 质量门禁：`emf-validation` 10 条单测全绿（含约束求值、类过滤、分派诊断、未注册包静默跳过、XML 约束解析与实例化），fmt + clippy（0 告警）通过，全工作区 test 无回归。
+
+- **Milestone 12 — emf-compare 两方/三方比较全管线（本轮新增）**：把 `emf-compare` 从骨架推进为完整的比较/合并管线。
+  - 模型类型（`support`）：`Comparison` / `Match` / `Diff`（属性 / 引用 / MOVE / ADD / DELETE）/ `Conflict`（REAL / PSEUDO）/ `Equivalence` / `Dependency`，均带引用与方向/来源统计。
+  - `MatchEngine`：根匹配 + ID 匹配（`xmi:id`）优先 + 就近相似度（属性命中、phantom 判定）；`DiffEngine`：属性值、单/多引用、有序集合 MOVE 差分、法术变化；`EquivalenceEngine` 归一化等价项。
+  - `ConflictDetector`（真/伪冲突）+ `RequirementEngine`（遍历 diff 依赖边、拓扑排序）+ `MergeEngine`（`remove_conflicting`/`merge_over`，按依赖顺序应用并标记 merged）+ `MinimalDiffFilter`。
+  - 质量门禁：`emf-compare` 14 条单测全绿，fmt + clippy（0 告警）通过，全工作区 test 无回归。
+
+- **Milestone 13 — emf-xsd 元模型 + 解析器（本轮新增）**：把 `emf-xsd` 从骨架推进为一套可用的 XSD 处理层。
+  - `xsd_metamodel`：`XSDSchema` / `XSDComplexTypeDefinition` / `XSDElementDeclaration` / `XSDAttributeDeclaration` / `XSDCompositor`（sequence/choice/all）/ `XsdFacet` / `XSDAnnotation` / import/include/redefine + fluent builder + `type_by_name` / `element_by_name` 查询。
+  - `xsd_parser`：基于 `emf-xmi` 的 XML 解析器把 `<schema>`（含 `targetNamespace`、elementFormDefault 等）灌入元模型，按 local name 忽略命名空间前缀，`maxOccurs="unbounded"` → `-1`，支持自闭合标签与注解。
+  - 质量门禁：`emf-xsd` 6 条单测全绿，fmt + clippy（0 告警）通过，全工作区 test 无回归。
+
+- **Milestone 14 — emf-xcore / emf-acceleo / emf-sphinx（本轮新增）**：把剩余三个骨架 crate 推进为可用实现。
+  - `emf-xcore`：`dsl` 定义 Xcore AST（`PackageDecl` / `EClassDecl` / `EDataTypeDecl` / `EEnumDecl` / `FeatureDecl` / `Annotation` / `Multiplicity`），`parser` 递归下降（`@key[.value]` 注解、`package/class/interface/abstract`、`extends`、`#` containment 引用、`?`/`*`/`+` 多重性、内置 `String/Int/...` 与 `@DataType` 表判定属性 vs 引用），5 条单测全绿。
+  - `emf-acceleo`：`mtl_parser`（`[template]/[query]`、public/private/protected、类型化 `(a : EClass)` 参数、模块/导入/注释跳过）+ `template`（`TemplateFile` / `TemplateDecl` / `ValueContext` + `$var` 替换 + `[comment]` 剥离）+ `m2t_engine`（entry-point 渲染、`[if/$]/[else]/[/if]`、`[for/$]/[/for]`、具名渲染），13 条单测全绿。
+  - `emf-sphinx`：`headless_core` 提供 `Node`（attrs/children + fluent builder）、`Root`/`Model`（全路径索引 + O(1) `resolve`/`require`）、`WalkControl`（Continue/Prune/Stop）深度遍历，4 条单测全绿。
+  - 质量门禁：新增 22 条单测全绿，三个 crate fmt + clippy（0 告警）通过，全工作区 test 无回归。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 

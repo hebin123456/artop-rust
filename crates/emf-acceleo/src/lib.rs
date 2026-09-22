@@ -2,38 +2,21 @@
 //!
 //! Port target: C++ `emf-acceleo` module of `hebin123456/artop-cpp`.
 //!
-//! This file is *skeleton*: each module below is a compile placeholder that
-//! will be filled with the port of the corresponding C++ translation unit.
-//! Filled by GitHub Actions; see `.github/workflows/ci.yml`.
+//! This crate implements a lightweight Acceleo-style Model-to-Text (M2T)
+//! engine:
+//!
+//! - [`mtl_parser`] parses `.mtl` template files into a list of template
+//!   declarations with their parameters and body.
+//! - [`template`] defines the template model (declaration, parameters, body,
+//!   query) plus the runtime value context.
+//! - [`m2t_engine`] evaluates a template against a value context and produces
+//!   the generated text, supporting variable substitution, conditionals and
+//!   iteration.
 
-pub mod mtl_parser {
-    //! Port target: C++ source unit for `mtl_parser`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-acceleo::mtl_parser"
-    }
-}
+pub mod m2t_engine;
+pub mod mtl_parser;
+pub mod template;
 
-pub mod template {
-    //! Port target: C++ source unit for `template`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-acceleo::template"
-    }
-}
-
-pub mod m2t_engine {
-    //! Port target: C++ source unit for `m2t_engine`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-acceleo::m2t_engine"
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn skeleton_compiles() {
-        assert_eq!(super::mtl_parser::api_surface(), "emf-acceleo::mtl_parser");
-    }
-}
+pub use m2t_engine::{render, M2tError};
+pub use mtl_parser::{parse_templates, TemplateParseError};
+pub use template::{QueryDecl, TemplateDecl, TemplateFile, TemplateParam, ValueContext};

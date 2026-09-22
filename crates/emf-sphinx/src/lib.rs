@@ -2,25 +2,11 @@
 //!
 //! Port target: C++ `emf-sphinx` module of `hebin123456/artop-cpp`.
 //!
-//! This file is *skeleton*: each module below is a compile placeholder that
-//! will be filled with the port of the corresponding C++ translation unit.
-//! Filled by GitHub Actions; see `.github/workflows/ci.yml`.
+//! [`headless_core`] provides the model-processing entry points that the
+//! downstream patcher / validator / report tools are built on: a lightweight
+//! object graph with path-based resolution and controllable depth-first
+//! traversal.
 
-pub mod headless_core {
-    //! Port target: C++ source unit for `headless_core`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-sphinx::headless_core"
-    }
-}
+pub mod headless_core;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn skeleton_compiles() {
-        assert_eq!(
-            super::headless_core::api_surface(),
-            "emf-sphinx::headless_core"
-        );
-    }
-}
+pub use headless_core::{count, walk, Model, ModelError, Node, Root, WalkControl};

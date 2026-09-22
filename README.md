@@ -37,9 +37,9 @@ Each directory mirrors one C++ module; module names map 1:1 to C++ translation u
 | `emf-edit` | `emf-edit` (commands / editing domain) | **working** |
 | `emf-compare` | `emf-compare` (match+diff+merge) | **working** |
 | `emf-validation` | `emf-validation` (batch + live) | **working** |
-| `emf-xcore` | `emf-xcore` (Xcore DSL) | skeleton |
-| `emf-acceleo` | `emf-acceleo` (MTL/M2T) | skeleton |
-| `emf-sphinx` | `emf-sphinx` (headless core) | skeleton |
+| `emf-xcore` | `emf-xcore` (Xcore DSL parser) | **working** |
+| `emf-acceleo` | `emf-acceleo` (MTL/M2T engine) | **working** |
+| `emf-sphinx` | `emf-sphinx` (headless core) | **working** |
 | `emf-artop/autosar448-model` | `emf-artop/autosar448-model` (generated AUTOSAR 4.4.8 registry + reflection) | **working** |
 | `emf-artop/artop-runtime` | `emf-artop/emf-artop-runtime` (AUTOSAR ser/de, versions) | skeleton |
 | `emf-artop/artop-codegen` | `emf-artop/emf-artop-codegen` (.ecore → static model) | skeleton |
