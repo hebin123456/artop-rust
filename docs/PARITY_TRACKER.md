@@ -50,7 +50,8 @@
    Rust 新增 `emf_xmi::metamodel_saver`（EPackage→<ecore:EPackage>）补齐元模型序列化） |
 | RoundtripTests.cpp | ✅ cpp_parity_xmi_roundtrip（9；load→save→reload 后 name·nsURI·nsPrefix/classifier 数·名/feature name·type·containment·upperBound/defaultValueLiteral/两次 save 幂等/EEnum literal name·value·literal/abstract·eSuperTypes/空包幂等/iD·resolveProxies 保持 全对齐。
    loader 侧同步补齐：EEnum literal 缺省 value 按序取值、iD/resolveProxies 属性解析） |
-| XMLHelperTests.cpp | ⬜ |
+| XMLHelperTests.cpp | ✅ cpp_parity_xml_helper（32；XMIHelper 工具函数 splitQName/splitHref/stripFragmentSlash、escapeXmlAttr（`& < "`·`\n\r\t`→`&#xA;/&#xD;/&#x9;`·`>`与`'`不转义·非 ASCII→`&#xNNNN;` 小写、mappableLimit 默认 0x7F/passthrough 0x10FFFF）、escapeXmlText（保留 `\n \t`，转义 `\r`）、四个命名空间常量 kEcore·kXmi·kXmi2·kXsi/XMLHelperImpl 命名空间上下文 getURI·getPrefix·getNamespaceURI·pop 清除·嵌套作用域/getXMLEncoding·getJavaEncoding 编码映射/setResource·setNoNamespacePackage·setBaseURI/FeatureKind 常量 1-5 全对齐。
+   Rust 新增 `emf_xmi::xmi_helper` 模块并扩展 `XMLHelper` 补齐 resource·base_uri·编码映射与 get_namespace_uri） |
 | XMIResourceFactoryTests.cpp | ⬜ |
 | P3_5_GetEObjectByIDHrefTests.cpp | ⬜ |
 | P3_XMLSaveLoadUUIDTests.cpp | ⬜ |

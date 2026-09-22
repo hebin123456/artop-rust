@@ -16,6 +16,8 @@
 
 use std::collections::HashMap;
 
+use emf_common::resource::Resource;
+use emf_common::uri::Uri;
 use emf_ecore::{EClass, EStructuralFeature};
 
 /// Feature-kind classification, aligned to Java `XMLHelper` constants.
@@ -52,6 +54,10 @@ pub struct XMLHelper {
     uris_to_prefixes: HashMap<String, String>,
     /// The `noNamespacePackage` (package whose classes carry no namespace URI).
     no_namespace_package: Option<String>,
+    /// The resource this helper works on (EMF `XMLHelperImpl.resource`).
+    resource: Option<Resource>,
+    /// A base URI against which `href`s are resolved (EMF `baseURI`).
+    base_uri: Option<Uri>,
 }
 
 impl XMLHelper {
@@ -124,6 +130,62 @@ impl XMLHelper {
     /// The no-namespace package name, if set.
     pub fn no_namespace_package(&self) -> Option<&str> {
         self.no_namespace_package.as_deref()
+    }
+
+    /// The namespace URI bound to `prefix`. Equivalent to `get_uri`; the C++
+    /// alias `getNamespaceURI` returns `""` when unknown (the caller maps
+    /// `None` to `""`).
+    pub fn get_namespace_uri(&self, prefix: &str) -> Option<&str> {
+        self.get_uri(prefix)
+    }
+
+    /// Direct access to the current resource (EMF `getResource`).
+    pub fn resource(&self) -> Option<&Resource> {
+        self.resource.as_ref()
+    }
+
+    /// Set the current resource (EMF `setResource`).
+    pub fn set_resource(&mut self, r: Option<Resource>) {
+        self.resource = r;
+    }
+
+    /// The base URI, if any (EMF `getBaseURI`).
+    pub fn base_uri(&self) -> Option<&Uri> {
+        self.base_uri.as_ref()
+    }
+
+    /// Set the base URI (EMF `setBaseURI`).
+    pub fn set_base_uri(&mut self, u: Option<Uri>) {
+        self.base_uri = u;
+    }
+
+    /// Map a Java encoding name to the XML/IANA encoding name used in the
+    /// declaration (EMF `getXMLEncoding`). Returns `""` for an unrecognized
+    /// name.
+    pub fn get_xml_encoding(&self, java_encoding: &str) -> String {
+        match java_encoding.trim().to_ascii_uppercase().as_str() {
+            "" => String::new(),
+            "UTF-8" | "UTF8" => "UTF-8".to_string(),
+            "US-ASCII" | "ASCII" => "US-ASCII".to_string(),
+            "ISO-8859-1" | "ISO8859-1" | "8859_1" | "LATIN1" => "ISO-8859-1".to_string(),
+            "ISO-8859-2" | "ISO8859-2" | "8859_2" => "ISO-8859-2".to_string(),
+            "UTF-16" | "UTF16" => "UTF-16".to_string(),
+            other => other.to_string(),
+        }
+    }
+
+    /// Map an XML/IANA encoding name to the equivalent Java encoding name
+    /// (EMF `getJavaEncoding`). Returns `""` for an unrecognized name.
+    pub fn get_java_encoding(&self, xml_encoding: &str) -> String {
+        match xml_encoding.trim().to_ascii_uppercase().as_str() {
+            "" => String::new(),
+            "UTF-8" => "UTF-8".to_string(),
+            "US-ASCII" => "US-ASCII".to_string(),
+            "ISO-8859-1" => "ISO-8859-1".to_string(),
+            "ISO-8859-2" => "ISO-8859-2".to_string(),
+            "UTF-16" => "UTF-16".to_string(),
+            other => other.to_string(),
+        }
     }
 
     /// Look up a structural feature by name on `class` such that its declaring

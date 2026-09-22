@@ -18,7 +18,13 @@ pub mod xmi_resource_factory;
 pub mod xml_escape;
 pub mod xml_helper;
 pub mod xml_load_impl;
+pub mod xmi_helper;
 
+pub use xmi_helper::{
+    escape_xml_attr, escape_xml_attr_with_limit, escape_xml_text, escape_xml_text_with_limit,
+    split_href, split_qname, strip_fragment_slash, HrefParts, K_ECORE_NS_URI, K_XMI_NS_URI,
+    K_XMI_NS_URI_2, K_XSI_NS_URI,
+};
 pub use xmi_resource::XMIResource;
 pub use xmi_resource_factory::XMIResourceFactory;
 pub use xml_helper::{FeatureKind, XMLHelper};
