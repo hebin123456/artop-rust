@@ -54,7 +54,8 @@
    Rust 新增 `emf_xmi::xmi_helper` 模块并扩展 `XMLHelper` 补齐 resource·base_uri·编码映射与 get_namespace_uri） |
 | XMIResourceFactoryTests.cpp | ✅ cpp_parity_xmi_resource_factory（4；registerDefaults 使 .xmi/.ecore 可创建/未知扩展回退 XMIResource（不抛异常）/registerFactory 自定义扩展·大小写不敏感/direct createResource 返回具体 XMIResource 全对齐。
    Rust 在 `XMIResourceFactory` 补齐静态扩展分派 API：thread_local 扩展注册表·register_defaults·register_factory·create_resource_for·create_resource） |
-| P3_5_GetEObjectByIDHrefTests.cpp | ⬜ |
+| P3_5_GetEObjectByIDHrefTests.cpp | ✅ cpp_parity_get_eobject_by_id（13；setID/getID/getEObjectByID 双向映射·覆盖旧 id·未知 id→None·未注册→""/xmi:id 加载自动注册/getEObject 三种形态 "?id"·"Name"·"//Name"/空·未知 fragment→None/resolvePositionPath "@feat.index"（含多值 containment 取首个/次个）·无 @ 按名/getIDToEObjectMap 全部注册 id 全对齐。
+   Rust 在 `XMIResource` 补齐 id 双向映射（Rc 指针键）+ 片段导航，`loader::load_from_str_with_ids` 导出 xmi:id 表；C++ 走 ecore:EPackage 元模型、Rust 以 DynamicEObject 文档承载同一 ID/href 契约） |
 | P3_XMLSaveLoadUUIDTests.cpp | ⬜ |
 | resourceset_multi_file_test.cpp | ⬜ |
 | E2E_MultiFileEcoreTests.cpp | ⬜ |

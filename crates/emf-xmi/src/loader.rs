@@ -16,6 +16,7 @@
 //!   document's `xmi:id` table after all objects are built.
 
 use std::cell::Ref;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use emf_common::eobject::EObject;
@@ -28,8 +29,18 @@ use super::parser::{parse, XmlNode};
 /// Load a complete XMI/XML document into `DynamicEObject`s. Returns the object
 /// roots in document order.
 pub fn load_from_str(src: &str, registry: &PackageRegistry) -> Result<Vec<ObjectRef>, String> {
+    load_from_str_with_ids(src, registry).map(|(roots, _)| roots)
+}
+
+/// Load a document like [`load_from_str`], additionally returning the table of
+/// `xmi:id` -> object entries harvested while building the graph. Used so a
+/// resource can expose `getEObjectByID` for ids that appear in the document.
+pub fn load_from_str_with_ids(
+    src: &str,
+    registry: &PackageRegistry,
+) -> Result<(Vec<ObjectRef>, HashMap<String, ObjectRef>), String> {
     let roots = parse(src)?;
-    let mut id_map: std::collections::HashMap<String, ObjectRef> = Default::default();
+    let mut id_map: HashMap<String, ObjectRef> = Default::default();
     let mut deferred: Vec<(ObjectRef, String, String)> = Vec::new();
     let mut built = Vec::new();
 
@@ -42,7 +53,7 @@ pub fn load_from_str(src: &str, registry: &PackageRegistry) -> Result<Vec<Object
         built.push(obj);
     }
     resolve_hrefs(&built, &id_map, &mut deferred);
-    Ok(built)
+    Ok((built, id_map))
 }
 
 /// Return `roots` unchanged, unless there is a single wrapper element whose

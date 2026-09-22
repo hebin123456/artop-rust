@@ -11,12 +11,14 @@
 //! Being part of the generic EMF XMI layer it has no knowledge of any domain
 //! metamodel; the registry drives all class/feature resolution.
 
+use std::rc::Rc;
+
 use emf_common::resource::{Resource, ResourceHandle};
 use emf_common::uri::Uri;
-use emf_common::value::ObjectRef;
+use emf_common::value::{ObjectRef, Val};
 use emf_ecore::PackageRegistry;
 
-use super::loader::load_from_str;
+use super::loader::load_from_str_with_ids;
 use super::options::XmiOptions;
 use super::saver::save_to_string;
 
@@ -26,6 +28,10 @@ pub struct XMIResource {
     resource: Resource,
     registry: PackageRegistry,
     opts: XmiOptions,
+    /// `xmi:id` (or an id set via [`set_id`](Self::set_id)) -> object.
+    id_to_eobject: std::collections::HashMap<String, ObjectRef>,
+    /// Object identity (pointer) -> id, for the reverse `get_id` lookup.
+    eobject_to_id: std::collections::HashMap<usize, String>,
 }
 
 impl XMIResource {
@@ -35,6 +41,8 @@ impl XMIResource {
             resource: Resource::new(uri),
             registry,
             opts: XmiOptions::default(),
+            id_to_eobject: std::collections::HashMap::new(),
+            eobject_to_id: std::collections::HashMap::new(),
         }
     }
 
@@ -44,6 +52,8 @@ impl XMIResource {
             resource,
             registry,
             opts: XmiOptions::default(),
+            id_to_eobject: std::collections::HashMap::new(),
+            eobject_to_id: std::collections::HashMap::new(),
         }
     }
 
@@ -55,6 +65,11 @@ impl XMIResource {
     /// Access the underlying abstract resource.
     pub fn resource(&self) -> &Resource {
         &self.resource
+    }
+
+    /// The registry this resource resolves classes/features against.
+    pub fn registry(&self) -> &PackageRegistry {
+        &self.registry
     }
 
     /// Mutable access to the underlying abstract resource.
@@ -75,16 +90,92 @@ impl XMIResource {
     /// Parse XMI/XML text into the resource, replacing its root contents and
     /// marking it loaded. Any parse/registry error surfaces as `Err`.
     pub fn load_from_string(&mut self, src: &str) -> Result<(), String> {
-        let roots = load_from_str(src, &self.registry)?;
-        let contents: Vec<ObjectRef> = roots;
-        self.resource.set_contents(contents);
+        let (roots, id_map) = load_from_str_with_ids(src, &self.registry)?;
+        self.resource.set_contents(roots);
         self.resource.set_loaded(true);
+        // Adopt every `xmi:id` discovered while loading into the id map.
+        self.id_to_eobject = id_map;
+        self.eobject_to_id = self
+            .id_to_eobject
+            .iter()
+            .map(|(id, obj)| (object_key(obj), id.clone()))
+            .collect();
         Ok(())
     }
 
     /// `fromXmiString` — delegate to [`Self::load_from_string`].
     pub fn from_xmi_string(&mut self, src: &str) -> Result<(), String> {
         self.load_from_string(src)
+    }
+
+    // ---- ID / href navigation (EMF `XMIResource.getID/getEObject` etc.) ----
+
+    /// Register `id` for `obj`, replacing any prior id (EMF `setID`).
+    pub fn set_id(&mut self, obj: &ObjectRef, id: impl Into<String>) {
+        let key = object_key(obj);
+        if let Some(old) = self.eobject_to_id.get(&key).cloned() {
+            self.id_to_eobject.remove(&old);
+        }
+        let id = id.into();
+        self.eobject_to_id.insert(key, id.clone());
+        self.id_to_eobject.insert(id, Rc::clone(obj));
+    }
+
+    /// The id registered for `obj`, if any (EMF `getID`; `""` when none).
+    pub fn get_id(&self, obj: &ObjectRef) -> String {
+        self.eobject_to_id
+            .get(&object_key(obj))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// The object registered under `id`, if any (EMF `getEObjectByID`).
+    pub fn get_object_by_id(&self, id: &str) -> Option<ObjectRef> {
+        self.id_to_eobject.get(id).cloned()
+    }
+
+    /// All `id -> object` entries currently registered. Aligns the C++
+    /// `getIDToEObjectMap` accessor.
+    pub fn id_to_eobject_map(&self) -> &std::collections::HashMap<String, ObjectRef> {
+        &self.id_to_eobject
+    }
+
+    /// Resolve a fragment to an object (EMF `XMIResource.getEObject`).
+    ///
+    /// Supports the forms tested by the C++ suite:
+    /// - `"?<id>"` -> by `xmi:id`
+    /// - `"Name"` / `"//Name"` (leading slashes stripped) -> by classifier name
+    /// An empty or unknown fragment yields `None`.
+    pub fn get_eobject(&self, fragment: &str) -> Option<ObjectRef> {
+        if fragment.is_empty() {
+            return None;
+        }
+        if let Some(id) = fragment.strip_prefix('?') {
+            return self.get_object_by_id(id);
+        }
+        let name = fragment.trim_start_matches('/');
+        find_object_by_name(self.resource.contents(), name)
+    }
+
+    /// Resolve a position path into an object (EMF `resolvePositionPath`).
+    ///
+    /// `"@feat.0[.feat2.1...]"` walks a containment feature by index from a
+    /// root; a path without `@` resolves by classifier name, as `get_eobject`.
+    pub fn resolve_position_path(&self, path: &str) -> Option<ObjectRef> {
+        if path.is_empty() {
+            return None;
+        }
+        if path.starts_with('@') {
+            let segments: Vec<&str> = path[1..].split('.').collect();
+            for root in self.resource.contents().iter() {
+                if let Some(obj) = navigate_position(root, &segments) {
+                    return Some(obj);
+                }
+            }
+            None
+        } else {
+            find_object_by_name(self.resource.contents(), path.trim_start_matches('/'))
+        }
     }
 
     /// Persist to the resource URI (`file:` only for now).
@@ -154,6 +245,60 @@ impl ResourceHandle for XMIResource {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
+}
+
+/// A stable identity for an [`ObjectRef`] (the underlying `Rc` pointer), used
+/// as the reverse `object -> id` map key.
+fn object_key(obj: &ObjectRef) -> usize {
+    Rc::as_ptr(obj) as *const () as usize
+}
+
+/// Depth-first search for the first reachable object (including roots) whose
+/// eClass name equals `name`.
+fn find_object_by_name(roots: &[ObjectRef], name: &str) -> Option<ObjectRef> {
+    fn rec(obj: &ObjectRef, name: &str) -> Option<ObjectRef> {
+        if obj.borrow().e_class() == name {
+            return Some(Rc::clone(obj));
+        }
+        for child in obj.borrow().e_contents() {
+            if let Some(found) = rec(&child, name) {
+                return Some(found);
+            }
+        }
+        None
+    }
+    for root in roots {
+        if let Some(found) = rec(root, name) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// Walk a `@feat.0[.feat2.1...]` position path from `root`. Returns the object
+/// at the end of the path, or `None` if any feature/index is missing.
+fn navigate_position(root: &ObjectRef, segments: &[&str]) -> Option<ObjectRef> {
+    let mut current = Rc::clone(root);
+    let mut i = 0;
+    while i + 1 < segments.len() {
+        let feat = segments[i];
+        let index: usize = segments[i + 1].parse().ok()?;
+        let value = current.borrow().e_get(feat)?;
+        let next = match value {
+            Val::List(items) => items.get(index)?.as_object()?.clone(),
+            Val::Object(sub) => {
+                if index == 0 {
+                    sub
+                } else {
+                    return None;
+                }
+            }
+            _ => return None,
+        };
+        current = next;
+        i += 2;
+    }
+    Some(current)
 }
 
 #[cfg(test)]
