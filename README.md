@@ -30,13 +30,13 @@ Each directory mirrors one C++ module; module names map 1:1 to C++ translation u
 |---|---|---|
 | `emf-common` | `emf-common` (EObject/EList/Resource/URI/Diagnostic/EPackageRegistry) | **working** |
 | `emf-ecore` | `emf-ecore` (EClass/EPackage/EFactory/ECorePackage) | **working** |
-| `emf-ecore-util` | `emf-ecore-util` (EcoreUtil/Copier/EMap/validator) | skeleton |
-| `emf-ecore-codegen` | `emf-ecore-codegen` (GenModel → codegen) | skeleton |
-| `emf-xmi` | `emf-xmi` (XMI/XML serialize, proxies, UUID) | skeleton |
+| `emf-ecore-util` | `emf-ecore-util` (EcoreUtil/Copier/EMap/validator) | **working** |
+| `emf-ecore-codegen` | `emf-ecore-codegen` (GenModel → codegen) | **working** |
+| `emf-xmi` | `emf-xmi` (XMI/XML serialize, proxies, UUID) | **working** |
 | `emf-xsd` | `emf-xsd` (XSD metamodel) | skeleton |
-| `emf-edit` | `emf-edit` (commands / editing domain) | skeleton |
-| `emf-compare` | `emf-compare` (match+diff+merge) | skeleton |
-| `emf-validation` | `emf-validation` (batch + live) | skeleton |
+| `emf-edit` | `emf-edit` (commands / editing domain) | **working** |
+| `emf-compare` | `emf-compare` (match+diff+merge) | **working** |
+| `emf-validation` | `emf-validation` (batch + live) | **working** |
 | `emf-xcore` | `emf-xcore` (Xcore DSL) | skeleton |
 | `emf-acceleo` | `emf-acceleo` (MTL/M2T) | skeleton |
 | `emf-sphinx` | `emf-sphinx` (headless core) | skeleton |

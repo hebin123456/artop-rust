@@ -59,7 +59,7 @@ examples/
 | `emf-xmi` | ✅ 工作 | saver + loader + 真实 `XMIResource` + `ResourceSet` 按需加载集成（`ResourceHandle` / `ResourceFactory` / `XMIResourceFactory`）；**`XMLHelper`**（命名空间上下文栈 + feature kind 分类 + 按名查询）+ **`XMLLoadImpl`**（`XMLLoad` trait + 默认实现委托资源加载器）已实现并测试通过 |
 | `emf-xsd` | ⬜ 骨架 | XSD 元模型 |
 | `emf-edit` | ✅ 工作 | `EditingDomain` + `SetCommand` / `AddCommand` / `RemoveCommand` / `MoveCommand`（经 `BasicCommandStack` undo/redo）；其余含 adapter_factory_editing_domain / command_helper / replace_command 等骨架 |
-| `emf-compare` | ⬜ 骨架 | match + diff + merge |
+| `emf-compare` | ✅ 工作 | 两方/三方比较全管线：`MatchEngine`（ID / 就近匹配）+ `DiffEngine`（属性 / 引用 / MOVE 差分）+ `EquivalenceEngine` + `ConflictDetector`（真/伪冲突）+ `RequirementEngine`（依赖排序）+ `MergeEngine`（按依赖拓扑应用并标记 merged）+ `DiffFilter`；模型类型 `Diff` / `Match` / `Conflict` / `Equivalence` / `Dependency` / `Comparison` |
 | `emf-validation` | ✅ 工作 | `Constraint` / `EValidator` / `Diagnostician` / `ConstraintDescriptor`（批量+实时校验） |
 | `emf-xcore` | ⬜ 骨架 | Xcore DSL |
 | `emf-acceleo` | ⬜ 骨架 | MTL / M2T |

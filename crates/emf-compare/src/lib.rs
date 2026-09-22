@@ -1,79 +1,38 @@
-//! Model comparison (match+diff) (port of C++ `emf-compare`).
+//! Model comparison (match+diff+merge) — port of C++ `emf-compare`
+//! (`hebin123456/artop-cpp`), aligned to Java `org.eclipse.emf.compare`.
 //!
-//! Port target: C++ `emf-compare` module of `hebin123456/artop-cpp`.
+//! The crate compares two (or three, via an "origin") `EObject` graphs and
+//! reports the structural differences ([`Diff`], [`Comparison`]), so a model
+//! tool can review, filter, merge or undo changes just like EMF Compare.
 //!
-//! This file is *skeleton*: each module below is a compile placeholder that
-//! will be filled with the port of the corresponding C++ translation unit.
-//! Filled by GitHub Actions; see `.github/workflows/ci.yml`.
+//! Pipeline stages, each an engine module:
+//! - [`match_engine`] — align objects across versions (ID / proximity);
+//! - [`diff_engine`] — detect attribute / reference / move differences;
+//! - [`equivalence_engine`] — group diffs that must merge together;
+//! - [`conflict_detector`] — real vs pseudo conflicts in 3-way compares;
+//! - [`requirement_engine`] — ordering constraints between diffs;
+//! - [`merge_engine`] — apply diffs in dependency order;
+//! - [`diff_filter`] — veto diffs before they reach the user.
+//!
+//! Everything is written over the `emf-common` reflection surface, so it is
+//! independent of any domain metamodel (artop-free).
 
-pub mod comparison {
-    //! Port target: C++ source unit for `comparison`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-compare::comparison"
-    }
-}
+pub mod comparison;
+pub mod conflict_detector;
+pub mod diff;
+pub mod diff_engine;
+pub mod diff_filter;
+pub mod equivalence_engine;
+pub mod match_engine;
+pub mod merge_engine;
+pub mod requirement_engine;
+pub mod support;
 
-pub mod conflict_detector {
-    //! Port target: C++ source unit for `conflict_detector`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-compare::conflict_detector"
-    }
-}
-
-pub mod diff_engine {
-    //! Port target: C++ source unit for `diff_engine`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-compare::diff_engine"
-    }
-}
-
-pub mod diff_filter {
-    //! Port target: C++ source unit for `diff_filter`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-compare::diff_filter"
-    }
-}
-
-pub mod equivalence_engine {
-    //! Port target: C++ source unit for `equivalence_engine`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-compare::equivalence_engine"
-    }
-}
-
-pub mod match_engine {
-    //! Port target: C++ source unit for `match_engine`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-compare::match_engine"
-    }
-}
-
-pub mod merge_engine {
-    //! Port target: C++ source unit for `merge_engine`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-compare::merge_engine"
-    }
-}
-
-pub mod requirement_engine {
-    //! Port target: C++ source unit for `requirement_engine`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-compare::requirement_engine"
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn skeleton_compiles() {
-        assert_eq!(super::comparison::api_surface(), "emf-compare::comparison");
-    }
-}
+/// Convenience two-way compare (match + diff + equivalence).
+pub use comparison::compare;
+/// Convenience three-way compare (match + diff + conflict + equivalence).
+pub use comparison::compare3;
+/// The main result container.
+pub use comparison::Comparison;
+/// A single detected difference.
+pub use diff::Diff;
