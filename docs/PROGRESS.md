@@ -60,7 +60,7 @@ examples/
 | `emf-xsd` | ⬜ 骨架 | XSD 元模型 |
 | `emf-edit` | ✅ 工作 | `EditingDomain` + `SetCommand` / `AddCommand` / `RemoveCommand` / `MoveCommand`（经 `BasicCommandStack` undo/redo）；其余含 adapter_factory_editing_domain / command_helper / replace_command 等骨架 |
 | `emf-compare` | ⬜ 骨架 | match + diff + merge |
-| `emf-validation` | ⬜ 骨架 | 批量 + 实时校验 |
+| `emf-validation` | ✅ 工作 | `Constraint` / `EValidator` / `Diagnostician` / `ConstraintDescriptor`（批量+实时校验） |
 | `emf-xcore` | ⬜ 骨架 | Xcore DSL |
 | `emf-acceleo` | ⬜ 骨架 | MTL / M2T |
 | `emf-sphinx` | ⬜ 骨架 | headless 核心 |
@@ -176,6 +176,13 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - `EditingDomain`：持有 `BasicCommandStack`，`create_command`/`create_commands_for_set` 统一构造 set/add/remove/move 命令（对齐 C++ `createCommand` 编排入口）。
   - `lib.rs` 移除 add/remove/move/set/editing_domain 占位模块并挂载真实实现（`CommandRequest` 作为 `SetCommandRequest` 的别名对外）。
   - 质量门禁：`emf-edit` 9 条单测全绿（含经 `BasicCommandStack` 的 execute/undo/redo/redo 端到端），fmt + clippy（0 告警）通过，全工作区 test 无回归。
+
+- **Milestone 11 — emf-validation 校验框架（本轮新增）**：把 `emf-validation` 从骨架推进为可用的校验框架。
+  - `Constraint`：持有求值器 `Evaluator`（`Fn(&dyn EObject) -> bool`），带 id/name/message/**severity**（Ok/Info/Warning/Error/Cancel）/ **mode**（Live/Batch）+ 按类名子串过滤（`target_class_names`）。
+  - `EValidator`：注册/注销约束（`register_constraint` / `unregister_constraint` / `get_constraint`）+ 监听器（`IConstraintListener`）;`validate` / `validate_mode` 对目标求值产出诊断；内置默认约束（空 name 告警）;提供 per-`EPackage` 的 `Registry`（`from_pairs` / `put` / `get`）供 `Diagnostician` 分派。
+  - `Diagnostician`：`map_severity` 把校验严重级映射到通用 `Diagnostic`；`validate_object` 单对象、`validate` 沿 containment 树深度优先遍历（`collect`）并逐对象按包分派；`package_of` 以类名为兜底包键。
+  - `ConstraintDescriptorParser`：零依赖解析 `plugin.xml` 风格 `<constraint>`（自闭合 `/>` 与完整 `>` 均支持，含引号内 `>` 处理），`parse_descriptors` / `parse_and_register`；`ConstraintDescriptor::instantiate` 把 `body` 编译为求值器（`==`（值相等）/ `~=`（不得包含）两种 OCL 子集）。
+  - 质量门禁：`emf-validation` 10 条单测全绿（含约束求值、类过滤、分派诊断、未注册包静默跳过、XML 约束解析与实例化），fmt + clippy（0 告警）通过，全工作区 test 无回归。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 
