@@ -15,9 +15,13 @@ pub mod saver;
 pub mod xmi_resource;
 pub mod xmi_resource_factory;
 pub mod xml_escape;
+pub mod xml_helper;
+pub mod xml_load_impl;
 
 pub use xmi_resource::XMIResource;
 pub use xmi_resource_factory::XMIResourceFactory;
+pub use xml_helper::{FeatureKind, XMLHelper};
+pub use xml_load_impl::{XMLLoad, XMLLoadImpl};
 
 pub mod xml_base_handler {
     //! Port target: C++ source unit for `xml_base_handler`.
@@ -51,14 +55,6 @@ pub mod xmi_handler {
     }
 }
 
-pub mod xmi_helper {
-    //! Port target: C++ source unit for `xmi_helper`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-xmi::xmi_helper"
-    }
-}
-
 pub mod xmi_loader {
     //! Port target: C++ source unit for `xmi_loader`.
     /// Placeholder marker so the module compiles until the real port lands.
@@ -80,22 +76,6 @@ pub mod xml_handler {
     /// Placeholder marker so the module compiles until the real port lands.
     pub fn api_surface() -> &'static str {
         "emf-xmi::xml_handler"
-    }
-}
-
-pub mod xml_helper {
-    //! Port target: C++ source unit for `xml_helper`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-xmi::xml_helper"
-    }
-}
-
-pub mod xml_load_impl {
-    //! Port target: C++ source unit for `xml_load_impl`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-xmi::xml_load_impl"
     }
 }
 

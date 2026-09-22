@@ -56,7 +56,7 @@ examples/
 | `emf-artop/autosar448-model` | ✅ 工作 | 生成的 AUTOSAR 4.4.8 注册表 + 反射查询（eAllFeatures / isSuperTypeOf / eGet） |
 | `emf-ecore-util` | ✅ 工作 | EcoreUtil / Copier / **EObjectValidator** / **FeatureMap** / **ECrossReferenceAdapter**；其余含 extended_metadata / EList 家族骨架 |
 | `emf-ecore-codegen` | ✅ 工作 | GenModel→代码生成：ecore loader（XMI→`EPackage`）+ TypeMapper + generator（struct / `match` 反射表 / `register_package`）+ 顶层 `GenModel` API 与 CLI（`.ecore` → 落盘可独立编译 crate），生成的 crate 可脱离 `.ecore` 编译运行 |
-| `emf-xmi` | ✅ 工作 | saver + loader + 真实 `XMIResource` + `ResourceSet` 按需加载集成（`ResourceHandle` / `ResourceFactory` / `XMIResourceFactory`）已实现并测试通过；`XMILoadImpl` / `XMIHelper` 接口待做 |
+| `emf-xmi` | ✅ 工作 | saver + loader + 真实 `XMIResource` + `ResourceSet` 按需加载集成（`ResourceHandle` / `ResourceFactory` / `XMIResourceFactory`）；**`XMLHelper`**（命名空间上下文栈 + feature kind 分类 + 按名查询）+ **`XMLLoadImpl`**（`XMLLoad` trait + 默认实现委托资源加载器）已实现并测试通过 |
 | `emf-xsd` | ⬜ 骨架 | XSD 元模型 |
 | `emf-edit` | ⬜ 骨架 | 命令 / 编辑域 |
 | `emf-compare` | ⬜ 骨架 | match + diff + merge |
@@ -164,6 +164,11 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - `FeatureMap` / `BasicFeatureMap`：有序 `(feature, value)` 条目表（对齐 C++ `FeatureMap`），支持 `add` / `entries_for` / `size_for` / `get_for` / `set_for` / `remove`，为 XSD/XML 的 group/choice/sequence 序列化铺路。
   - `ECrossReferenceAdapter`：收集子树内所有非 containment 跨引用目标（对齐 C++ `ECrossReferenceAdapter` 的 `getNonContainmentReferences`），`add_adapter_to` / `remove_adapter_from` / `contains`；Rust 反射层暂为快照式扫描实现，`ObjectRefKey` 作为不透明引用键对外。
   - 质量门禁：`emf-ecore-util` 13 条单测 + fmt + clippy（0 告警）全绿，全工作区 test 无回归。
+
+- **Milestone 9 — emf-xmi `XMLHelper` / `XMLLoadImpl`（本轮新增）**：补齐 XMI 层的配置与反序列化入口接口。
+  - `XMLHelper`：命名空间上下文栈（`push_context` / `pop_context` / `add_prefix` / `get_uri` / `get_prefix` / `record_prefix_to_uri_mapping`）+ feature kind 分类（`DatatypeSingle` / `IsManyAdd` / `DatatypeMany` / `Other`）+ 按 `(class, namespaceURI, name)` 查询 feature，为序列化器提供配置基座。
+  - `XMLLoadImpl`：`XMLLoad` trait + 默认实现（`load(request)` 委托给资源自身的 registry 驱动加载器），外加 `parse_only` 只校验不落盘入口。
+  - 质量门禁：`emf-xmi`（新增单元测试后）24 条测试全绿，`fmt --check` 通过、新模块 clippy 0 告警；全工作区 test 无回归。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 
