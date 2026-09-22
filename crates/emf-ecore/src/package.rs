@@ -5,6 +5,7 @@
 
 use crate::{DynamicEObject, EClass, EDataType, EEnum, Val};
 use emf_common::uri::Uri;
+use std::collections::HashMap;
 
 /// A handle to an owned metamodel package.
 pub type PackageRef = std::rc::Rc<std::cell::RefCell<EPackage>>;
@@ -164,6 +165,9 @@ impl EPackage {
 #[derive(Debug, Clone, Default)]
 pub struct PackageRegistry {
     packages: Vec<PackageRef>,
+    /// Packages also indexed under their `name`, `nsURI` and `nsPrefix` keys,
+    /// mirroring C++ `EPackageRegistry` (all keys resolve to the same package).
+    key_index: HashMap<String, PackageRef>,
 }
 
 impl PackageRegistry {
@@ -171,17 +175,59 @@ impl PackageRegistry {
     pub fn new() -> Self {
         Self {
             packages: Vec::new(),
+            key_index: HashMap::new(),
         }
     }
 
-    /// Register a package (by name and by `nsURI`, both are searchable).
+    /// Register a package, indexing it under `name`, `nsURI` and `nsPrefix`.
     pub fn register(&mut self, pkg: PackageRef) {
         let name = pkg.borrow().name().to_string();
-        if !self.packages.iter().any(|p| p.borrow().name() == name) {
-            // register by name keyed out of band; keep list for lookup
-            let _ = name;
-            self.packages.push(pkg);
+        if !self
+            .packages
+            .iter()
+            .any(|p| std::rc::Rc::ptr_eq(p, &pkg) || p.borrow().name() == name)
+        {
+            self.packages.push(pkg.clone());
         }
+        self.key_index.insert(name.clone(), pkg.clone());
+        if let Some(u) = pkg.borrow().ns_uri() {
+            self.key_index.insert(u.to_string(), pkg.clone());
+        }
+        let ns_prefix = pkg.borrow().ns_prefix().to_string();
+        self.key_index.insert(ns_prefix, pkg);
+    }
+
+    /// Look up a package by any registered key (`name`, `nsURI`, `nsPrefix`).
+    pub fn get(&self, key: &str) -> Option<&PackageRef> {
+        self.key_index.get(key)
+    }
+
+    /// Register a package directly under an explicit key (C++ `EPackageRegistry::put`).
+    pub fn put(&mut self, key: impl Into<String>, pkg: PackageRef) {
+        let key = key.into();
+        if !self
+            .packages
+            .iter()
+            .any(|p| std::rc::Rc::ptr_eq(p, &pkg) || p.borrow().name() == key)
+        {
+            self.packages.push(pkg.clone());
+        }
+        self.key_index.insert(key, pkg);
+    }
+
+    /// Whether any package is registered under `key`.
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.key_index.contains_key(key)
+    }
+
+    /// Remove a package from `key`; returns the removed handle if present.
+    pub fn remove(&mut self, key: &str) -> Option<PackageRef> {
+        self.key_index.remove(key)
+    }
+
+    /// All registered keys (each package appears under its name/nsURI/nsPrefix).
+    pub fn keys(&self) -> Vec<String> {
+        self.key_index.keys().cloned().collect()
     }
 
     /// Look up a package by name.
