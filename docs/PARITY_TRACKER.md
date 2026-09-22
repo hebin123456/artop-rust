@@ -14,9 +14,9 @@
 | UniqueEListTests.cpp | 🔶 基本对齐；`set` 重复拒绝待补 |
 | BasicEMapTests.cpp | ✅ cpp_parity_common_core |
 | NotifyingListTests.cpp | ⬜ |
-| SegmentSequenceTests.cpp | ⬜ |
+| SegmentSequenceTests.cpp | 🔶 `cpp_parity_common_path`；空分隔符差异待补（Rust 按字符拆 vs C++ 单段） |
 | ENotifierTests.cpp | ⬜ |
-| URITests.cpp | ⬜ |
+| URITests.cpp | ✅ cpp_parity_common_path |
 | ResourceTests.cpp | ⬜ |
 | CommandTests.cpp | ⬜ |
 | EPackageRegistryTests.cpp | ⬜ |
