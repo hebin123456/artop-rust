@@ -52,3 +52,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: cargo build --release
         run: cargo build --workspace --release
+
+  conformance:
+    name: Conformance vs C++ oracle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Checkout artop-cpp reference
+        uses: actions/checkout@v4
+        with:
+          repository: hebin123456/artop-cpp
+          path: reference/artop-cpp
+          fetch-depth: 1
+      - name: Build and run C++ oracle
+        run: bash tools/conformance/build_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-common
+      - name: Compare Rust vs oracle
+        run: python3 tools/conformance/compare.py

@@ -1,7 +1,3 @@
 /target
-**/target/
-Cargo.lock
-.DS_Store
-*.swp
-.idea/
-.vscode/
+**/target
+tools/conformance/build/

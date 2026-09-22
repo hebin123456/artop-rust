@@ -1,0 +1,31 @@
+# C++(参考, oracle) 测试 ↔ Rust(移植) 测试的等价映射表
+#
+# 列: group<TAB>cpp_test<TAB>rust_test
+#   group    : emf-common 内的大类(uri / elist / segment_sequence / ...)
+#   cpp_test : C++ 单元测试名(来自 emf-cpp/emf-common/tests, 以 EMF_TEST 注册)
+#   rust_test: 对应的 Rust 测试路径(compare.py 会用 `cargo test <path> -- --exact` 单独跑)
+#
+# 规则:
+#   - 已映射且 Rust 同名校验通过 => PASS(行为等价)
+#   - 已映射但 Rust 测试缺失 => PENDING(等价待实现, 可接受)
+#   - 未映射的 C++ 测试 => PENDING(尚未核对), 逐步补齐
+#   - 已映射但 Rust 测试失败 => REGRESSION(必须修复)
+# 以 # 开头的行为注释, 忽略。
+
+group	cpp_test	rust_test
+
+uri	URI_PlainPath	uri::tests::parses_plain_path
+uri	URI_CreateFileURI	uri::tests::file_uri_roundtrip
+uri	URI_CreateURIParsesFileURI	uri::tests::parses_file_with_authority
+uri	URI_CreatePlatformURI	uri::tests::roundtrip_uri
+uri	URI_TrimSegments	uri::tests::trim_segments_drops_tail
+uri	URI_QueryString	uri::tests::roundtrip_uri
+uri	URI_AppendFragment	uri::tests::roundtrip_uri
+
+# 以下仍为“等价待实现”目标; 先占位示意, 实现后填写 rust_test 列:
+# elist	EList_AddGetBasic	elist::tests::basic_list_ops
+# elist	EList_AddUnique	elist::tests::unique_add_deduplicates
+# elist	EList_NotifierCallbacks	elist::tests::change_hook_fires
+# segment_sequence	SegmentSequence_ToString_Simple	segment_sequence::tests::builder_joins
+# segment_sequence	SegmentSequence_AppendStringWithDelimiter	segment_sequence::tests::splits_on_delimiter
+# emap	BasicEMap_PutGet	emap::tests::basic_map_ops

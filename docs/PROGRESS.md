@@ -75,21 +75,20 @@ examples/
 - `DynamicEObject` 继承特征解析从"全局注册表"改为"归属注册表优先 + 全局兜底"，修复 `shortName` 等继承属性查不到的问题（XMI 加载反射建对象的必要前提）。
 - 清理全部编译/裁剪警告：未用导入、死代码、固有 `to_string` 遮蔽 `Display`、`non_snake_case` 等。
 
-## 5. 与 C++ 等价的一致性测试框架（进行中）
+## 5. 与 C++ 等价的一致性测试框架（已搭建，逐步收敛）
 
-设计：**同一份输入，C++ 与 Rust 各跑一遍，对比结构输出**，允许逐步补齐实现，暂未实现时先标记 SKIP，最终收敛为全过。
+做法与要求一致：**直接取 C++ 的二进制来跑**——把 artop-cpp 里对应的 C++ 单测二进制作
+oracle，跑参考结果；Rust 侧跑同名/对应测试，逐条比对。**一开始缺失实现跑不过很正常**，
+框架把每条行为标为 `PASS / PENDING / REGRESSION`，只有 `REGRESSION`（已映射但 Rust 失败）
+才让脚本非零退出；`PENDING` 反映“等价待实现”，随着落地逐步变 `PASS`。
 
-- 编译 C++ 参考实现（直接取 C++ 二进制，见 `compat-cpp/` 与 `scripts/`），产出参考输出。
-- Rust 侧用对应测试用例产出结果。
-- 比对器做归一化（忽略顺序、时间戳、平台差异）后逐个用例比对。
-- 覆盖：URI 规范化、EClass 继承/反射、FeatureMap、XMI roundtrip、诊断序列等。
+- oracle：`emf-common` C++ 单测二进制（`EMF_TEST` 迷你框架，无需外部依赖），当前 193 条、0 失败。
+- 脚本：`tools/conformance/build_oracle.sh`（编译并跑 C++ oracle）、
+  `compare.py`（跑 Rust 侧并输出 PASS/PENDING/REGRESSION）、`cases.tsv`（C++↔Rust 映射表）。
+- 当前基线：`URI_*` 首批 7 条已 `PASS`；其余 186 条 `PENDING`(未映射)，逐个补齐。
+- 已接入 CI（`conformance` job）：CI 检出 artop-cpp、编译并跑 oracle、再与 Rust 比对。
 
-TODO（见 §7）：
-- [ ] 搭好 C++ 构建入口与用例数据目录
-- [ ] 比对器 skeleton
-- [ ] 首批用例：URI + Ecore 反射
-- [ ] XMI loader/saver roundtrip 等价
-- [ ] CI 集成：C++ 参考输出随 CI 缓存，Rust 用例与之对比
+复用路径：C++ oracle 单测 → `tools/conformance/build`，与 CI 的 `conformance` job 对齐。
 
 ## 6. 质量门禁（每次提交前）
 
@@ -98,15 +97,17 @@ cargo fmt    --all -- --check
 cargo test   --workspace --all-targets     # 当前 18 个测试套件全绿
 cargo clippy --workspace --all-targets     # 无 error / warning
 cargo build  --workspace --release         # release 也通过
+bash tools/conformance/build_oracle.sh <artop-cpp>/cpp/emf-cpp/emf-common
+python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 ```
 
 ## 7. 下一步（按优先级）
 
 1. `emf-xmi`：XMI/XML load/save（解析 `.arxml` 的核心依赖），先做 loader + saver roundtrip + 诊断。
-2. `emf-ecore-util`：Copier / EcoreUtil / eContents / eCrossReferences。
-3. 补 `Val` 对**对象引用、多值**、eIsSet/eUnset、内容树与交叉引用的完整表达。
-4. `artop-runtime`：AUTOSAR 序列化/反序列化。
-5. 一致性测试框架扩展到 XMI 用例并接入 CI。
+2. 一致性测试映射扩展到 EList / SegmentSequence / EMap / Resource：在 `cases.tsv` 补行，翻绿现有 Rust 行为。
+3. `emf-ecore-util`：Copier / EcoreUtil / eContents / eCrossReferences。
+4. 扩展 oracle 到 emf-ecore / emf-xmi 的 C++ tests，逐模块收敛。
+5. `artop-runtime`：AUTOSAR 序列化/反序列化。
 
 ## 8. 提交记录（与本仓库进度相关的近期提交）
 
