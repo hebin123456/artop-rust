@@ -13,9 +13,9 @@
 | EListTests.cpp | ✅ cpp_parity_common_core |
 | UniqueEListTests.cpp | 🔶 基本对齐；`set` 重复拒绝待补 |
 | BasicEMapTests.cpp | ✅ cpp_parity_common_core |
-| NotifyingListTests.cpp | ⬜ |
+| NotifyingListTests.cpp | 🔶 Rust `ListChange` hook 仅 Add/Remove/Set/Move 且不带值、无 ADD_MANY/REMOVE_MANY/MOVE 语义；需先扩展 hook（带值 + 批量变体）再完整移植，现仅数据操作可对齐 |
 | SegmentSequenceTests.cpp | 🔶 `cpp_parity_common_path`；空分隔符差异待补（Rust 按字符拆 vs C++ 单段） |
-| ENotifierTests.cpp | ⬜ |
+| ENotifierTests.cpp | ✅ cpp_parity_common_enotifier（30；adapter 生命周期/eNotify/NotificationChain 抵消+合并+dispatch/wasSet）；⏳ 3 条 `setEContainer` 反向通知属 emf-ecore EObject 容器接线，待补 |
 | URITests.cpp | ✅ cpp_parity_common_path |
 | ResourceTests.cpp | 🔶 cpp_parity_common_resource（19）；setResourceSet 关联待补 |
 | CommandTests.cpp | ✅ cpp_parity_common_command（39，覆盖全命令类） |
