@@ -30,7 +30,8 @@
 | EClassImplTests.cpp | ⬜ |
 | EPackageImplTests.cpp | ⬜ |
 | ETypedElementImplTests.cpp | ⬜ |
-| EObjectEInvokeTests.cpp | ⬜ |
+| EObjectEInvokeTests.cpp | 🔶 cpp_parity_ecore_einvoke（4；EOperation 元数据 operation_id/get-by-name/count 全对齐）；
+   ⏳ eInvoke + EInvocationDelegate 派发机制 Rust 尚无对应（需对象级 invocation-delegate 注册表）|
 | EcorePackageTests.cpp | ⬜ |
 | DataTypeUtilTests.cpp | ⬜ |
 | ChangeNotificationTests.cpp | ⬜ |
