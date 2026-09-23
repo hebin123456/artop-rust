@@ -60,7 +60,8 @@
    Rust 在 `XMIResource` 补齐 v4 UUID 生成（splitmix64+单调序号）、`use_uuids`/`ensure_id`，并新增 `emf_xmi::xml_save_impl` 模块（XMLSave/XMLSaveImpl + XMLLoader/XMLoaderImpl 注入抽象），`save_to_string`/`load_from_string` 经当前激活实现分派） |
 | resourceset_multi_file_test.cpp | ✅ cpp_parity_resourceset_multi_file（1；场景A：a.xmi(EPackage pkgA+EClass A)·b.xmi(pkgB+EClass B, eSuperTypes="a.xmi#//A") 分别 load_ecore_package→EPackage，共注册入同一 PackageRegistry 后 B.eSuperTypes 解析为真实 EClass A（非 proxy，相当于 EMF 跨包物件解析）全对齐。
    差异：场景B（arxml AutosarResourceSet）属 artop 侧按门线禁止；场景A 的 ResourceSet 自动 demand-load 由 object-proxy 触发，Rust 元模型层无持久 proxy 对象，以「跨包按名解析到已注册真实 classifier」等价表达） |
-| E2E_MultiFileEcoreTests.cpp | ⬜ |
+| E2E_MultiFileEcoreTests.cpp | ✅ e2e_multi_file_ecore（10；base .ecore(EPackage base+Library/Book/Writer) 按 nsURI 注册可查/ext .ecore 加载后结构（AnnotatedLibrary·BookCollection 2 classifier）/跨包 eSuperTypes：AnnotatedLibrary 继承 base#//Library 解析到真实 Library/跨包 eType：highlighted·books 均解析到 base#//Book（Reference·many·containment·type_name=Book）/双包同存 Registry（base·ext 双 nsURI 均在）/samples/multi/library.ecore·library_ext.ecore 磁盘加载 + 跨文件 superType·eType 解析 全对齐。
+   样本文件已随 crate 归置于 tests/samples/multi/；C++ 走 EPackageRegistry object-proxy 解析、Rust 以「type_name/href_tail 按名 + 共享 registry 解析到真实 class」等价。MISS 时静默跳过（与 C++ 一致）） |
 | E2E_ProxyModelTests.cpp | ⬜ |
 | StaticVsDynamicXmiTests.cpp | ⬜ |
 | JavaInteropTests.cpp | ⬜ |
