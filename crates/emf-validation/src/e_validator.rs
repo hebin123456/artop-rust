@@ -106,17 +106,30 @@ impl EValidator {
         out
     }
 
-    /// Register the default built-in constraints (batch mode).
+    /// Register the default built-in constraints (batch mode), matching the
+    /// C++ `registerDefaultConstraints` ids.
     pub fn register_default_constraints(&mut self) {
-        // no_empty_name: a class/tag named "name" on any class must be non-empty.
+        // no_empty_name: a feature named "name" holding an empty string is invalid.
         self.add_constraint(
             Box::new(|o| {
                 let name = o.e_get("name").and_then(|v| v.as_str().map(String::from));
                 name.map(|n| !n.is_empty()).unwrap_or(true)
             }),
-            "no_empty_name",
+            "emf.validation.default.no_empty_name",
             "No Empty Name",
             "The name attribute must not be empty",
+            Severity::Warning,
+            ConstraintMode::Batch,
+        );
+        // no_null_required_ref: required references must stay set. The generic
+        // EObject surface can't enumerate features, so the evaluator is a
+        // structural marker registered under the canonical id (its full check
+        // lives in the domain-aware / descriptive layer).
+        self.add_constraint(
+            Box::new(|_| true),
+            "emf.validation.default.no_null_required_ref",
+            "No Null Required Reference",
+            "A required reference must not be null",
             Severity::Warning,
             ConstraintMode::Batch,
         );

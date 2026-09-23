@@ -37,24 +37,12 @@ pub mod constraint_parser {
     }
 }
 
-pub mod live_validator {
-    //! Port target: C++ source unit for `live_validator`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-validation::live_validator"
-    }
-}
+pub mod live_validator;
 
-pub mod validation_service {
-    //! Port target: C++ source unit for `validation_service`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-validation::validation_service"
-    }
-}
+pub mod validation_service;
 
-/// Test-only helpers shared across module tests.
-#[cfg(test)]
+/// Test-only helpers shared across unit and integration tests.
+#[doc(hidden)]
 pub mod test_util {
     use emf_common::value::ObjectRef;
     use emf_ecore::{make_package_ref, DynamicEObject, EClass, EClassKind, PackageRegistry};
