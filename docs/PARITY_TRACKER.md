@@ -68,8 +68,9 @@
    Rust"静态"与"动态"同为反射后端，等价性天然成立，以「两次独立重建文档 normalize 后相等 + books 子元素计数一致」等价表达 C++ 的 normalizeXml+countOccurrences） |
 | JavaInteropTests.cpp | ✅ cpp_parity_java_interop（3；Java 风格独立 `<ecore:EPackage>` 文档（无需外部包注册）直读后 name="library"·nsURI·nsPrefix + ≥4 classifier（Library·Book 类 + BookCategory 枚举3 literal + MyString EDataType）；写回时恰好单个 `<ecore:EPackage>` 包裹且保留 nsURI·name·nsPrefix，并重输出 Library/BookCategory 及 `xsi:type="ecore:EClass|EEnum|EDataType"` 标记 全对齐。
    差异：C++ 读 `/workspace/emf-cpp-demo/build/java_ref/library.ecore`（Java 生成参考文件），该文件不在仓库（源 C++ 亦在缺文件时 skip）；Rust 以同构 Java 风格独立多 classifier 文档承载同一互读/写回契约） |
-| roundtrip_test.cpp | ⬜ |
-| XmiInteropTests.cpp | ⬜ |
+| roundtrip_test.cpp | ⚪ 不可移植（ARXML CLI 工具）|
+| XmiInteropTests.cpp | ✅ cpp_parity_xmi_interop（5；非 containment 跨引用指向 containment 树内对象时序列化为 Java 兼容 position-path `author="//@writers.0"` 且非裸 `//`·并声明 xmlns:xsi/save→load→再读保持跨引用·读取 Java 风格属性 position-path `author="//@writers.0"`·读取空格分隔多值跨引用 `authors="//@writers.0 //@writers.1"`→2 个 Writer·读取 `xmi:id` 寻址 `author="//w1"`→`<writers xmi:id="w1">` 全对齐。
+   差异/Rust 增强：C++ Saver 对 containment 树内对象生成 `//@feat.idx`；Rust 在 `saver::index_tree_positions` 预索引 containment 树、跨引用优先 position-path（树外对象回退 `//<xmi:id>`），loader 侧 `index_positions` 建 `path→object` 索引直接解析 `//@...`，并支持 href 空格分词多值（`resolve_token`）。`roundtrip_test.cpp` 为 ARXML 往返 CLI（加载 autosar40 424 静态包子包 + Java 参考文件对比），依赖 Autosar39 静态 codegen 与 `/tmp/*.arxml` 外部输入，非通用 EMF XMI 运行时契约，不移植 |
 | E2E_GenModelXmi*.cpp（CxxProduces/EquivalentReplacement/MultiEcoreTyped/TypedMultiFile） | ⬜ |
 
 ## emf-ecore-util

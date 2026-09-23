@@ -56,6 +56,62 @@ pub fn load_from_str_with_ids(
     Ok((built, id_map))
 }
 
+/// Index every object reachable from `roots` through containment features by
+/// its position path: roots at `""`, and each child at `@feat.idx` (nested
+/// e.g. `@books.0/@chapters.1`). Aligned to the containment-tree walk EMF uses
+/// to build `//@feat.idx` URI fragments. Returns `path -> object`.
+fn index_positions(roots: &[ObjectRef]) -> HashMap<String, ObjectRef> {
+    let mut out = HashMap::new();
+    for r in roots {
+        // Track visited pointers so a shared object isn't re-walked into an
+        // infinite recursion (shared containment is unusual but legal).
+        let mut seen: std::collections::HashSet<usize> = Default::default();
+        rec_positions(r, "", &mut out, &mut seen);
+    }
+    out
+}
+
+/// DFS from a root, recording each reachable object's position path.
+fn rec_positions(
+    obj: &ObjectRef,
+    path: &str,
+    out: &mut HashMap<String, ObjectRef>,
+    seen: &mut std::collections::HashSet<usize>,
+) {
+    let key = Rc::as_ptr(obj) as *const () as usize;
+    if !seen.insert(key) {
+        return;
+    }
+    out.entry(path.to_string()).or_insert_with(|| Rc::clone(obj));
+    let b: Ref<'_, dyn EObject> = obj.borrow();
+    let dy = match emf_common::eobject::downcast_ref::<DynamicEObject>(&*b) {
+        Some(d) => d,
+        None => return,
+    };
+    for f in dy.all_structural_features() {
+        if !f.is_containment() {
+            continue;
+        }
+        let name = f.name().to_string();
+        let Some(val) = b.e_get(&name) else { continue };
+        match val {
+            Val::List(items) => {
+                for (i, item) in items.iter().enumerate() {
+                    if let Some(child) = item.as_object() {
+                        let seg = format!("{path}@{}.{}", name, i);
+                        rec_positions(&child, &seg, out, seen);
+                    }
+                }
+            }
+            Val::Object(child) => {
+                let seg = format!("{path}@{}.0", name);
+                rec_positions(&child, &seg, out, seen);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Return `roots` unchanged, unless there is a single wrapper element whose
 /// local name is `XMI` and prefix `xmi` — in which case its children are the
 /// real roots.
@@ -179,20 +235,57 @@ fn find_feature(obj: &ObjectRef, name: &str) -> Option<EStructuralFeature> {
         .find(|f| f.name() == name)
 }
 
-/// After all objects are built, resolve local `//<xmi:id>` hrefs against the
-/// document's id table.
+/// After all objects are built, resolve deferred cross-references against the
+/// built containment tree and the document's `xmi:id` table.
+///
+/// Supported href forms (Java EMF inline cross-reference contract):
+/// - `//<xmi:id>`: an object addressed by its `xmi:id` (aligned to
+///   `XMIHandler.getEObjectById`).
+/// - `//@feat.idx[{(/@feat.idx)...}]`: a position path from a root through a
+///   containment feature by index (aligned to `XMIResource.resolvePositionPath`).
+/// - Multiple of the above separated by whitespace for multi-valued
+///   non-containment references (Java serializes each element separately).
 fn resolve_hrefs(
-    _built: &[ObjectRef],
+    built: &[ObjectRef],
     id_map: &std::collections::HashMap<String, ObjectRef>,
     deferred: &mut Vec<(ObjectRef, String, String)>,
 ) {
+    // Position paths are resolved against the containment tree of the built
+    // roots, indexed once up front for repeated lookups.
+    let positions = index_positions(built);
+
     for (owner, feat, href) in deferred.drain(..) {
-        if let Some(target) = href.strip_prefix("//") {
-            if let Some(tobj) = id_map.get(target) {
-                append_reference(&owner, &feat, Rc::clone(tobj));
+        for token in href.split_whitespace() {
+            if let Some(target) = resolve_token(token, id_map, &positions) {
+                append_reference(&owner, &feat, target);
             }
         }
     }
+}
+
+/// Resolve one cross-reference token to an object, or `None` on failure.
+fn resolve_token(
+    token: &str,
+    id_map: &std::collections::HashMap<String, ObjectRef>,
+    positions: &HashMap<String, ObjectRef>,
+) -> Option<ObjectRef> {
+    if let Some(rest) = token.strip_prefix("//") {
+        if rest.starts_with('@') {
+            // Position path: `@feat.idx/@other.0...` from a root.
+            return resolve_position(rest, positions);
+        }
+        // `//<id>`: strip the slashes and look up the xmi:id.
+        return id_map.get(rest).cloned();
+    }
+    None
+}
+
+/// Resolve a `@feat.idx/{@feat.idx...}` path to the object carrying exactly
+/// that position in the indexed containment tree (EMF `resolvePositionPath`).
+fn resolve_position(path: &str, positions: &HashMap<String, ObjectRef>) -> Option<ObjectRef> {
+    // Index-keyed direct lookup: everything in the containment tree was
+    // indexed up front, so any nested `@a.0/@b.1` path resolves in one step.
+    positions.get(path).cloned()
 }
 
 /// Append a target to a reference feature: wrap in a list for multi-valued,

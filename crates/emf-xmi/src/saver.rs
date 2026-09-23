@@ -41,6 +41,7 @@ pub fn save_to_string(roots: &[ObjectRef], opts: &XmiOptions) -> String {
         opts,
         out: String::new(),
         ids: HashMap::new(),
+        positions: index_tree_positions(roots),
         next_id: 1,
     };
     s.save(roots);
@@ -52,7 +53,58 @@ struct XmiSaver<'a> {
     out: String,
     /// Object pointer (Rc::as_ptr) -> xmi:id.
     ids: HashMap<usize, String>,
+    /// Object pointer -> position path (`//@feat.idx`, or `//` for a root),
+    /// for objects inside the saved containment trees. Cross-references to
+    /// objects in a tree use this Java-compatible position path instead of an
+    /// `xmi:id`.
+    positions: HashMap<usize, String>,
     next_id: usize,
+}
+
+/// Index every object reachable from `roots` through containment features by
+/// object pointer, mapping each to its position path (`//@feat.idx`, `//` for
+/// a root). Aligned to the containment-tree walk EMF uses to build URI
+/// fragments (Java XMLSave `getURIFragment`).
+fn index_tree_positions(roots: &[ObjectRef]) -> HashMap<usize, String> {
+    fn rec(obj: &ObjectRef, prefix: &str, out: &mut HashMap<usize, String>) {
+        let key = Rc::as_ptr(obj) as *const () as usize;
+        if out.contains_key(&key) {
+            return; // shared object -> already positioned
+        }
+        out.insert(key, format!("//{prefix}"));
+        let b: Ref<'_, dyn EObject> = obj.borrow();
+        let dy = match downcast_ref::<DynamicEObject>(&*b) {
+            Some(d) => d,
+            None => return,
+        };
+        for f in dy.all_structural_features() {
+            if !f.is_containment() {
+                continue;
+            }
+            let name = f.name().to_string();
+            let Some(val) = b.e_get(&name) else { continue };
+            match val {
+                Val::List(items) => {
+                    for (i, item) in items.iter().enumerate() {
+                        if let Some(child) = item.as_object() {
+                            let seg = format!("{prefix}@{}.{}", name, i);
+                            rec(&child, &seg, out);
+                        }
+                    }
+                }
+                Val::Object(child) => {
+                    let seg = format!("{prefix}@{}.0", name);
+                    rec(&child, &seg, out);
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut out = HashMap::new();
+    for r in roots {
+        rec(r, "", &mut out);
+    }
+    out
 }
 
 /// A borrow-free snapshot of an object, collected so the writer never holds a
@@ -221,7 +273,17 @@ impl<'a> XmiSaver<'a> {
                 } else {
                     let hrs: Vec<String> = object_refs(&val)
                         .iter()
-                        .map(|o| format!("//{}", self.ensure_id(o)))
+                        .map(|o| {
+                            let pkey = Rc::as_ptr(o) as *const () as usize;
+                            // Prefer the Java-compatible position path when the
+                            // target lives inside a saved containment tree;
+                            // otherwise fall back to a `//<xmi:id>` reference.
+                            if let Some(path) = self.positions.get(&pkey) {
+                                path.clone()
+                            } else {
+                                format!("//{}", self.ensure_id(o))
+                            }
+                        })
                         .collect();
                     if !hrs.is_empty() {
                         hrefs.push((name, hrs.join(" ")));
