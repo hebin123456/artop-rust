@@ -65,14 +65,9 @@ pub mod eobject_containment_inverse_elist {
     }
 }
 
-pub mod eobject_elist {
-    //! Port target: C++ source unit for `eobject_elist`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-ecore-util::eobject_elist"
-    }
-}
+pub mod e_object_elist;
 
+/// `EobjectResolvingEList`: EObject list resolving proxies lazily.
 pub mod eobject_resolving_elist {
     //! Port target: C++ source unit for `eobject_resolving_elist`.
     /// Placeholder marker so the module compiles until the real port lands.
