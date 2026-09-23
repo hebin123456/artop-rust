@@ -186,9 +186,17 @@ impl EStructuralFeature {
     pub fn lower_bound(&self) -> i32 {
         self.lower_bound
     }
+    /// Set `lowerBound`.
+    pub fn set_lower_bound(&mut self, v: i32) {
+        self.lower_bound = v;
+    }
     /// `upperBound`.
     pub fn upper_bound(&self) -> i32 {
         self.upper_bound
+    }
+    /// Set `upperBound`.
+    pub fn set_upper_bound(&mut self, v: i32) {
+        self.upper_bound = v;
     }
     /// Whether this is a many-valued feature (`upperBound` != 1).
     pub fn is_many(&self) -> bool {
@@ -269,13 +277,18 @@ impl EAttribute {
     pub fn feature(&self) -> &EStructuralFeature {
         &self.feature
     }
+    /// The underlying structural feature, mutably.
+    pub fn feature_mut(&mut self) -> &mut EStructuralFeature {
+        &mut self.feature
+    }
     /// Whether an ID attribute.
     pub fn is_id(&self) -> bool {
-        self.is_id
+        self.is_id || self.feature.is_id()
     }
-    /// Set ID.
+    /// Set ID (records on the descriptor and on the underlying feature).
     pub fn set_id(&mut self, v: bool) {
         self.is_id = v;
+        self.feature.id = v;
     }
 }
 
@@ -289,6 +302,8 @@ pub struct EReference {
     resolve_proxies: bool,
     /// Target class name.
     reference_type: Option<String>,
+    /// Opposite feature name (EMF `EReference.eOpposite`).
+    opposite: Option<String>,
 }
 
 impl EReference {
@@ -299,11 +314,24 @@ impl EReference {
             containment: false,
             resolve_proxies: true,
             reference_type: None,
+            opposite: None,
         }
     }
     /// The underlying structural feature.
     pub fn feature(&self) -> &EStructuralFeature {
         &self.feature
+    }
+    /// The underlying structural feature, mutably.
+    pub fn feature_mut(&mut self) -> &mut EStructuralFeature {
+        &mut self.feature
+    }
+    /// The opposite feature name (EMF `EReference.eOpposite`), if any.
+    pub fn opposite(&self) -> Option<&str> {
+        self.opposite.as_deref()
+    }
+    /// Set the opposite feature name.
+    pub fn set_opposite(&mut self, name: impl Into<String>) {
+        self.opposite = Some(name.into());
     }
     /// Whether a containment.
     pub fn is_containment(&self) -> bool {

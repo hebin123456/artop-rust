@@ -205,7 +205,12 @@ impl EDataType {
 #[derive(Debug, Clone, Default)]
 pub struct EClass {
     name: String,
-    kind: EClassKind,
+    /// Whether abstract (independent of interface, per EMF `EClass.abstract`).
+    is_abstract: bool,
+    /// Whether an interface (independent of abstract, per EMF `EClass.interface`).
+    is_interface: bool,
+    /// Whether a map entry (EMF `EClass.instanceTypeName == Map.Entry`).
+    is_map_entry: bool,
     /// Java/instance class name (EClassifier.instanceClassName).
     instance_class_name: String,
     /// Parent class names (EMF `eSuperTypes`, may be several).
@@ -223,11 +228,20 @@ pub struct EClass {
 }
 
 impl EClass {
-    /// New class.
+    /// New class from a `kind` shorthand. `Interface` also marks abstract (an
+    /// interface is abstract by definition); `MapEntry` marks a map entry.
     pub fn new(name: impl Into<String>, kind: EClassKind) -> Self {
+        let (is_abstract, is_interface, is_map_entry) = match kind {
+            EClassKind::Class => (false, false, false),
+            EClassKind::AbstractClass => (true, false, false),
+            EClassKind::Interface => (true, true, false),
+            EClassKind::MapEntry => (false, false, true),
+        };
         Self {
             name: name.into(),
-            kind,
+            is_abstract,
+            is_interface,
+            is_map_entry,
             instance_id: NEXT_CLASS_ID.fetch_add(1, Ordering::Relaxed),
             ..Self::default()
         }
@@ -246,29 +260,39 @@ impl EClass {
     pub fn set_name(&mut self, name: impl Into<String>) {
         self.name = name.into();
     }
-    /// The class kind.
+    /// The class kind shorthand. Interface implies abstract here; a class that
+    /// is both interface and abstract maps to `Interface`, otherwise abstract
+    /// maps to `AbstractClass`.
     pub fn kind(&self) -> EClassKind {
-        self.kind
+        if self.is_map_entry {
+            EClassKind::MapEntry
+        } else if self.is_interface {
+            EClassKind::Interface
+        } else if self.is_abstract {
+            EClassKind::AbstractClass
+        } else {
+            EClassKind::Class
+        }
     }
-    /// Abstract interface-agnostic: EClass.isAbstract (interfaces are abstract).
+    /// EClass.isAbstract (independent of `is_interface`).
     pub fn is_abstract(&self) -> bool {
-        !self.kind.is_concrete()
+        self.is_abstract
     }
-    /// EClass.isInterface.
+    /// EClass.isInterface (independent of `is_abstract`).
     pub fn is_interface(&self) -> bool {
-        self.kind == EClassKind::Interface
+        self.is_interface
     }
     /// EClass.isMapEntry.
     pub fn is_map_entry(&self) -> bool {
-        self.kind == EClassKind::MapEntry
+        self.is_map_entry
     }
-    /// Enable the abstract flag.
+    /// Set the abstract flag independently.
     pub fn set_abstract(&mut self, abstract_: bool) {
-        if self.kind.is_concrete() && abstract_ {
-            self.kind = EClassKind::AbstractClass;
-        } else if !self.kind.is_concrete() && !abstract_ {
-            self.kind = EClassKind::Class;
-        }
+        self.is_abstract = abstract_;
+    }
+    /// Set the interface flag independently.
+    pub fn set_interface(&mut self, interface: bool) {
+        self.is_interface = interface;
     }
     /// `instanceClassName` (EClassifier.instanceClassName).
     pub fn instance_class_name(&self) -> &str {

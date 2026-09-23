@@ -121,13 +121,7 @@ pub mod ecore_emap {
     }
 }
 
-pub mod ecore_validator {
-    //! Port target: C++ source unit for `ecore_validator`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-ecore-util::ecore_validator"
-    }
-}
+pub mod ecore_validator;
 
 pub mod equality_helper;
 
