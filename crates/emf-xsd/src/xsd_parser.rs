@@ -281,15 +281,20 @@ pub fn schema_from_node(node: &XmlNode) -> XSDSchema {
         version: attr(node, "version").map(|s| s.to_string()),
         ..Default::default()
     };
+    // 与 complexType parse_annotation(n) 一致：从容器节点收集 schema 级注解。
+    // （此前在循环中把 annotation 元素本身传给 parse_annotation，因其子节点不含
+    // annotation，恒返回 None，导致 schema 级注解被静默丢弃。）
+    if let Some(a) = parse_annotation(node) {
+        schema.annotations.push(a);
+    }
     for c in &node.children {
         if c.name.starts_with("/") {
             continue;
         }
         match c.local.as_str() {
             "annotation" => {
-                if let Some(a) = parse_annotation(c) {
-                    schema.annotations.push(a);
-                }
+                // annotation 元素本身已被上方 parse_annotation(node) 收集；
+                // 此分支保留仅作兼容（对 annotation 元素调用本语义返回 None）。
             }
             "element" => schema.elements.push(parse_element(c)),
             "complexType" => schema
