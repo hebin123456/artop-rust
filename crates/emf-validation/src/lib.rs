@@ -29,13 +29,7 @@ pub mod autosar_constraints {
     }
 }
 
-pub mod constraint_parser {
-    //! Port target: C++ source unit for `constraint_parser`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-validation::constraint_parser"
-    }
-}
+pub mod constraint_parser;
 
 pub mod live_validator;
 
