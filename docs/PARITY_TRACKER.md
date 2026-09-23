@@ -71,7 +71,12 @@
 | roundtrip_test.cpp | ⚪ 不可移植（ARXML CLI 工具）|
 | XmiInteropTests.cpp | ✅ cpp_parity_xmi_interop（5；非 containment 跨引用指向 containment 树内对象时序列化为 Java 兼容 position-path `author="//@writers.0"` 且非裸 `//`·并声明 xmlns:xsi/save→load→再读保持跨引用·读取 Java 风格属性 position-path `author="//@writers.0"`·读取空格分隔多值跨引用 `authors="//@writers.0 //@writers.1"`→2 个 Writer·读取 `xmi:id` 寻址 `author="//w1"`→`<writers xmi:id="w1">` 全对齐。
    差异/Rust 增强：C++ Saver 对 containment 树内对象生成 `//@feat.idx`；Rust 在 `saver::index_tree_positions` 预索引 containment 树、跨引用优先 position-path（树外对象回退 `//<xmi:id>`），loader 侧 `index_positions` 建 `path→object` 索引直接解析 `//@...`，并支持 href 空格分词多值（`resolve_token`）。`roundtrip_test.cpp` 为 ARXML 往返 CLI（加载 autosar40 424 静态包子包 + Java 参考文件对比），依赖 Autosar39 静态 codegen 与 `/tmp/*.arxml` 外部输入，非通用 EMF XMI 运行时契约，不移植 |
-| E2E_GenModelXmi*.cpp（CxxProduces/EquivalentReplacement/MultiEcoreTyped/TypedMultiFile） | ⬜ |
+| E2E_GenModelXmiEquivalentReplacementTests.cpp | ✅ cpp_parity_e2e_equiv（10；Java 参考 library.ecore 独立文档等价替换：name·nsURI·nsPrefix/classifier 数·名/library.ecore 读进 + save-back 含 `xsi:type="ecore:EClass"`·`eType="...#//EString"`·containment="true"/多包共享注册/跨包 eType·superType 按名解析到真实 class/往返 defaultValueLiteral="0" 保持/Java 样例文件解析回再写出保留 nsURI 全对齐。
+   「等价替换」语义：C++ 用真实 Java 生成文件做互读互写，Rust 以同构 Java 风格独立文档承载同一契约） |
+| E2E_GenModelXmiCxxProducesTests.cpp | ✅ cpp_parity_e2e_genmodel_xmi（10；gen-model 全链路：注入元模型→动态实例化 Library/Book/Writer→存属性(name·title·pages int)→设置 containment books/library↔book 关系→save→reload 后 Book 类名·title·pages(Int) 保持/重复 reload 幂等 save 一致/XML 头与 xmlns 声明/缺省 writer author 关联 全对齐。
+   Rust 复用「load_ecore_package→registry→DynamicEObject 实例化→saver/loader」；C++ 用 Fjage 组件产出的静态类，契约等价） |
+| E2E_GenModelXmiMultiEcoreTypedTests.cpp | 🔶 待移植（跨包继承+多包 typed 引用） |
+| E2E_GenModelXmiTypedMultiFileTests.cpp | 🔶 待移植 |
 
 ## emf-ecore-util
 | C++ 测试 | Rust 状态 |
