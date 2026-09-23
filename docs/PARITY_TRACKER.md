@@ -64,7 +64,8 @@
    样本文件已随 crate 归置于 tests/samples/multi/；C++ 走 EPackageRegistry object-proxy 解析、Rust 以「type_name/href_tail 按名 + 共享 registry 解析到真实 class」等价。MISS 时静默跳过（与 C++ 一致）） |
 | E2E_ProxyModelTests.cpp | ✅ cpp_parity_proxy_model（13；新对象默认非代理/设置 eSetProxyURI 后 eIsProxy==true/eProxyURI 返回所设 URI/eResolveProxy 非代理返回自身/经 ResourceSet 解析代理达到 target 根对象（非代理自身）/无 ResourceSet 时退化返回代理自身/带 fragment 代理 URI 整体存储且 fragment() 返回 `//Library/books.0`/多代理各自独立 URI/getEObject(uri,loadOnDemand) 跨资源按 URI 找根/getResource(uri,false) 返回已注册资源/eIsProxy 设置后持续为 true/后设代理 URI 覆盖先前 全对齐。
    Rust 在 `EObject` trait 与 `DynamicEObject` 补齐 `proxy_uri`/`e_set_proxy_uri`/`e_is_proxy`/`e_resolve_proxy`（默认非代理解析自身·无 set 退化返回 proxy），并新增 `emf_xmi::xmi_resource_set`（XMIResourceSet：create_resource/get_resource/get_eobject(按 URI 去 fragment 找根)/resolve_proxy_uri，等价 EMF ResourceSet.getEObject + EcoreUtil.resolve） |
-| StaticVsDynamicXmiTests.cpp | ⬜ |
+| StaticVsDynamicXmiTests.cpp | ✅ cpp_parity_static_vs_dynamic_xmi（3;动态 DynamicEObject 构造 Library{name}+2×Book{title,pages} 产出 XMI 含 name="Test Library"·title="Book One/Two"·pages="100/200" 结构/reload 该 XMI roundtrip 后 name·title·pages 与 2 本 books 保持/静态与动态两路径规范化 XMI 语义一致·containment `<books>` 子元素恰好 2 个 全对齐。
+   Rust"静态"与"动态"同为反射后端，等价性天然成立，以「两次独立重建文档 normalize 后相等 + books 子元素计数一致」等价表达 C++ 的 normalizeXml+countOccurrences） |
 | JavaInteropTests.cpp | ⬜ |
 | roundtrip_test.cpp | ⬜ |
 | XmiInteropTests.cpp | ⬜ |
