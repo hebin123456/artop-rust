@@ -22,10 +22,16 @@ pub type ContainerBackref = (Weak<RefCell<dyn EObject>>, String);
 pub struct DynamicEObject {
     /// The class descriptor (owned clone).
     pub e_class: EClass,
-    /// Multi-purpose storage keyed by feature id.
-    pub dynamic_settings: HashMap<i32, Val>,
-    /// Whether each feature id has been set (for `eIsSet`).
-    pub set_flags: std::collections::HashSet<i32>,
+    /// Multi-purpose storage keyed by feature *name*.
+    ///
+    /// Keyed by name rather than feature id because feature ids are only unique
+    /// within a single EPackage: a cross-package subclass (whose supertype
+    /// lives in another package that reboots the 0-based numbering) would
+    /// otherwise collide — e.g. base's inherited `name` and ext's own `note`
+    /// can share id 0, so an id-keyed map would clobber one with the other.
+    pub dynamic_settings: HashMap<String, Val>,
+    /// Whether each feature (by name) has been set (for `eIsSet`).
+    pub set_flags: std::collections::HashSet<String>,
     /// The container (weak parent + containment feature name), if this object is
     /// owned by another object through a containment reference.
     container: Option<ContainerBackref>,
@@ -83,18 +89,13 @@ impl DynamicEObject {
 
     /// Read a feature's value (stored or default).
     pub fn e_get_feature(&self, feature: &crate::structural::EStructuralFeature) -> Val {
-        let id = feature.feature_id();
-        if id >= 0 {
-            if let Some(v) = self.dynamic_settings.get(&id) {
-                return v.clone();
-            }
-            if let Some(d) = self.e_class.default_value(id) {
-                return d.clone();
-            }
-            // An unset many-valued feature reads as an empty list (EMF).
-            if feature.upper_bound() == -1 && feature.is_reference() {
-                return Val::List(Vec::new());
-            }
+        let name = feature.name();
+        if let Some(v) = self.dynamic_settings.get(name) {
+            return v.clone();
+        }
+        // An unset many-valued reference reads as an empty list (EMF).
+        if feature.upper_bound() == -1 && feature.is_reference() {
+            return Val::List(Vec::new());
         }
         feature.default_value().cloned().unwrap_or(Val::Null)
     }
@@ -105,30 +106,25 @@ impl DynamicEObject {
             Some(f) => f,
             None => return false,
         };
-        let id = feature.feature_id();
-        if id < 0 {
-            return true;
-        }
         // Reference features store object refs / object lists; attributes store
         // atomic values.
         if feature.is_reference() {
-            self.dynamic_settings.insert(id, normalize_reference_value(&value));
+            self.dynamic_settings.insert(name.to_string(), normalize_reference_value(&value));
         } else {
-            self.dynamic_settings.insert(id, value);
+            self.dynamic_settings.insert(name.to_string(), value);
         }
-        self.set_flags.insert(id);
+        self.set_flags.insert(name.to_string());
         true
     }
 
     /// Whether a feature (by name) is set.
     pub fn e_is_set_by_name(&self, name: &str) -> Option<bool> {
         let feature = self.e_all().into_iter().find(|f| f.name() == name)?;
-        let id = feature.feature_id();
         // A multi-valued feature is "set" if it has been touched (flag) and is
         // non-empty; a single-valued feature follows the flag alone.
-        let flag = self.set_flags.contains(&id);
+        let flag = self.set_flags.contains(name);
         if feature.upper_bound() == -1 {
-            let non_empty = matches!(self.dynamic_settings.get(&id), Some(Val::List(l)) if !l.is_empty());
+            let non_empty = matches!(self.dynamic_settings.get(name), Some(Val::List(l)) if !l.is_empty());
             Some(flag && non_empty)
         } else {
             Some(flag)
@@ -142,15 +138,12 @@ impl DynamicEObject {
             Some(f) => f,
             None => return false,
         };
-        let id = feature.feature_id();
-        if id >= 0 {
-            // Detach contained children before clearing.
-            if feature.is_containment() {
-                clear_container_children(self, id);
-            }
-            self.dynamic_settings.remove(&id);
-            self.set_flags.remove(&id);
+        // Detach contained children before clearing.
+        if feature.is_containment() {
+            clear_container_children(self, name);
         }
+        self.dynamic_settings.remove(name);
+        self.set_flags.remove(name);
         true
     }
 
@@ -172,8 +165,8 @@ impl DynamicEObject {
     pub fn contents(&self) -> Vec<ObjectRef> {
         let mut out = Vec::new();
         for f in self.all_containments() {
-            let id = f.feature_id();
-            match self.dynamic_settings.get(&id) {
+            let name = f.name();
+            match self.dynamic_settings.get(name) {
                 Some(Val::Object(o)) => out.push(o.clone()),
                 Some(Val::List(l)) => {
                     for e in l {
@@ -195,13 +188,12 @@ impl DynamicEObject {
             Some(f) => f,
             None => return Vec::new(),
         };
-        let id = feature.feature_id();
-        let cur = self.dynamic_settings.get(&id).cloned().unwrap_or(Val::Null);
+        let cur = self.dynamic_settings.get(name).cloned().unwrap_or(Val::Null);
         let objs = cur
             .as_list()
             .map(|l| l.iter().filter_map(|v| v.as_object().cloned()).collect())
             .unwrap_or_default();
-        self.set_flags.insert(id);
+        self.set_flags.insert(name.to_string());
         objs
     }
 
@@ -323,9 +315,9 @@ fn normalize_reference_value(value: &Val) -> Val {
     }
 }
 
-/// Detach the contained children of `id` from their container back-link.
-fn clear_container_children(obj: &mut DynamicEObject, id: i32) {
-    match obj.dynamic_settings.get(&id).cloned() {
+/// Detach the contained children of `name` from their container back-link.
+fn clear_container_children(obj: &mut DynamicEObject, name: &str) {
+    match obj.dynamic_settings.get(name).cloned() {
         Some(Val::Object(o)) => {
             o.borrow_mut().clear_container();
         }

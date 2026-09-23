@@ -358,11 +358,16 @@ impl EClass {
         package: &crate::package::PackageRegistry,
     ) -> Vec<EStructuralFeature> {
         let mut out: Vec<EStructuralFeature> = Vec::new();
-        let mut seen: HashSet<i32> = HashSet::new();
+        // Dedup by feature *name* rather than feature_id. Feature IDs are only
+        // unique within a single EPackage; two classes across different
+        // packages (e.g. a subclass whose supertype lives in another package)
+        // reboot the 0-based numbering, so ID-based dedup would wrongly drop
+        // own features that collide with inherited ones. EMF guarantees names
+        // are unique across a class's whole feature hierarchy.
+        let mut seen: HashSet<String> = HashSet::new();
         let mut push = |feats: &[EStructuralFeature]| {
             for f in feats {
-                let fid = f.feature_id();
-                if fid >= 0 && !seen.insert(fid) {
+                if !seen.insert(f.name().to_string()) {
                     continue;
                 }
                 out.push(f.clone());

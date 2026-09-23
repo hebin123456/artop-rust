@@ -75,7 +75,8 @@
    「等价替换」语义：C++ 用真实 Java 生成文件做互读互写，Rust 以同构 Java 风格独立文档承载同一契约） |
 | E2E_GenModelXmiCxxProducesTests.cpp | ✅ cpp_parity_e2e_genmodel_xmi（10；gen-model 全链路：注入元模型→动态实例化 Library/Book/Writer→存属性(name·title·pages int)→设置 containment books/library↔book 关系→save→reload 后 Book 类名·title·pages(Int) 保持/重复 reload 幂等 save 一致/XML 头与 xmlns 声明/缺省 writer author 关联 全对齐。
    Rust 复用「load_ecore_package→registry→DynamicEObject 实例化→saver/loader」；C++ 用 Fjage 组件产出的静态类，契约等价） |
-| E2E_GenModelXmiMultiEcoreTypedTests.cpp | 🔶 待移植（跨包继承+多包 typed 引用） |
+| E2E_GenModelXmiMultiEcoreTypedTests.cpp | ✅ cpp_parity_e2e_multi_ecore_typed（12；base(Library:name+books / Book:title)+ext(AnnotatedLibrary extends base#//Library 增 note 属性 + highlighted containment of base#//Book) 跨包 typed：AnnotatedLibrary 继承 Library/supertype 解析到真实 base Library/自有 feature==2 {note,highlighted}/eAllStructuralFeatures≥4 含继承 {name,books}+自有 {note,highlighted}·全部按名可查/实例化 eClass()=="AnnotatedLibrary"/反射设继承 name 与自有 note·读回/add Book 到继承 books 列表与自有 highlighted 列表/跨包 containment highlighted.eType 解析 base#//Book+eAllContainments 含 books+highlighted/save 产出 `ext:AnnotatedLibrary`·name·note 字段/两包各自实例化基类对象 全对齐。
+   修复 Rust 跨包缺陷：`e_all_structural_features` 与 `DynamicEObject` 值/标志存储原按 feature_id（每包从 0 编号→跨包冲突）改为按 feature 名键控；e_all 去重改按名，存储改按名，修复继承的 `name` 与自有 `note` 同 id0 互相覆盖的 bug） |
 | E2E_GenModelXmiTypedMultiFileTests.cpp | 🔶 待移植 |
 
 ## emf-ecore-util
