@@ -7,12 +7,61 @@
 
 use crate::constraint::{Constraint, ConstraintMode, IConstraintListener, Severity};
 use emf_common::eobject::EObject;
+use emf_common::value::Val;
+use emf_ecore::DynamicEObject;
 
 /// Re-export severity so callers see a single validation-centric name source.
 pub use crate::constraint::Severity as ValidationSeverity;
 
-/// Diagnostic source identifier for validation diagnostics.
+/// Legacy process-wide diagnostic source identifier. Kept as a public constant
+/// for backwards compatibility, but the built-in constraints now stamp each
+/// diagnostic with the *constraint name* (C++ `Constraint::getName()`), so this
+/// constant is no longer used by `validate_mode`.
 pub const DIAGNOSTIC_SOURCE: &str = "org.eclipse.emf.validation";
+
+/// Default constraint evaluator: a feature literally named `"name"` must not
+/// hold an empty string (C++ `noEmptyNameEval`). Objects without a `name`
+/// feature (or where it isn't set) pass.
+fn no_empty_name_eval(target: &dyn EObject) -> bool {
+    let name = target.e_get("name").and_then(|v| v.as_str().map(String::from));
+    name.map(|n| !n.is_empty()).unwrap_or(true)
+}
+
+/// Default constraint evaluator: a required (`lowerBound >= 1`), single-valued
+/// *reference* must not be null (C++ `noNullReqRefEval`).
+///
+/// Primary path: reflect over the object's dynamic `EClass` features (via the
+/// `DynamicEObject` reflection surface) and, for every reference with
+/// `lowerBound >= 1` that is not many-valued, check the current value is
+/// non-null. This mirrors C++ walking `EClass::getEAllStructuralFeatures()`.
+///
+/// Fallback trade-off: the generic `EObject` surface only exposes `e_class()`
+/// (a name string) — it carries no structural-feature metadata. When the target
+/// is not a `DynamicEObject` (or reflection can't enumerate features), we cannot
+/// discover which references are required, so we conservatively treat the object
+/// as *passing* to avoid false positives. This diverges from C++, which always
+/// has `EClass` metadata, at the cost of not catching the required-null case for
+/// non-dynamic targets.
+fn no_null_required_ref_eval(target: &dyn EObject) -> bool {
+    if let Some(dyno) = target.as_any().downcast_ref::<DynamicEObject>() {
+        for f in dyno.all_structural_features() {
+            if !f.is_reference() || f.is_many() {
+                // Only single-valued references can be "required but null".
+                continue;
+            }
+            if f.lower_bound() >= 1 {
+                let v = dyno.e_get(f.name());
+                let is_null = v.is_none() || matches!(v, Some(Val::Null));
+                if is_null {
+                    return false; // violation
+                }
+            }
+        }
+        return true; // every required single-valued reference is satisfied
+    }
+    // Fallback for non-`DynamicEObject` targets (no feature metadata): pass.
+    true
+}
 
 /// `EValidator`: registers constraints and validates objects against them.
 ///
@@ -97,7 +146,7 @@ impl EValidator {
             if !c.evaluate(target) {
                 out.push(emf_common::diagnostic::Diagnostic::new(
                     crate::diagnostician::map_severity(c.severity()),
-                    DIAGNOSTIC_SOURCE,
+                    c.name(),
                     0,
                     c.message(),
                 ));
@@ -106,32 +155,48 @@ impl EValidator {
         out
     }
 
-    /// Register the default built-in constraints (batch mode), matching the
-    /// C++ `registerDefaultConstraints` ids.
+    /// Register the default built-in constraints, each in both `BATCH` and
+    /// `LIVE` modes (matching C++ `registerDefaultConstraints`, whose `BATCH`
+    /// and `LIVE` twins carry ids with a `.live` suffix).
+    ///
+    /// - `no_empty_name` (`"NoEmptyName"`): a `name` feature must not be empty.
+    /// - `no_null_required_ref` (`"NoNullRequiredRef"`): any `lowerBound >= 1`
+    ///   single-valued reference must not be null.
     pub fn register_default_constraints(&mut self) {
         // no_empty_name: a feature named "name" holding an empty string is invalid.
         self.add_constraint(
-            Box::new(|o| {
-                let name = o.e_get("name").and_then(|v| v.as_str().map(String::from));
-                name.map(|n| !n.is_empty()).unwrap_or(true)
-            }),
+            Box::new(no_empty_name_eval),
             "emf.validation.default.no_empty_name",
-            "No Empty Name",
+            "NoEmptyName",
             "The name attribute must not be empty",
             Severity::Warning,
             ConstraintMode::Batch,
         );
-        // no_null_required_ref: required references must stay set. The generic
-        // EObject surface can't enumerate features, so the evaluator is a
-        // structural marker registered under the canonical id (its full check
-        // lives in the domain-aware / descriptive layer).
         self.add_constraint(
-            Box::new(|_| true),
-            "emf.validation.default.no_null_required_ref",
-            "No Null Required Reference",
-            "A required reference must not be null",
+            Box::new(no_empty_name_eval),
+            "emf.validation.default.no_empty_name.live",
+            "NoEmptyName",
+            "The name attribute must not be empty",
             Severity::Warning,
+            ConstraintMode::Live,
+        );
+        // no_null_required_ref: a required (lowerBound >= 1), single-valued
+        // reference must stay set (reflection over the object's eClass).
+        self.add_constraint(
+            Box::new(no_null_required_ref_eval),
+            "emf.validation.default.no_null_required_ref",
+            "NoNullRequiredRef",
+            "A required reference must not be null",
+            Severity::Error,
             ConstraintMode::Batch,
+        );
+        self.add_constraint(
+            Box::new(no_null_required_ref_eval),
+            "emf.validation.default.no_null_required_ref.live",
+            "NoNullRequiredRef",
+            "A required reference must not be null",
+            Severity::Error,
+            ConstraintMode::Live,
         );
     }
 }
@@ -247,7 +312,13 @@ mod tests {
         assert_eq!(diags.len(), 0); // no "name" set -> not flagged
         item.borrow_mut().e_set("name", Val::string(""));
         let diags = v.validate(&*item.borrow());
-        assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].message(), "The name attribute must not be empty");
+        // `register_default_constraints` registers no_empty_name in both BATCH
+        // and LIVE modes; `validate` (any mode) runs both twins -> 2 diagnostics.
+        assert_eq!(diags.len(), 2);
+        // Diagnostic source reflects the constraint name (C++ getName()).
+        assert!(diags.iter().all(|d| d.source() == "NoEmptyName"));
+        assert!(diags
+            .iter()
+            .all(|d| d.message() == "The name attribute must not be empty"));
     }
 }

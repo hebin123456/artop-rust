@@ -101,8 +101,11 @@ mod tests {
             o.e_set("name", Val::string(""));
         }
         let ds = Diagnostician::validate(&*handle.borrow(), &reg, None);
-        assert_eq!(ds.len(), 1);
-        assert_eq!(ds[0].severity(), emf_common::diagnostic::Severity::Warning);
+        assert!(!ds.is_empty());
+        assert!(
+            ds.iter()
+                .all(|d| d.severity() == emf_common::diagnostic::Severity::Warning)
+        );
     }
 
     #[test]
