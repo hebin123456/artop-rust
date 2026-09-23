@@ -18,7 +18,10 @@ use std::collections::HashMap;
 const LCS_MAX_N: usize = 2048;
 
 /// Run the full difference pass over a comparison.
-pub(crate) fn do_diff(comp: &mut Comparison) {
+///
+/// Public so integration tests can drive the manual match→diff pipeline exactly
+/// like C++ `DiffEngine::diff(comp)` (e.g. after configuring a `MatchEngine`).
+pub fn do_diff(comp: &mut Comparison) {
     // Build left→right object mapping from matches.
     let mut left_to_right: HashMap<usize, ObjectRef> = HashMap::new();
     for m in comp.matches() {

@@ -115,12 +115,12 @@
 ## emf-compare
 | C++ 测试 | Rust 状态 |
 |---|---|
-| MatchEngineTests.cpp | ⬜ |
-| ComparisonTests.cpp | ⬜ |
-| DiffEngineTests.cpp | ⬜ |
-| MergeEngineTests.cpp | ⬜ |
-| CompareE2ETests.cpp | ⬜ |
-| CompareP0RegressionTests.cpp | ⬜ |
+| MatchEngineTests.cpp | ✅ 已移植（match_engine_tests，3 测试；threshold/useIdentifierMatcher/both-null） |
+| ComparisonTests.cpp | ✅ 已移植（comparison_tests，3 测试；addMatch/differences-empty/clear） |
+| DiffEngineTests.cpp | ✅ 已移植（diff_engine_tests，2 测试；identical 无 diff、different 产 CHANGE） |
+| MergeEngineTests.cpp | ✅ 已移植（merge_engine_tests，1 测试；null target） |
+| CompareE2ETests.cpp | ✅ 已移植（compare_e2e_tests，15 测试；ADD/DELETE/CHANGE/MOVE、双向 merge、克隆不共享、eOpposite） |
+| CompareP0RegressionTests.cpp | ✅ 已移植（compare_p0_regression_tests，15 测试；3-way REAL/PSEUDO 冲突、依赖边、等价关系） |
 
 ## emf-xsd
 | C++ 测试 | Rust 状态 |

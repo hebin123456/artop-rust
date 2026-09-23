@@ -57,6 +57,12 @@ pub struct EStructuralFeature {
     /// Whether proxies are resolved for this reference (EMF
     /// `EReference.resolveProxies`, default `true`). Only meaningful for refs.
     resolve_proxies: bool,
+    /// The opposite feature name (EMF `EReference.eOpposite`), if this
+    /// reference is the forward end of a bidirectional pair. This is surfaced
+    /// on the structural-feature descriptor so the reflection-driven compare
+    /// engines (e.g. merge eOpposite maintenance) can read it without the
+    /// `EReference` wrapper.
+    opposite: Option<String>,
 }
 
 impl EStructuralFeature {
@@ -87,6 +93,7 @@ impl EStructuralFeature {
             containment: false,
             id: false,
             resolve_proxies: true,
+            opposite: None,
         }
     }
 
@@ -137,6 +144,14 @@ impl EStructuralFeature {
     /// Set the resolve-proxies flag (`EReference.resolveProxies`).
     pub fn set_resolve_proxies(&mut self, v: bool) {
         self.resolve_proxies = v;
+    }
+    /// The opposite feature name (`EReference.eOpposite`), if any.
+    pub fn opposite(&self) -> Option<&str> {
+        self.opposite.as_deref()
+    }
+    /// Set the opposite feature name (`EReference.eOpposite`).
+    pub fn set_opposite(&mut self, name: impl Into<String>) {
+        self.opposite = Some(name.into());
     }
     /// The kind.
     pub fn kind(&self) -> FeatureKind {
@@ -331,7 +346,9 @@ impl EReference {
     }
     /// Set the opposite feature name.
     pub fn set_opposite(&mut self, name: impl Into<String>) {
-        self.opposite = Some(name.into());
+        let name = name.into();
+        self.opposite = Some(name.clone());
+        self.feature.opposite = Some(name);
     }
     /// Whether a containment.
     pub fn is_containment(&self) -> bool {

@@ -13,7 +13,11 @@ use emf_common::value::ObjectRef;
 use std::collections::HashMap;
 
 /// Compute dependency edges over a comparison's diffs.
-pub(crate) fn compute_requirements(comp: &mut Comparison) {
+///
+/// Public so integration tests can assert dependency edges exist (the P0 G6
+/// case) before handing the comparison to the merge engine, mirroring C++
+/// `RequirementEngine::computeRequirements(comp)`.
+pub fn compute_requirements(comp: &mut Comparison) {
     comp.dependencies_mut().clear();
     let mut seen: Vec<(usize, usize)> = Vec::new();
 
