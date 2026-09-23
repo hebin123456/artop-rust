@@ -62,7 +62,8 @@
    差异：场景B（arxml AutosarResourceSet）属 artop 侧按门线禁止；场景A 的 ResourceSet 自动 demand-load 由 object-proxy 触发，Rust 元模型层无持久 proxy 对象，以「跨包按名解析到已注册真实 classifier」等价表达） |
 | E2E_MultiFileEcoreTests.cpp | ✅ e2e_multi_file_ecore（10；base .ecore(EPackage base+Library/Book/Writer) 按 nsURI 注册可查/ext .ecore 加载后结构（AnnotatedLibrary·BookCollection 2 classifier）/跨包 eSuperTypes：AnnotatedLibrary 继承 base#//Library 解析到真实 Library/跨包 eType：highlighted·books 均解析到 base#//Book（Reference·many·containment·type_name=Book）/双包同存 Registry（base·ext 双 nsURI 均在）/samples/multi/library.ecore·library_ext.ecore 磁盘加载 + 跨文件 superType·eType 解析 全对齐。
    样本文件已随 crate 归置于 tests/samples/multi/；C++ 走 EPackageRegistry object-proxy 解析、Rust 以「type_name/href_tail 按名 + 共享 registry 解析到真实 class」等价。MISS 时静默跳过（与 C++ 一致）） |
-| E2E_ProxyModelTests.cpp | ⬜ |
+| E2E_ProxyModelTests.cpp | ✅ cpp_parity_proxy_model（13；新对象默认非代理/设置 eSetProxyURI 后 eIsProxy==true/eProxyURI 返回所设 URI/eResolveProxy 非代理返回自身/经 ResourceSet 解析代理达到 target 根对象（非代理自身）/无 ResourceSet 时退化返回代理自身/带 fragment 代理 URI 整体存储且 fragment() 返回 `//Library/books.0`/多代理各自独立 URI/getEObject(uri,loadOnDemand) 跨资源按 URI 找根/getResource(uri,false) 返回已注册资源/eIsProxy 设置后持续为 true/后设代理 URI 覆盖先前 全对齐。
+   Rust 在 `EObject` trait 与 `DynamicEObject` 补齐 `proxy_uri`/`e_set_proxy_uri`/`e_is_proxy`/`e_resolve_proxy`（默认非代理解析自身·无 set 退化返回 proxy），并新增 `emf_xmi::xmi_resource_set`（XMIResourceSet：create_resource/get_resource/get_eobject(按 URI 去 fragment 找根)/resolve_proxy_uri，等价 EMF ResourceSet.getEObject + EcoreUtil.resolve） |
 | StaticVsDynamicXmiTests.cpp | ⬜ |
 | JavaInteropTests.cpp | ⬜ |
 | roundtrip_test.cpp | ⬜ |

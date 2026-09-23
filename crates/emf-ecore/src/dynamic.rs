@@ -7,6 +7,7 @@
 
 use crate::{EClass, Val};
 use emf_common::eobject::EObject;
+use emf_common::uri::Uri;
 use emf_common::value::ObjectRef;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -30,6 +31,9 @@ pub struct DynamicEObject {
     container: Option<ContainerBackref>,
     /// Registry snapshot used to resolve the inheritance graph.
     registry: Option<crate::package::PackageRegistry>,
+    /// A proxy URI, when this object stands in for an unresolved reference
+    /// (`e_is_proxy` == true). `None` for a concrete object.
+    proxy_uri: Option<Uri>,
 }
 
 impl DynamicEObject {
@@ -42,6 +46,7 @@ impl DynamicEObject {
             set_flags: std::collections::HashSet::new(),
             container: None,
             registry: None,
+            proxy_uri: None,
         }
     }
 
@@ -54,6 +59,7 @@ impl DynamicEObject {
             set_flags: std::collections::HashSet::new(),
             container: None,
             registry: Some(registry),
+            proxy_uri: None,
         }
     }
 
@@ -274,6 +280,26 @@ impl EObject for DynamicEObject {
 
     fn e_unset(&mut self, feature_id: &str) -> bool {
         self.e_unset_by_name(feature_id)
+    }
+
+    fn e_proxy_uri(&self) -> Option<&Uri> {
+        self.proxy_uri.as_ref()
+    }
+
+    fn e_set_proxy_uri(&mut self, uri: Option<Uri>) {
+        self.proxy_uri = uri;
+    }
+
+    fn e_is_proxy(&self) -> bool {
+        self.proxy_uri.is_some()
+    }
+
+    fn e_resolve_proxy(&self, proxy: &ObjectRef) -> ObjectRef {
+        // Base contract (C++ `eResolveProxy`): a non-proxy resolves to itself.
+        // When `proxy` is a real proxy with no resolving ResourceSet handy, the
+        // degenerate result is the proxy unchanged. The ResourceSet-level
+        // demand-load resolution lives on the XMI resource set (EMF `EcoreUtil`).
+        Rc::clone(proxy)
     }
 }
 

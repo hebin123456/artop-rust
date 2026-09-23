@@ -15,6 +15,7 @@ pub mod parser;
 pub mod saver;
 pub mod xmi_resource;
 pub mod xmi_resource_factory;
+pub mod xmi_resource_set;
 pub mod xml_escape;
 pub mod xml_helper;
 pub mod xml_load_impl;
@@ -28,6 +29,7 @@ pub use xmi_helper::{
 };
 pub use xmi_resource::XMIResource;
 pub use xmi_resource_factory::XMIResourceFactory;
+pub use xmi_resource_set::XMIResourceSet;
 pub use xml_helper::{FeatureKind, XMLHelper};
 pub use xml_load_impl::{XMLLoad, XMLLoadImpl};
 pub use xml_save_impl::{XMLLoader, XMLSave, XMLSaveImpl, XMLoaderImpl};
