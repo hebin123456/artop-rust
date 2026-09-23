@@ -85,12 +85,13 @@
 |---|---|
 | EcoreUtilTests.cpp | ✅ ecore_util_tests（37 例：equals/equalsValue 同对象·双 None·单 None·不同类(按 EClass 实例 identity)·同类同值·同类异值·String/Int·双空·单空/getID·setID·覆写·无 id 属性为空/getURI urn:emf/isAncestor 同 class·父子 supertype·无关 createFromString/convertToString EString·EInt·EBoolean·roundtrip/getEClassifier 找到·缺失·非 EDataType 全对齐。新增 `EClass::instance_id` 复刻 C++ `EClass*` 指针恒等：clone 保留 id 使同类共享、独立构造相异）。 |
 | EcoreUtilExtendedTests.cpp | ✅ ecore_util_tests（扩展 7 例：getAllContents 无子·单子·嵌套深度优先/remove 单值 containment 置空·无 container 不崩/copy 保留属性·深拷贝 containment(child.eContainer==父副本)·独立实例/copyAll 空·多对象/resolve 非代理·null·resolveAll 不崩。`emf-ecore-util` 新增 `remove`·`copy`·`copy_all`·`resolve`·`resolve_all` 与 `EqualityHelper`；`Copier` 重建为保留 `DynamicEObject` 节点并在拷贝 containment 子时写回 container 弱链接，使得 `copy` 的副本子树 eContainer 指向副本身） |
-| CopierTests.cpp | ⬜ |
-| EcoreSwitchTests.cpp | ⬜ |
-| FeatureMapTests / BasicFeatureMapTests.cpp | ⬜ |
-| EObjectEListTests.cpp | ⬜ |
-| EObjectValidatorTests.cpp | ⬜ |
-| ValidatorComprehensiveTests.cpp | ⬜ |
+| CopierTests.cpp | ✅ copier_tests（12 例：拷贝属性·containment 子树深拷贝连通 container·经 containment 拷贝 part 重置 owner/外部 ref 保留源·copyReferences 后指向副本·多 referer 各自副本/copyAll/copyEntry 语义全对齐）。 |
+| EcoreSwitchTests.cpp | ✅ ecore_switch_tests（1 例：EClass/EAttribute/EReference 分发到最具体 case，含 meta 层级遍历 + 自定义 switch 计数）。 |
+| FeatureMapTests / BasicFeatureMapTests.cpp | ✅ feature_map_tests（18 例：add_entry/add_multiple/add_by_feature·add_at 仅 feature 切片内相对索引·remove_entry·get/set_by_feature·values/entries/size_by_feature·迭代器·list_iterator·clear·contains·feature+value 视图·index_of/last_index_of·add_with_any；同步补全 `BasicFeatureMap.add(feature,index,value)`/`index_of`/`last_index_of`/`to_array`）。 |
+| EObjectEListTests.cpp | ✅ e_object_elist_tests（33 例：构造(featureID/owner/dataClass)·useEquals=false·isUnique=true·hasInverse=false·isEObject·canContainNull=false/add 序·add 拒绝重复·addUnique 绕过唯一·get/basicGet 越界 panic·contains/indexOf -1·remove(index) 返回旧值·remove(value)·setUnique·set 重复越位 panic·clear·move 重排·toArray·isSet/unset·addAllUnique 空输入返回 false。新增 `emf-ecore-util::e_object_elist`，ObjectRef 指针 identity 比较）。 |
+| EObjectValidatorTests.cpp | ✅ validator_tests（空包/无名类/无类型 attr·ref 空包/合法包无 name 错误；`e_object_validator` 前缀validate_epackage/eclass）。 |
+| ValidatorComprehensiveTests.cpp | ✅ validator_tests（45 例：no_circular_containment·consistent_super_types·unique_feature_names/接口抽象·唯一签名·feature/operation 签名不重叠·唯一 operation 签名·consistent_transient·attr/ref top·ns_uri/ns_prefix well-formed(+/-)·EPackage top·opposite/container·default value literal·lower bound/consistent bounds·well-formed name/instance type·enum 唯一字面量·operation 重复参数名·isWellFormedUri/isWellFormedJavaIdentifier。新增 `ecore_validator`；**修复 `EClassKind` 将 abstract/interface 折叠为一值导致 INTERFACE_IS_ABSTRACT 不可达的问题：改为独立 `is_abstract`/`is_interface` 标志，`kind()` 仅作派生捷径**）。 |
+| FeatureMapUtil（无独立 C++ 测试文件） | ✅ feature_map_util_tests（14 例：wildcard `*`/:前缀·anyAttribute·group 后缀·isFeatureMap·isMany·document-root·createEntry·per-feature entries/values/size/isEmpty/has_entries·decodeFeatureName/splitName ns#name）。 |
 
 ## emf-edit
 | C++ 测试 | Rust 状态 |
