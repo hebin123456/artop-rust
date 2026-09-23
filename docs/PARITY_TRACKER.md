@@ -105,10 +105,10 @@
 |---|---|
 | EValidatorTests.cpp | ✅ 已移植（cpp_parity_e_validator，6 测试） |
 | ConstraintParserTests.cpp | ✅ 已移植（constraint_parser_tests，113 测试；OCL 子集递归下降 + 集合/字符串/整数/对象操作库） |
-| ConstraintDescriptorTests.cpp | ⬜ |
+| ConstraintDescriptorTests.cpp | ✅ 已移植（constraint_descriptor_tests，3 测试：defaults/setters/parseDescriptors） |
 | AnnotationConstraintLoaderTests.cpp | ✅ 已移植（annotation_constraint_loader_tests，5 测试；依赖 EClass.eAnnotations，emf-ecore 新增 EAnnotation） |
-| LiveValidatorTests.cpp | 🔶 部分（attach/detach/add_listener 已实现；LIVE 采用显式触发重校验语义，见 validation_e2e_tests） |
-| ValidationServiceTests.cpp | 🔶 部分（validate/validate_all + include_root/include_live 已实现） |
+| LiveValidatorTests.cpp | ✅ 已移植（live_validator_tests，3 测试；attach/detach/add_listener 已实现，LIVE 采用显式触发重校验语义，见 validation_e2e_tests） |
+| ValidationServiceTests.cpp | ✅ 已移植（validation_service_tests，3 测试；validate/validate_all + include_root/include_live 已实现） |
 | ValidationE2ETests.cpp | ✅ 已移植（validation_e2e_tests，4 测试；默认约束 source=约束名 + BATCH/LIVE 双 mode + required-ref 检查） |
 | AutosarConstraintsTests.cpp | ✅ 架构修正：在 artop 层 `artop-validation` 实现（13 测试），不放 emf 底座（对齐 org.artop.aal.*.constraints 分层） |
 
