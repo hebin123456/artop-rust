@@ -257,6 +257,31 @@ impl EObject for DynamicEObject {
         self.contents()
     }
 
+    fn e_cross_references(&self) -> Vec<ObjectRef> {
+        // Non-containment references' targets (EMF `eCrossReferences`), used by
+        // reflective proxy checks (e.g. AUTOSAR no-unresolved-proxy). Only the
+        // target objects held by *non-containment* reference features are
+        // returned; containment children are already surfaced via `e_contents`.
+        let mut out = Vec::new();
+        for f in self.all_references() {
+            if f.is_containment() {
+                continue;
+            }
+            match self.dynamic_settings.get(f.name()) {
+                Some(Val::Object(o)) => out.push(o.clone()),
+                Some(Val::List(l)) => {
+                    for e in l {
+                        if let Some(o) = e.as_object() {
+                            out.push(o.clone());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+
     fn e_get(&self, feature_id: &str) -> Option<Val> {
         self.e_get_by_name(feature_id)
     }

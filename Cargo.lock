@@ -17,6 +17,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "artop-validation"
+version = "0.1.0"
+dependencies = [
+ "emf-common",
+ "emf-ecore",
+ "emf-validation",
+]
+
+[[package]]
 name = "arxml-roundtrip"
 version = "0.1.0"
 dependencies = [

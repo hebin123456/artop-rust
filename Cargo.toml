@@ -4,6 +4,7 @@ members = [
     "crates/emf-common",
     "crates/emf-ecore",
     "crates/emf-artop/autosar448-model",
+    "crates/emf-artop/artop-validation",
     "crates/emf-ecore-util",
     "crates/emf-ecore-codegen",
     "crates/emf-xmi",
@@ -31,6 +32,7 @@ emf-xsd = { path = "crates/emf-xsd" }
 emf-edit = { path = "crates/emf-edit" }
 emf-compare = { path = "crates/emf-compare" }
 emf-validation = { path = "crates/emf-validation" }
+artop-validation = { path = "crates/emf-artop/artop-validation" }
 emf-xcore = { path = "crates/emf-xcore" }
 emf-acceleo = { path = "crates/emf-acceleo" }
 emf-sphinx = { path = "crates/emf-sphinx" }
