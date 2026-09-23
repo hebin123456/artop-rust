@@ -66,7 +66,8 @@
    Rust 在 `EObject` trait 与 `DynamicEObject` 补齐 `proxy_uri`/`e_set_proxy_uri`/`e_is_proxy`/`e_resolve_proxy`（默认非代理解析自身·无 set 退化返回 proxy），并新增 `emf_xmi::xmi_resource_set`（XMIResourceSet：create_resource/get_resource/get_eobject(按 URI 去 fragment 找根)/resolve_proxy_uri，等价 EMF ResourceSet.getEObject + EcoreUtil.resolve） |
 | StaticVsDynamicXmiTests.cpp | ✅ cpp_parity_static_vs_dynamic_xmi（3;动态 DynamicEObject 构造 Library{name}+2×Book{title,pages} 产出 XMI 含 name="Test Library"·title="Book One/Two"·pages="100/200" 结构/reload 该 XMI roundtrip 后 name·title·pages 与 2 本 books 保持/静态与动态两路径规范化 XMI 语义一致·containment `<books>` 子元素恰好 2 个 全对齐。
    Rust"静态"与"动态"同为反射后端，等价性天然成立，以「两次独立重建文档 normalize 后相等 + books 子元素计数一致」等价表达 C++ 的 normalizeXml+countOccurrences） |
-| JavaInteropTests.cpp | ⬜ |
+| JavaInteropTests.cpp | ✅ cpp_parity_java_interop（3；Java 风格独立 `<ecore:EPackage>` 文档（无需外部包注册）直读后 name="library"·nsURI·nsPrefix + ≥4 classifier（Library·Book 类 + BookCategory 枚举3 literal + MyString EDataType）；写回时恰好单个 `<ecore:EPackage>` 包裹且保留 nsURI·name·nsPrefix，并重输出 Library/BookCategory 及 `xsi:type="ecore:EClass|EEnum|EDataType"` 标记 全对齐。
+   差异：C++ 读 `/workspace/emf-cpp-demo/build/java_ref/library.ecore`（Java 生成参考文件），该文件不在仓库（源 C++ 亦在缺文件时 skip）；Rust 以同构 Java 风格独立多 classifier 文档承载同一互读/写回契约） |
 | roundtrip_test.cpp | ⬜ |
 | XmiInteropTests.cpp | ⬜ |
 | E2E_GenModelXmi*.cpp（CxxProduces/EquivalentReplacement/MultiEcoreTyped/TypedMultiFile） | ⬜ |
