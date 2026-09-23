@@ -7,6 +7,14 @@
 use crate::structural::{EOperation, EStructuralFeature};
 use crate::Val;
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Monotonic counter assigning each freshly constructed `EClass` a unique
+/// identity. Because `EClass` is a value type, the `instance_id` is preserved
+/// through `clone`, so two objects built from the same class value share a
+/// class identity while separately-constructed classes differ — mirrors C++'s
+/// `EClass*` pointer identity in `EcoreUtil.equals`.
+static NEXT_CLASS_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Discriminator for how a `EClass` is instantiated / used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -210,6 +218,8 @@ pub struct EClass {
     default_values: Vec<(i32, Val)>,
     /// The FeatureID of the ID attribute, if the class has one.
     id_feature: Option<i32>,
+    /// Unique class instance identity (see `NEXT_CLASS_ID`).
+    instance_id: u64,
 }
 
 impl EClass {
@@ -218,8 +228,14 @@ impl EClass {
         Self {
             name: name.into(),
             kind,
+            instance_id: NEXT_CLASS_ID.fetch_add(1, Ordering::Relaxed),
             ..Self::default()
         }
+    }
+
+    /// The class's unique instance identity, preserved through `clone`.
+    pub fn instance_id(&self) -> u64 {
+        self.instance_id
     }
 
     /// Class name.

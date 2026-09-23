@@ -83,8 +83,8 @@
 ## emf-ecore-util
 | C++ 测试 | Rust 状态 |
 |---|---|
-| EcoreUtilTests.cpp | ⬜ |
-| EcoreUtilExtendedTests.cpp | ⬜ |
+| EcoreUtilTests.cpp | ✅ ecore_util_tests（37 例：equals/equalsValue 同对象·双 None·单 None·不同类(按 EClass 实例 identity)·同类同值·同类异值·String/Int·双空·单空/getID·setID·覆写·无 id 属性为空/getURI urn:emf/isAncestor 同 class·父子 supertype·无关 createFromString/convertToString EString·EInt·EBoolean·roundtrip/getEClassifier 找到·缺失·非 EDataType 全对齐。新增 `EClass::instance_id` 复刻 C++ `EClass*` 指针恒等：clone 保留 id 使同类共享、独立构造相异）。 |
+| EcoreUtilExtendedTests.cpp | ✅ ecore_util_tests（扩展 7 例：getAllContents 无子·单子·嵌套深度优先/remove 单值 containment 置空·无 container 不崩/copy 保留属性·深拷贝 containment(child.eContainer==父副本)·独立实例/copyAll 空·多对象/resolve 非代理·null·resolveAll 不崩。`emf-ecore-util` 新增 `remove`·`copy`·`copy_all`·`resolve`·`resolve_all` 与 `EqualityHelper`；`Copier` 重建为保留 `DynamicEObject` 节点并在拷贝 containment 子时写回 container 弱链接，使得 `copy` 的副本子树 eContainer 指向副本身） |
 | CopierTests.cpp | ⬜ |
 | EcoreSwitchTests.cpp | ⬜ |
 | FeatureMapTests / BasicFeatureMapTests.cpp | ⬜ |

@@ -134,13 +134,7 @@ pub mod ecore_validator {
     }
 }
 
-pub mod equality_helper {
-    //! Port target: C++ source unit for `equality_helper`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-ecore-util::equality_helper"
-    }
-}
+pub mod equality_helper;
 
 pub mod feature_map_util {
     //! Port target: C++ source unit for `feature_map_util`.

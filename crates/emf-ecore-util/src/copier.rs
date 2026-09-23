@@ -27,6 +27,10 @@ pub struct Copier {
     map: HashMap<usize, ObjectRef>,
     /// Copy-in-creation order, so `copy_references` can run and extend the set.
     order: Vec<(ObjectRef, ObjectRef)>,
+    /// Original object address -> its copy as a concrete `DynamicEObject` node.
+    /// Kept so containment back-links can be written on copies (the trait
+    /// object cannot be downcast mutably).
+    dyn_nodes: HashMap<usize, Rc<RefCell<DynamicEObject>>>,
 }
 
 impl Default for Copier {
@@ -41,6 +45,7 @@ impl Copier {
         Self {
             map: HashMap::new(),
             order: Vec::new(),
+            dyn_nodes: HashMap::new(),
         }
     }
 
@@ -72,6 +77,7 @@ impl Copier {
     pub fn clear(&mut self) {
         self.map.clear();
         self.order.clear();
+        self.dyn_nodes.clear();
     }
 
     /// Number of objects copied so far.
@@ -95,14 +101,17 @@ impl Copier {
             (dy.class().clone(), dy.registry().cloned())
         };
 
-        let copy: ObjectRef = match registry {
+        let unode: Rc<RefCell<DynamicEObject>> = match registry {
             Some(reg) => Rc::new(RefCell::new(DynamicEObject::new_in(class, reg))),
             None => Rc::new(RefCell::new(DynamicEObject::new(class))),
         };
+        let copy: ObjectRef = unode.clone() as ObjectRef;
         self.map.insert(key, Rc::clone(&copy));
+        self.dyn_nodes.insert(key, Rc::clone(&unode));
         self.order.push((Rc::clone(original), Rc::clone(&copy)));
 
-        // Recurse into containment children.
+        // Recurse into containment children, adopting each copied child into
+        // the copy with its container back-link set (matches `adopt_*`).
         let containments: Vec<(String, Vec<ObjectRef>, bool)> = {
             let b = original.borrow();
             let dy = downcast_ref::<DynamicEObject>(&*b).expect("downcast just succeeded");
@@ -115,20 +124,41 @@ impl Copier {
             }
             feats
         };
+        let parent_unode = self
+            .dyn_nodes
+            .get(&key)
+            .cloned()
+            .expect("parent copy node recorded");
+        let weak = Rc::downgrade(&(parent_unode.clone() as ObjectRef));
         for (name, children, many) in containments {
             if children.is_empty() {
                 continue;
             }
-            let mut mapped = Vec::with_capacity(children.len());
-            for ch in &children {
-                mapped.push(self.copy_one(ch)?);
-            }
-            let copy_obj = Rc::clone(&copy);
-            let mut cb = copy_obj.borrow_mut();
-            if many || mapped.len() > 1 {
-                cb.e_set(&name, val_list(mapped));
+            if many || children.len() > 1 {
+                let mut vals = Vec::with_capacity(children.len());
+                for ch in &children {
+                    self.copy_one(ch)?;
+                    let cn = self
+                        .dyn_nodes
+                        .get(&ptr(ch))
+                        .cloned()
+                        .ok_or_else(|| "child copy node missing".to_string())?;
+                    cn.borrow_mut()
+                        .set_container(Some((weak.clone(), name.clone())));
+                    vals.push(Val::Object(cn.clone() as ObjectRef));
+                }
+                parent_unode.borrow_mut().e_set_by_name(&name, Val::List(vals));
             } else {
-                cb.e_set(&name, Val::Object(Rc::clone(&mapped[0])));
+                self.copy_one(&children[0])?;
+                let cn = self
+                    .dyn_nodes
+                    .get(&ptr(&children[0]))
+                    .cloned()
+                    .ok_or_else(|| "child copy node missing".to_string())?;
+                cn.borrow_mut().set_container(Some((weak.clone(), name.clone())));
+                parent_unode
+                    .borrow_mut()
+                    .e_set_by_name(&name, Val::Object(cn.clone() as ObjectRef));
             }
         }
 

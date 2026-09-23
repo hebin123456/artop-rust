@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 use emf_common::eobject::{downcast_ref, EObject};
 use emf_common::value::{ObjectRef, Val};
-use emf_ecore::DynamicEObject;
+use emf_ecore::{datatype, DynamicEObject, EClass, EDataType, EPackage};
 
 /// The direct containment children of `obj`, in feature / element order.
 ///
@@ -138,9 +138,297 @@ fn append_object_refs(v: &Val, out: &mut Vec<ObjectRef>) {
     }
 }
 
+/// The class name of an object (via the reflective `EObject::e_class`).
+fn class_name(obj: &ObjectRef) -> String {
+    let b = obj.borrow();
+    b.e_class().to_string()
+}
+
+/// The class instance identity of a `DynamicEObject` (mirrors C++ `EClass*`).
+fn class_identity(obj: &ObjectRef) -> u64 {
+    let b = obj.borrow();
+    downcast_ref::<DynamicEObject>(&*b)
+        .map(|d| d.class().instance_id())
+        .unwrap_or(0)
+}
+
+/// Deep equality of two objects (EMF `EcoreUtil.equals`). Two `None` are
+/// equal; one side missing is not; pointer-identical objects are equal; and
+/// otherwise the objects must share a class and every structural-feature
+/// value must be value-equal.
+pub fn equals(a: Option<&ObjectRef>, b: Option<&ObjectRef>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(_), None) | (None, Some(_)) => false,
+        (Some(x), Some(y)) => {
+            if Rc::ptr_eq(x, y) {
+                return true;
+            }
+            if class_identity(x) != class_identity(y) {
+                return false;
+            }
+            // Compare every feature present on either side (names + values).
+            let names: Vec<String> = feature_names(x);
+            if names != feature_names(y) {
+                return false;
+            }
+            for n in names {
+                let vx = x.borrow().e_get(&n);
+                let vy = y.borrow().e_get(&n);
+                if !equals_value(vx.as_ref(), vy.as_ref()) {
+                    return false;
+                }
+            }
+            true
+        }
+    }
+}
+
+/// Value equality (EMF `EcoreUtil.equalsValue`): `None` (unset/`std::any{}`)
+/// equals another `None`, differs from anything set, and set values compare
+/// structurally (`Val::PartialEq`, object refs by identity).
+pub fn equals_value(a: Option<&Val>, b: Option<&Val>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(_), None) | (None, Some(_)) => false,
+        (Some(x), Some(y)) => x == y,
+    }
+}
+
+/// The value of the class's ID-marked attribute, or `""` when the class has no
+/// ID attribute or it is unset (EMF `EcoreUtil.getID`).
+pub fn get_id(obj: &ObjectRef) -> String {
+    match id_feature_name(obj) {
+        Some(feat) => match obj.borrow().e_get(&feat) {
+            Some(Val::String(s)) => s,
+            Some(Val::Null) | None => String::new(),
+            Some(v) => v.describe(),
+        },
+        None => String::new(),
+    }
+}
+
+/// Set the ID-marked attribute to `id`. Returns false when the class has no ID
+/// attribute (EMF `EcoreUtil.setID`).
+pub fn set_id(obj: &ObjectRef, id: &str) -> bool {
+    match id_feature_name(obj) {
+        Some(feat) => obj
+            .borrow_mut()
+            .e_set(&feat, Val::String(id.to_string())),
+        None => false,
+    }
+}
+
+/// The name of the object's class's ID-marked structural feature, if any.
+fn id_feature_name(obj: &ObjectRef) -> Option<String> {
+    let b = obj.borrow();
+    let dy = downcast_ref::<DynamicEObject>(&*b)?;
+    dy.all_structural_features()
+        .iter()
+        .find(|f| f.is_id())
+        .map(|f| f.name().to_string())
+}
+
+/// The `urn:emf`-style URI of a root object with no resource (EMF
+/// `EcoreUtil.getURI`). An object with a container walks up to its root. For a
+/// resource-less root the URI is a `urn:emf:///...` path fragment.
+pub fn get_uri(obj: &ObjectRef) -> String {
+    let root = get_root_container(obj);
+    format!("urn:emf://{}", uri_fragment(&root))
+}
+
+/// A `//@feat.idx`-style fragment for the object as seen from its root.
+fn uri_fragment(obj: &ObjectRef) -> String {
+    let root = get_root_container(obj);
+    if Rc::ptr_eq(&root, obj) {
+        return format!("/{}", class_name(obj));
+    }
+    // Walk from the root down, matching the object by pointer.
+    fn find(node: &ObjectRef, target: &ObjectRef, prefix: &str) -> Option<String> {
+        if Rc::ptr_eq(node, target) {
+            return Some(prefix.to_string());
+        }
+        for f in structural_features(node) {
+            if !f.is_containment() {
+                continue;
+            }
+            let v = node.borrow().e_get(f.name());
+            if let Some(val) = &v {
+                if let Some(o) = single_object(val) {
+                    if let Some(p) = find(&o, target, &format!("{}@{}", prefix, f.name())) {
+                        return Some(p);
+                    }
+                } else if let Some(l) = list(val) {
+                    for (i, item) in l.iter().enumerate() {
+                        if let Some(o) = item {
+                            if let Some(p) =
+                                find(o, target, &format!("{}@{}.{}", prefix, f.name(), i))
+                            {
+                                return Some(p);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+    find(&root, obj, "").unwrap_or_else(|| format!("/{}", class_name(obj)))
+}
+
+/// Whether `ancestor` is `obj`'s class or one of its supertypes (EMF
+/// `EcoreUtil.isAncestor(EClass, EObject)`; distinct from the object-containment
+/// `is_ancestor` above).
+pub fn is_ancestor_of(ancestor: &EClass, obj: &ObjectRef) -> bool {
+    let b = obj.borrow();
+    let dy = match downcast_ref::<DynamicEObject>(&*b) {
+        Some(d) => d,
+        None => return false,
+    };
+    if dy.class().name() == ancestor.name() {
+        return true;
+    }
+    let reg = dy
+        .registry()
+        .cloned()
+        .unwrap_or_else(emf_ecore::ecore_package::global);
+    dy.class().is_super_type_of(ancestor.name(), &reg)
+}
+
+/// Look up an `EDataType` classifier by name inside `pkg` (EMF
+/// `EcoreUtil.getEClassifier`). Returns `None` when missing or when the
+/// classifier is not a data type (an `EClass`, etc.).
+pub fn get_e_classifier(pkg: &EPackage, name: &str) -> Option<EDataType> {
+    pkg.find_data_type(name).cloned()
+}
+
+/// Parse `literal` into a [`Val`] using the named Ecore built-in data type
+/// (EMF `EcoreUtil.createFromString`).
+pub fn create_from_string(data_type: &str, literal: &str) -> Val {
+    datatype::from_string(data_type, literal)
+}
+
+/// Render `value` back to its literal string for the named Ecore built-in data
+/// type (EMF `EcoreUtil.convertToString`).
+pub fn convert_to_string(data_type: &str, value: &Val) -> String {
+    datatype::to_string(data_type, value)
+}
+
+/// The structural-feature names of a `DynamicEObject`, own + inherited.
+fn feature_names(obj: &ObjectRef) -> Vec<String> {
+    structural_features(obj)
+        .iter()
+        .map(|f| f.name().to_string())
+        .collect()
+}
+
+/// All structural features (own + inherited) of a `DynamicEObject`.
+fn structural_features(obj: &ObjectRef) -> Vec<emf_ecore::EStructuralFeature> {
+    let b = obj.borrow();
+    match downcast_ref::<DynamicEObject>(&*b) {
+        Some(d) => d.all_structural_features(),
+        None => Vec::new(),
+    }
+}
+
+/// The single object pointed at by a `Val`, if any.
+fn single_object(v: &Val) -> Option<ObjectRef> {
+    v.as_object().cloned()
+}
+
+/// The object refs held by a `Val::List`, if any.
+fn list(v: &Val) -> Option<Vec<Option<ObjectRef>>> {
+    v.as_list().map(|l| l.iter().map(|x| x.as_object().cloned()).collect())
+}
+
 /// Object identity key: the raw `Rc` pointer address.
 pub(crate) fn ptr(obj: &ObjectRef) -> usize {
     Rc::as_ptr(obj) as *const () as usize
+}
+
+// ---- structural mutation / copy / proxy resolution (C++ EcoreUtil) ----
+
+/// Detach `obj` from its container. If the holding feature is single-valued it
+/// is unset; if multi-valued `obj` is removed from the list. Returns `false`
+/// when `obj` has no container (or its container is not reflective).
+pub fn remove(obj: &ObjectRef) -> bool {
+    let Some(container) = obj.borrow().e_container() else {
+        return false;
+    };
+    let key = ptr(obj);
+    let hit: Option<(String, bool)> = {
+        let c = container.borrow();
+        let dy = match downcast_ref::<DynamicEObject>(&*c) {
+            Some(d) => d,
+            None => return false,
+        };
+        dy.all_containments().into_iter().find_map(|f| {
+            let name = f.name().to_string();
+            let val = dy.e_get_by_name(&name)?;
+            if let Some(o) = val.as_object() {
+                (ptr(o) == key && !f.is_many()).then_some((name, false))
+            } else if let Some(l) = val.as_list() {
+                l.iter()
+                    .any(|v| v.as_object().map(|o| ptr(o) == key).unwrap_or(false))
+                    .then_some((name, true))
+            } else {
+                None
+            }
+        })
+    };
+    let (name, many) = match hit {
+        Some(h) => h,
+        None => return false,
+    };
+    {
+        let mut d = container.borrow_mut();
+        if many {
+            let cur = d.e_get(&name).unwrap_or(Val::List(Vec::new()));
+            let kept: Vec<Val> = cur
+                .as_list()
+                .map(|l| {
+                    l.iter()
+                        .filter(|v| v.as_object().map(|o| ptr(o) != key).unwrap_or(true))
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default();
+            d.e_set(&name, Val::List(kept));
+        } else {
+            d.e_unset(&name);
+        }
+    }
+    obj.borrow_mut().clear_container();
+    true
+}
+
+/// A structural copy of `obj` (attributes by value, containment children
+/// deep-copied, cross references redirected to copies), or `None` on failure.
+/// EMF `EcoreUtil.copy`.
+pub fn copy(obj: &ObjectRef) -> Option<ObjectRef> {
+    crate::copier::Copier::new().copy(obj).ok()
+}
+
+/// `EcoreUtil.copyAll`: structural copies of each root.
+pub fn copy_all(roots: &[ObjectRef]) -> Vec<ObjectRef> {
+    crate::copier::Copier::new()
+        .copy_all(roots)
+        .unwrap_or_default()
+}
+
+/// Resolve a (possibly proxy) object. A `None` stays `None`; a non-proxy is
+/// returned as-is; a proxy with no available `ResourceSet` to resolve through
+/// is returned as-is too (EMF behaviour: it cannot be resolved).
+pub fn resolve(obj: Option<&ObjectRef>) -> Option<ObjectRef> {
+    obj.map(Rc::clone)
+}
+
+/// `EcoreUtil.resolveAll`: resolve every resolvable object in `obj`'s subtree.
+/// With no `ResourceSet`, this is a no-op traversal (proxies are left as-is).
+pub fn resolve_all(obj: &ObjectRef) {
+    for o in e_all_contents(obj) {
+        let _ = o.borrow().e_is_proxy();
+    }
 }
 
 #[cfg(test)]
