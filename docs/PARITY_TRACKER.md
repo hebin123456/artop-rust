@@ -77,7 +77,8 @@
    Rust 复用「load_ecore_package→registry→DynamicEObject 实例化→saver/loader」；C++ 用 Fjage 组件产出的静态类，契约等价） |
 | E2E_GenModelXmiMultiEcoreTypedTests.cpp | ✅ cpp_parity_e2e_multi_ecore_typed（12；base(Library:name+books / Book:title)+ext(AnnotatedLibrary extends base#//Library 增 note 属性 + highlighted containment of base#//Book) 跨包 typed：AnnotatedLibrary 继承 Library/supertype 解析到真实 base Library/自有 feature==2 {note,highlighted}/eAllStructuralFeatures≥4 含继承 {name,books}+自有 {note,highlighted}·全部按名可查/实例化 eClass()=="AnnotatedLibrary"/反射设继承 name 与自有 note·读回/add Book 到继承 books 列表与自有 highlighted 列表/跨包 containment highlighted.eType 解析 base#//Book+eAllContainments 含 books+highlighted/save 产出 `ext:AnnotatedLibrary`·name·note 字段/两包各自实例化基类对象 全对齐。
    修复 Rust 跨包缺陷：`e_all_structural_features` 与 `DynamicEObject` 值/标志存储原按 feature_id（每包从 0 编号→跨包冲突）改为按 feature 名键控；e_all 去重改按名，存储改按名，修复继承的 `name` 与自有 `note` 同 id0 互相覆盖的 bug） |
-| E2E_GenModelXmiTypedMultiFileTests.cpp | 🔶 待移植 |
+| E2E_GenModelXmiTypedMultiFileTests.cpp | ✅ cpp_parity_e2e_typed_multi_file（12；加载内联 ecore（6 classifier·nsURI `http://example.com/emfdemo/library`·含 Library 5 containment books/magazines/authors/publishers）并注册/library.xmi 单根 `<library:Library>`·name=="City Central Library"/books containment 2·首 title=="The Pragmatic Programmer"/authors containment 3·首 name=="Ada Lovelace"/publishers containment 2·首 name=="O'Reilly Media"/authors.xmi `<xmi:XMI>` 多根·3 个 Author 根·name·email(`ada@example.com`) 加载/publishers.xmi 多根·2 个 Publisher·嵌套单值 address containment·city=="Sebastopol"/多文件独立加载互不干扰/各文件实例 class 均经同一注册元模型包(nsURI)解析 全对齐。
+   样本已随 crate 归置 tests/samples/multi-xmi-java/（Java 参考 library.xmi·authors.xmi·publishers.xmi）；Java 文件带元模型未声明属性(publishDate/category/...)由 loader record-and-skip。差异：C++ `getEPackage` 指针恒等，Rust 以「find_package_of_class→nsURI==emfdemo/library」等价）。emf-xmi GenModel*.cpp 全系列已移植完毕 |
 
 ## emf-ecore-util
 | C++ 测试 | Rust 状态 |

@@ -184,10 +184,9 @@ impl DynamicEObject {
     /// The multi-valued list for a feature, expanding an unset default to an
     /// empty list so callers can populate it (mirrors C++ lazy list creation).
     pub fn e_list_mut(&mut self, name: &str) -> Vec<ObjectRef> {
-        let feature = match self.e_all().into_iter().find(|f| f.name() == name) {
-            Some(f) => f,
-            None => return Vec::new(),
-        };
+        if !self.e_all().into_iter().any(|f| f.name() == name) {
+            return Vec::new();
+        }
         let cur = self.dynamic_settings.get(name).cloned().unwrap_or(Val::Null);
         let objs = cur
             .as_list()
