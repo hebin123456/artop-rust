@@ -29,6 +29,34 @@ pub fn attr_rust_type(type_name: &str, many: bool) -> String {
     }
 }
 
+/// Build the Rust default-value expression for an attribute, given its Ecore
+/// data type name and `defaultValueLiteral` (if any).
+///
+/// Equivalent to C++ `TypeMapper::defaultValueLiteral` / `defaultLitByCppType`,
+/// adapted to Rust. An empty `literal` means "no explicit default" and yields
+/// an empty string; otherwise:
+/// - `String`-typed attributes become `String::from("...")`;
+/// - `bool` attributes become `true` / `false`;
+/// - numeric attributes keep the literal verbatim.
+pub fn default_value_literal(e_type: &str, literal: &str) -> String {
+    let rust_ty = attr_rust_type(e_type, false);
+    if literal.is_empty() {
+        return String::new();
+    }
+    if rust_ty == "String" {
+        format!("String::from(\"{literal}\")")
+    } else if rust_ty == "bool" {
+        if literal == "true" || literal == "1" {
+            "true".to_string()
+        } else {
+            "false".to_string()
+        }
+    } else {
+        // Numeric types use the literal as-is (mirrors C++ `defaultLitByCppType`).
+        literal.to_string()
+    }
+}
+
 /// Map a reference feature's target-class name to a Rust field type. Every
 /// reference resolves to `ObjectRef` (single) / `Vec<ObjectRef>` (many); the
 /// target class name is intentionally unused (the concrete generated type of a

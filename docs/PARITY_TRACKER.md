@@ -140,12 +140,12 @@
 |---|---|
 | GenModelLoaderTests.cpp | ✅ 已移植（cpp_parity_static_modeling） |
 | RuntimeBehaviorTests.cpp | ✅ 已移植（metadata + 动态反射部分） |
-| GenModelGeneratorTests.cpp | ⬜ |
-| CppGeneratorTests.cpp | ⬜ |
-| CppTemplatesTests.cpp | ⬜ |
-| EmitterTests.cpp | ⬜ |
-| P4_JetTemplateTests.cpp | ⬜ |
-| TestEAnnotationReader.cpp / TestEAnnotationDebug.cpp | ⬜ |
+| GenModelGeneratorTests.cpp | 🔶 能力已实现（generator::generate_source 生成 Rust 代码）；C++ GenModelGenerator 生成 C++ 文本（emit*），未逐字移植 |
+| CppGeneratorTests.cpp | 🔶 同上：C++ 端到端生成 C++ 已非目标 |
+| CppTemplatesTests.cpp | 🔶 语言无关部分已移植（render_template 占位符替换 basicSubstitution/unknownKeptAsIs）；emit* C++ 模板未移植 |
+| EmitterTests.cpp | 🔶 语言无关部分已移植（TypeMapper 语义：EString→String、整型/浮点映射、default_value_literal）；C++ 发射器未移植 |
+| P4_JetTemplateTests.cpp | ✅ 全移植（jet_template_tests：render_jet_template each/if/unless，12 测试，含 NestedEach/IfInsideEach） |
+| TestEAnnotationReader.cpp / TestEAnnotationDebug.cpp | 🔶 C++ 特定调试；EAnnotation 语义已由 emf-ecore annotation.rs 覆盖 |
 
 ## emf-acceleo
 | C++ 测试 | Rust 状态 |

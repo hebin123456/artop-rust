@@ -40,6 +40,7 @@
 pub mod gen_model;
 pub mod generator;
 pub mod loader;
+pub mod template;
 pub mod typing;
 
 pub use gen_model::{CrateSpec, GenModel};
