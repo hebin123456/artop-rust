@@ -49,23 +49,35 @@ impl Copier {
         }
     }
 
-    /// Deep-copy a single root (plus everything it contains / references).
+    /// Deep-copy a single root (plus everything it contains), recording the
+    /// source->copy mapping. Non-containment references are NOT redirected
+    /// here; call [`Copier::copy_references`] (matching C++ `Copier`).
     pub fn copy(&mut self, root: &ObjectRef) -> Result<ObjectRef, String> {
         self.copy_one(root)?;
-        self.settle_references()?;
         self.map
             .get(&ptr(root))
             .cloned()
             .ok_or_else(|| "copy of root missing after copy".to_string())
     }
 
-    /// Deep-copy several roots.
+    /// Deep-copy several roots (see [`Copier::copy`]).
     pub fn copy_all(&mut self, roots: &[ObjectRef]) -> Result<Vec<ObjectRef>, String> {
         let mut out = Vec::with_capacity(roots.len());
         for r in roots {
             out.push(self.copy(r)?);
         }
         Ok(out)
+    }
+
+    /// Redirect every copied object's non-containment references so they point
+    /// at the *copies* of their targets. A target that was not copied is left
+    /// pointing at the original (C++ `Copier::copyReferences`).
+    pub fn copy_references(&mut self) -> Result<(), String> {
+        let snapshot = self.order.clone();
+        for (orig, copy) in &snapshot {
+            self.fix_one(orig, copy)?;
+        }
+        Ok(())
     }
 
     /// The copy of `original`, if it has been copied.
@@ -186,29 +198,41 @@ impl Copier {
                 }
             }
         }
+
+        // Copy non-containment (cross) references too, but leave them pointing at
+        // the ORIGINAL targets. `copyReferences` later redirects them to copies
+        // where available — this matches C++ `Copier.copy`, which copies the whole
+        // feature value set including references still aimed at the sources.
+        let refs: Vec<(String, Val)> = {
+            let b = original.borrow();
+            let dy = downcast_ref::<DynamicEObject>(&*b).expect("downcast just succeeded");
+            let mut feats = Vec::new();
+            for f in dy.all_references() {
+                if f.is_containment() {
+                    continue;
+                }
+                let name = f.name().to_string();
+                if let Some(val) = dy.e_get_by_name(&name) {
+                    feats.push((name, val));
+                }
+            }
+            feats
+        };
+        {
+            let mut cb = copy.borrow_mut();
+            for (name, val) in refs {
+                if !val.is_null() {
+                    cb.e_set(&name, val);
+                }
+            }
+        }
         Ok(copy)
     }
 
-    /// Run reference-fixing to a fixpoint: non-containment references point to
-    /// the copies of their targets (creating copies on demand), and newly
-    /// created copies get their own references fixed in later rounds.
-    fn settle_references(&mut self) -> Result<(), String> {
-        loop {
-            let n = self.order.len();
-            let snapshot = self.order.clone();
-            for (orig, copy) in &snapshot {
-                self.copy_references(orig, copy)?;
-            }
-            // If copy_references created new pairs, another round is needed.
-            if self.order.len() == n {
-                break;
-            }
-        }
-        Ok(())
-    }
-
-    /// Redirect a source object's non-containment references on its copy.
-    fn copy_references(&mut self, original: &ObjectRef, copy: &ObjectRef) -> Result<(), String> {
+    /// Redirect one source object's non-containment references on its copy.
+    /// Only targets already recorded in the map are redirected; unknown
+    /// targets are left pointing at the original.
+    fn fix_one(&mut self, original: &ObjectRef, copy: &ObjectRef) -> Result<(), String> {
         let refs: Vec<(String, bool, Vec<ObjectRef>)> = {
             let b = original.borrow();
             let dy = downcast_ref::<DynamicEObject>(&*b)
@@ -230,19 +254,18 @@ impl Copier {
             if targets.is_empty() {
                 continue;
             }
-            let mut mapped = Vec::with_capacity(targets.len());
+            let mut out = Vec::with_capacity(targets.len());
             for t in &targets {
-                let c = match self.map.get(&ptr(t)) {
-                    Some(c) => Rc::clone(c),
-                    None => self.copy_one(t)?, // dangling reference: copy its target too
-                };
-                mapped.push(c);
+                match self.map.get(&ptr(t)) {
+                    Some(c) => out.push(Rc::clone(c)),
+                    None => out.push(Rc::clone(t)), // not copied: keep original
+                }
             }
             let mut cb = copy.borrow_mut();
-            if many || mapped.len() > 1 {
-                cb.e_set(&name, val_list(mapped));
+            if many || targets.len() > 1 {
+                cb.e_set(&name, val_list(out));
             } else {
-                cb.e_set(&name, Val::Object(Rc::clone(&mapped[0])));
+                cb.e_set(&name, Val::Object(Rc::clone(&out[0])));
             }
         }
         Ok(())
@@ -361,6 +384,7 @@ mod tests {
 
         let mut copier = Copier::new();
         let copy = copier.copy(&fleet).unwrap();
+        copier.copy_references().unwrap();
 
         // Same class, same attribute values.
         assert_eq!(copy.borrow().e_class(), "Fleet");

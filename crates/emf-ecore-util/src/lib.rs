@@ -22,6 +22,9 @@ pub mod feature_map;
 /// `ECrossReferenceAdapter`: collect non-containment references of a subtree.
 pub mod e_cross_reference_adapter;
 
+/// `EcoreSwitch`: visitor dispatching on the Ecore meta-class of an object.
+pub mod ecore_switch;
+
 pub mod extended_metadata {
     //! Port target: C++ source unit for `extended_metadata`.
     /// Placeholder marker so the module compiles until the real port lands.
@@ -115,14 +118,6 @@ pub mod ecore_emap {
     /// Placeholder marker so the module compiles until the real port lands.
     pub fn api_surface() -> &'static str {
         "emf-ecore-util::ecore_emap"
-    }
-}
-
-pub mod ecore_switch {
-    //! Port target: C++ source unit for `ecore_switch`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-ecore-util::ecore_switch"
     }
 }
 

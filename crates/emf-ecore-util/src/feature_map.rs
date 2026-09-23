@@ -146,6 +146,91 @@ impl FeatureMap {
         }
     }
 
+    /// Insert `value` at `index` *within the slice* of entries whose feature is
+    /// `feature` (C++ `BasicFeatureMap.add(feature, index, value)`). Appends if
+    /// `index >=` that slice's length. Always succeeds in the append form.
+    pub fn add_at(&mut self, feature: &EStructuralFeature, index: usize, value: Val) {
+        let fid = feature.feature_id();
+        let mut rel = 0usize;
+        let mut pos = self.entries.len();
+        for (i, e) in self.entries.iter().enumerate() {
+            if e.feature().feature_id() == fid {
+                if rel == index {
+                    pos = i;
+                    break;
+                }
+                rel += 1;
+            }
+        }
+        self.entries.insert(pos, Entry::new(feature.clone(), value));
+    }
+
+    /// Values of all entries bound to `feature`, in document order.
+    pub fn values_for(&self, feature: &EStructuralFeature) -> Vec<Val> {
+        self.entries_for(feature)
+            .into_iter()
+            .map(|e| e.value().clone())
+            .collect()
+    }
+
+    /// Whether an entry with `feature` and `value` is present.
+    pub fn contains(&self, feature: &EStructuralFeature, value: &Val) -> bool {
+        self.index_of(feature, value) >= 0
+    }
+
+    /// Remove the first entry matching `feature` + `value`; `true` if removed.
+    pub fn remove_entry(&mut self, feature: &EStructuralFeature, value: &Val) -> bool {
+        let fid = feature.feature_id();
+        if let Some(i) = self
+            .entries
+            .iter()
+            .position(|e| e.feature().feature_id() == fid && &e.value == value)
+        {
+            self.entries.remove(i);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Index (in the feature slice) of the first entry matching `feature` +
+    /// `value`, or `-1`.
+    pub fn index_of(&self, feature: &EStructuralFeature, value: &Val) -> i32 {
+        let fid = feature.feature_id();
+        let mut rel = 0i32;
+        for e in &self.entries {
+            if e.feature().feature_id() == fid {
+                if &e.value == value {
+                    return rel;
+                }
+                rel += 1;
+            }
+        }
+        -1
+    }
+
+    /// Index (in the feature slice) of the last entry matching `feature` +
+    /// `value`, or `-1`.
+    pub fn last_index_of(&self, feature: &EStructuralFeature, value: &Val) -> i32 {
+        let fid = feature.feature_id();
+        let mut last = -1i32;
+        let mut rel = 0i32;
+        for e in &self.entries {
+            if e.feature().feature_id() == fid {
+                if &e.value == value {
+                    last = rel;
+                }
+                rel += 1;
+            }
+        }
+        last
+    }
+
+    /// All entry values across every feature, in document order (`toArray`).
+    pub fn to_array(&self) -> Vec<Val> {
+        self.entries.iter().map(|e| e.value().clone()).collect()
+    }
+
     /// Remove all entries.
     pub fn clear(&mut self) {
         self.entries.clear();

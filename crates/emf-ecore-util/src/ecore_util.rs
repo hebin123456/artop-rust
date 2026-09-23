@@ -406,14 +406,26 @@ pub fn remove(obj: &ObjectRef) -> bool {
 /// deep-copied, cross references redirected to copies), or `None` on failure.
 /// EMF `EcoreUtil.copy`.
 pub fn copy(obj: &ObjectRef) -> Option<ObjectRef> {
-    crate::copier::Copier::new().copy(obj).ok()
+    let mut copier = crate::copier::Copier::new();
+    match copier.copy(obj) {
+        Ok(cp) => {
+            copier.copy_references().ok()?;
+            Some(cp)
+        }
+        Err(_) => None,
+    }
 }
 
 /// `EcoreUtil.copyAll`: structural copies of each root.
 pub fn copy_all(roots: &[ObjectRef]) -> Vec<ObjectRef> {
-    crate::copier::Copier::new()
-        .copy_all(roots)
-        .unwrap_or_default()
+    let mut copier = crate::copier::Copier::new();
+    match copier.copy_all(roots) {
+        Ok(copies) => {
+            let _ = copier.copy_references();
+            copies
+        }
+        Err(_) => Vec::new(),
+    }
 }
 
 /// Resolve a (possibly proxy) object. A `None` stays `None`; a non-proxy is
