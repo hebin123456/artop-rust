@@ -123,15 +123,17 @@
 | CompareP0RegressionTests.cpp | ✅ 已移植（compare_p0_regression_tests，15 测试；3-way REAL/PSEUDO 冲突、依赖边、等价关系） |
 
 ## emf-xsd
+> C++ 下全部测试文件为空（0 字节），仅留有 `sample.xsd`。按"同一样本对齐行为"策略，以 `sample.xsd` 为 Rust 编写集成对照测试。
+
 | C++ 测试 | Rust 状态 |
 |---|---|
-| XSDSchemaTests.cpp | ⬜ |
-| XSDParserTests.cpp | ⬜ |
-| XSDComponentsTests.cpp | ⬜ |
-| XSDValidatorTests.cpp | ⬜ |
-| XSDFacetTests.cpp | ⬜ |
-| P5_XSDSchemaIncorporateTests.cpp | ⬜ |
-| XSDPackageTests.cpp | ⬜ |
+| XSDSchemaTests.cpp | 🔶 C++ 空；Rust sample 对照（sample_schema_tests：schema 级 targetNamespace/elementFormDefault/import/include） |
+| XSDParserTests.cpp | ✅ 解析器已实现（parse_schema）+ sample 对照（BookType 序列/粒子/facet/minMax/unbounded/any） |
+| XSDComponentsTests.cpp | ✅ 元模型已实现（XSDElementDeclaration/XSDAttributeDeclaration/XSDComplexTypeDefinition）+ sample 对照（type_by_name/element_by_name/全局元素属性） |
+| XSDValidatorTests.cpp | 🔶 C++ 空；Rust facet 语义单测 + sample 对照（XsdFacet 构造/Display、XsdUse Display） |
+| XSDFacetTests.cpp | ✅ 已实现（10 种 facet 构造/Display 单测） |
+| P5_XSDSchemaIncorporateTests.cpp | 🔶 C++ 空；未实现（需 XSDValidator/Incorporation 语义，后续补齐） |
+| XSDPackageTests.cpp | ✅ 新增 schema 级 `<xs:annotation>` 收集修复（对齐 complexType），12 测试全绿 |
 
 ## emf-ecore-codegen
 | C++ 测试 | Rust 状态 |
