@@ -120,13 +120,7 @@ pub mod ecore_validator;
 
 pub mod equality_helper;
 
-pub mod feature_map_util {
-    //! Port target: C++ source unit for `feature_map_util`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-ecore-util::feature_map_util"
-    }
-}
+pub mod feature_map_util;
 
 #[cfg(test)]
 mod tests {

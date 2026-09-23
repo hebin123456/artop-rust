@@ -14,7 +14,6 @@
 //!   false`); `isSet` is derived from being non-empty.
 
 use emf_common::value::ObjectRef;
-use emf_ecore::EClass;
 
 /// An ordered, unique list of object references backing a single multi-valued
 /// reference feature on a containing object.
