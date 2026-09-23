@@ -13,13 +13,7 @@ pub mod constraint_descriptor;
 pub mod diagnostician;
 pub mod e_validator;
 
-pub mod annotation_constraint_loader {
-    //! Port target: C++ source unit for `annotation_constraint_loader`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "emf-validation::annotation_constraint_loader"
-    }
-}
+pub mod annotation_constraint_loader;
 
 pub mod autosar_constraints {
     //! Port target: C++ source unit for `autosar_constraints`.

@@ -4,6 +4,7 @@
 //! `EEnum`/`EEnumLiteral`). Inheritance is *metadata*: `EClass`'s `e_super_types`
 //! lists parent names and the `e_all_*` query family walks the graph.
 
+use crate::annotation::EAnnotation;
 use crate::structural::{EOperation, EStructuralFeature};
 use crate::Val;
 use std::collections::HashSet;
@@ -219,6 +220,8 @@ pub struct EClass {
     features: Vec<EStructuralFeature>,
     /// Locally declared operations.
     operations: Vec<EOperation>,
+    /// Annotations attached to this class (EMF `EClass.eAnnotations`).
+    annotations: Vec<EAnnotation>,
     /// Compiled fallback: default feature values keyed by feature id.
     default_values: Vec<(i32, Val)>,
     /// The FeatureID of the ID attribute, if the class has one.
@@ -352,6 +355,19 @@ impl EClass {
     /// Append an own operation.
     pub fn add_operation(&mut self, op: EOperation) {
         self.operations.push(op);
+    }
+
+    /// `eAnnotations`: annotations attached to this class.
+    pub fn e_annotations(&self) -> &[EAnnotation] {
+        &self.annotations
+    }
+    /// Mutable `eAnnotations`.
+    pub fn e_annotations_mut(&mut self) -> &mut Vec<EAnnotation> {
+        &mut self.annotations
+    }
+    /// Append an annotation (EMF `eAnnotations().add`).
+    pub fn add_annotation(&mut self, ann: EAnnotation) {
+        self.annotations.push(ann);
     }
 
     /// Register a default feature value keyed by feature id.

@@ -28,6 +28,9 @@
 /// FeatureID constants for the Ecore meta-meta-model (C++ `FeatureID`).
 pub mod feature_id;
 
+/// `EAnnotation` — a lightweight key/value annotation on a model element.
+pub mod annotation;
+
 /// `EClassifier`, `EClass`, `EDataType`, `EEnum`, `EEnumLiteral`.
 pub mod classifier;
 
@@ -46,6 +49,7 @@ pub mod datatype;
 /// The singleton `EcorePackage` with built-in data types and meta-classes.
 pub mod ecore_package;
 
+pub use annotation::EAnnotation;
 pub use classifier::{EClass, EClassKind, EClassifier, EDataType, EEnum, EEnumLiteral};
 pub use dynamic::{adopt_many, adopt_single, node_to_object, DynNode, DynamicEObject};
 pub use ecore_package::{ECORE_NS_PREFIX, ECORE_NS_URI};
