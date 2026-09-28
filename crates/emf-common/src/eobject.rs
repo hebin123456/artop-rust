@@ -39,6 +39,20 @@ pub trait EObject: std::fmt::Debug {
         None
     }
 
+    /// The containment feature through which this object is held by its
+    /// container, as a feature name (C++ `eContainingFeature`). `None` for a
+    /// root object that is not contained.
+    fn e_containing_feature(&self) -> Option<String> {
+        None
+    }
+
+    /// The containment reference through which this object is held
+    /// (C++ `eContainmentFeature`). For a direct containment this is the same
+    /// reference as [`Self::e_containing_feature`].
+    fn e_containment_feature(&self) -> Option<String> {
+        self.e_containing_feature()
+    }
+
     /// Child objects held by containment features.
     fn e_contents(&self) -> Vec<ObjectRef> {
         Vec::new()

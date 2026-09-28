@@ -10,6 +10,7 @@
 //!     which set the child's `eContainer`/`eContainmentFeature` back-link.
 //!   - `eContents` collects children from single + multi containment features
 //!     in feature-id order.
+use emf_common::eobject::EObject;
 use emf_common::value::{ObjectRef, Val};
 use emf_ecore::{
     adopt_many, adopt_single, node_to_object, DynNode, DynamicEObject, EClass, EClassKind,
@@ -164,6 +165,38 @@ fn e_unset_null_feature_no_op() {
     let mut obj = DynamicEObject::new(node_class());
     let ok = obj.e_unset_by_name("no_such");
     assert!(!ok);
+}
+
+// ===== containment: eContainingFeature / eContainmentFeature back-link =====
+// Ports Runtime_Containment_eContainingFeature_AutoSet.
+
+#[test]
+fn containment_single_sets_containing_feature() {
+    let parent = node();
+    let child = node();
+    adopt_single(&parent, "child", &child);
+    let c = child.borrow();
+    assert_eq!(c.e_containing_feature().as_deref(), Some("child"));
+    assert_eq!(c.e_containment_feature().as_deref(), Some("child"));
+}
+
+#[test]
+fn multi_containment_sets_containing_feature() {
+    let parent = node();
+    let child = node();
+    adopt_many(&parent, "children", &child);
+    let c = child.borrow();
+    assert_eq!(c.e_containing_feature().as_deref(), Some("children"));
+    assert_eq!(c.e_containment_feature().as_deref(), Some("children"));
+}
+
+// ===== eResource: null when not in a resource =====
+// Ports Runtime_eResource_NullWhenNotInResource.
+
+#[test]
+fn e_resource_defaults_none() {
+    let obj = DynamicEObject::new(node_class());
+    assert!(obj.e_resource().is_none());
 }
 
 // ===== containment multi reference: eGet returns list =====

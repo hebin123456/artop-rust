@@ -44,8 +44,8 @@
 ## emf-xmi（序列化/反序列化）
 | C++ 测试 | Rust 状态 |
 |---|---|
-| XMILoaderTests.cpp | 🔶 部分（元模型断言已入 codegen 对照） |
-| RuntimeBehaviorTests.cpp | 🔶 部分 |
+| XMILoaderTests.cpp | ✅ 12 条全部映射（`load_*` / 注册 / builtin EString / same-package eType·superTypes / EEnum·EDataType）|
+| RuntimeBehaviorTests.cpp | 🔶 14 条中 13 条对齐（eClass/eGet·eSet·eIsSet·eUnset、containment eContainer·**eContainingFeature·eContainmentFeature**、eContents、多值 containment、**eResource 未入资源为 None**）；⏳ 余 1 条 EOperation/EAnnotation/EGenericType/ETypeParameter 解析 Rust 元模型无对应 |
 | XMISaverTests.cpp | ✅ cpp_parity_xmi_saver（13；EPackage 元模型文档：空根/包元数据 name·nsURI·nsPrefix/ecore:EPackage·xmi·xsi 命名空间声明/EClass·EAttribute·EReference·EEnum 输出/eType 内建 href·`#//同包` 形式/upperBound·containment·abstract·iD·resolveProxies/jsonEncoding·xmlDeclaration·xmiVersion 选项/EEnum 自增 value="" 省略 全对齐。
    Rust 新增 `emf_xmi::metamodel_saver`（EPackage→<ecore:EPackage>）补齐元模型序列化） |
 | RoundtripTests.cpp | ✅ cpp_parity_xmi_roundtrip（9；load→save→reload 后 name·nsURI·nsPrefix/classifier 数·名/feature name·type·containment·upperBound/defaultValueLiteral/两次 save 幂等/EEnum literal name·value·literal/abstract·eSuperTypes/空包幂等/iD·resolveProxies 保持 全对齐。

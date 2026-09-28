@@ -324,6 +324,12 @@ impl EObject for DynamicEObject {
         self.container.as_ref().and_then(|(weak, _)| weak.upgrade())
     }
 
+    fn e_containing_feature(&self) -> Option<String> {
+        self.container
+            .as_ref()
+            .and_then(|(weak, feature)| weak.upgrade().map(|_| feature.clone()))
+    }
+
     fn e_contents(&self) -> Vec<ObjectRef> {
         self.contents()
     }
