@@ -7,5 +7,6 @@ description = "See README: artop-rust skeleton crate."
 
 [dependencies]
 emf-common = { workspace = true }
+emf-ecore = { workspace = true }
 
 [lints.rust]

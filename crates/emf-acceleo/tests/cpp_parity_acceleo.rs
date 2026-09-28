@@ -611,14 +611,18 @@ fn build_from_xcore(src: &str) -> Built {
     for c in &pkg.classes {
         // Metadata descriptor (used to instantiate model objects).
         let mut meta = EClass::new(c.name.clone(), EClassKind::Class);
-        for f in &c.features {
-            let mut sf = if f.kind == emf_xcore::dsl::FeatureKind::Attribute {
-                EStructuralFeature::attribute(f.name.clone())
-            } else {
-                EStructuralFeature::reference_many(f.name.clone())
-            };
-            sf.set_type_name(ecore_type_name(&f.ty.type_name));
-            if f.ty.multiplicity.is_many() {
+        for a in &c.attributes {
+            let mut sf = EStructuralFeature::attribute(a.name.clone());
+            sf.set_type_name(ecore_type_name(&a.type_name));
+            if a.multi {
+                sf.set_upper_bound(-1);
+            }
+            meta.add_feature(sf);
+        }
+        for r in &c.references {
+            let mut sf = EStructuralFeature::reference_many(r.name.clone());
+            sf.set_type_name(ecore_type_name(&r.type_name));
+            if r.multi {
                 sf.set_upper_bound(-1);
             }
             meta.add_feature(sf);
@@ -626,9 +630,14 @@ fn build_from_xcore(src: &str) -> Built {
 
         // Reflective object graph (used to navigate the metamodel in templates).
         let feature_objects: Vec<DynNode> = c
-            .features
+            .attributes
             .iter()
-            .map(|f| eattribute_model(&f.name, &ecore_type_name(&f.ty.type_name)))
+            .map(|a| eattribute_model(&a.name, &ecore_type_name(&a.type_name)))
+            .chain(
+                c.references
+                    .iter()
+                    .map(|r| eattribute_model(&r.name, &ecore_type_name(&r.type_name))),
+            )
             .collect();
         let class_obj = eclass_model(&c.name, &feature_objects);
 

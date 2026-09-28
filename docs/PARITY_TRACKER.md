@@ -154,9 +154,20 @@
 | AcceleoTests.cpp | ✅ cpp_parity_acceleo（18 测试；parser 4 条 Module/ExprBlock/ForAndIf/Query + engine 8 条 StaticText/ExprWithLiteral/Let/IfElse/ServiceCall/EObjectNavigation/ForOverEList/FileBlock + Lambda 2 条 Collect/SelectForAllExists + Query_Eval + Protected_Merge + Module_Extends + Module_ImportAndExtendsQuery 全对齐。
    Rust 重写为对 C++ `AcceleoAst.h`/`AcceleoParser.cpp`/`AcceleoEngine.cpp` 的 1:1 移植：`ast`（Block/Expr 节点，含 `=`/`or`/`and`/比较/算术、lambda、`->collect/select/reject/forAll/exists/size` 集合操作）+ `parser`（递归下降：`[module]`/`template`/`query`/`import`/`extends`、`[for]/[if]/[let]/[file]/[protected]`、`post(...)` 容错）+ `engine`（`AcceleoEngine`/`AcceleoService`：上下文/服务注册/模板·查询查找、表达式求值、块求值、`[file]` 落盘与 `[protected]` 区域合并）） |
 | AlignmentTests.cpp | ✅ cpp_parity_acceleo（8 测试；XcoreDerivesEPackage/XcoreDerivedEClassFeatures/DynamicEObject_eSet_eGet/AcceleoGeneratesFromXcorePackage/AcceleoGeneratesCppClassSkeleton/AcceleoWritesFile_FromXcorePackage/XcoreResource_LoadsAndDerivesEPackage/AcceleoComplexTemplate_IfForNested 全对齐。
-   C++ 走 `XcoreGenerator` + `XcoreResource`；Rust `emf-xcore` 当前只移植 parser，测试用 `emf_xcore::parse` 解析同一 `.xcore` 源并直接构建等价的 `EPackage`/`EClass`/`EAttribute` 反射图（见下方差异说明）。顺序无关：结果对象图与模板渲染文本均与 C++ 一致） |
+   C++ 走 `XcoreGenerator` + `XcoreResource`；Rust `emf-xcore` 现已移植 parser + generator + resource（见 emf-xcore 章节），本套 alignment 测试仍以 `emf_xcore::parse` 解析同一 `.xcore` 源并直接构建等价的 `EPackage`/`EClass`/`EAttribute` 反射图。顺序无关：结果对象图与模板渲染文本均与 C++ 一致） |
 
-> **emf-acceleo 差异说明**：C++ `XcoreResource`/`XcoreStandaloneSetup`（resource 加载 `.xcore` 并派生元模型）在 Rust 侧尚未移植，仅保留 parser；各 alignment 测试以 `emf_xcore::parse` + 手工反射构图等价表达。此外 C++ xcore 接受花括号省略的 `package name` + 同级 `class` 块，Rust parser 采用标准 `package name { ... }` 形式，测试使用同一套 class/feature 声明。以上差异均不改变可观测的模板渲染结果与对象图。
+> **emf-acceleo 差异说明**：C++ `XcoreResource`/`XcoreStandaloneSetup` 现已由 Rust `emf-xcore` 的 `resource` 模块对齐（见 emf-xcore 章节）；本套 alignment 测试历史原因仍以 `emf_xcore::parse` + 手工反射构图等价表达，行为一致。C++ xcore 接受花括号省略的 `package name` + 同级 `class` 块，Rust parser 亦已支持（同时兼容 `package name { ... }`）。以上差异均不改变可观测的模板渲染结果与对象图。
+
+## emf-xcore
+| C++ 测试 | Rust 状态 |
+|---|---|
+| XcoreTests.cpp | ✅ cpp_parity_xcore（14 测试，全部 PASS：parser 3 条 BasicClass/ExtendsAndEnum/AnnotationsAndModifiers；generator 7 条 DeriveEPackage/Inheritance/TypeMapping/EOperation_Completeness/EOpposite_Bidirectional/EAnnotation_Propagation/GenModel_Generation；resource 2 条 LoadFromString/StandaloneSetup_Registers；真实样本 2 条 DesignPrinciples/EAttributeContained。
+   Rust 1:1 移植 C++ `emf-xcore`：`dsl`（AST 对齐 `XcoreAst.h`：`ReferenceKind`/`AnnotationDirective`/`Annotation`/`AttributeDecl`/`ReferenceDecl`/`OperationDecl`/`ParameterDecl`/`EnumDecl`/`DataTypeDecl`/`ClassDecl`/`PackageDecl`）+ `parser`（递归下降，对齐 `XcoreParser.cpp`：注释、`annotation "uri" as Name`、`@Directive(k=v)`、花括号可省略的 `package`、`class`/`enum`/`type`、成员修饰符、多重性、`op` 参数、`throws`、`get {}`、`opposite`）+ `generator`（对齐 `XcoreGenerator.cpp`：派生 `EPackage`/`EClass`/`EAttribute`/`EReference`/`EOperation`/`EEnum`/`EDataType`，`eOpposite` 双向链接，`@Directive` → `EAnnotation` 传播，`generate_gen_model` 生成 GenModel XML）+ `resource`（对齐 `XcoreResource.cpp`：`XcoreResource`/`XcoreResourceFactory`/`XcoreStandaloneSetup`） |
+
+> **emf-xcore 差异说明**：
+> - C++ `EPackage` 是 `EObject`，`XcoreResource.getContents()` 返回 `EObject*`；Rust 中 `EPackage` 为值类型 `PackageRef`，故 `XcoreResource::contents()` 返回单元素 `Vec<PackageRef>`。
+> - 属性类型映射在 Rust 侧以 `EStructuralFeature::type_name`（`"EString"`/`"EInt"`…）表达，而非 C++ 逐指针解析的 `EDataType` 对象。
+> - C++ `load` 会把派生包注册进全局 `EPackageRegistry`；Rust 的 registry 是 per-thread 快照，端到端测试直接断言 resource 上的派生包。
 
 ## emf-sphinx
 | C++ 测试 | Rust 状态 |
@@ -176,4 +187,4 @@
 > **emf-sphinx 差异说明**：C++ `emf-sphinx` 是显式 headless 骨架，多个方法在无 Eclipse 平台时返回空结果；Rust 逐条复刻这些分支（`getURI`/`getModelName`/`readRootElementComments`/`readSchemaLocationEntries` 等返回空），并在 `cpp_parity_sphinx` 中固定其行为。`getDescriptorForObject` / `createScopeFromObject` 依赖 EObject→EPackage→nsURI 回链，headless Rust 对象图无此回链，故仅定义 `None` 分支（与 C++ 空参数分支一致）。
 
 ## 迁移顺序（依赖驱动）
-emf-common → emf-ecore → emf-ecore-util → emf-xmi → emf-edit → emf-validation → emf-compare → emf-xsd → emf-ecore-codegen → emf-acceleo → emf-sphinx
+emf-common → emf-ecore → emf-ecore-util → emf-xmi → emf-edit → emf-validation → emf-compare → emf-xsd → emf-ecore-codegen → emf-xcore → emf-acceleo → emf-sphinx

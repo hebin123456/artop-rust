@@ -119,6 +119,7 @@ name = "emf-xcore"
 version = "0.1.0"
 dependencies = [
  "emf-common",
+ "emf-ecore",
 ]
 
 [[package]]

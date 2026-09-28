@@ -5,6 +5,7 @@
 //! that describes one attribute or reference on an `EClass`, including its
 //! bounds, flags and its integer `FeatureID`.
 
+use crate::annotation::EAnnotation;
 use crate::Val;
 
 /// Kinds of structural feature.
@@ -66,6 +67,8 @@ pub struct EStructuralFeature {
     /// The lazily-created generic type (`EGenericType`), C++
     /// `ETypedElementImpl::eGenericType_`. Kept in sync with `type_name`.
     generic_type: Option<EGenericType>,
+    /// Annotations attached to this feature (EMF `EModelElement.eAnnotations`).
+    annotations: Vec<EAnnotation>,
 }
 
 impl EStructuralFeature {
@@ -98,6 +101,7 @@ impl EStructuralFeature {
             resolve_proxies: true,
             opposite: None,
             generic_type: None,
+            annotations: Vec::new(),
         }
     }
 
@@ -310,6 +314,22 @@ impl EStructuralFeature {
         self.generic_type
             .as_ref()
             .is_some_and(|g| g.is_parameterized())
+    }
+    /// Annotations attached to this feature (EMF `EModelElement.eAnnotations`).
+    pub fn e_annotations(&self) -> &[EAnnotation] {
+        &self.annotations
+    }
+    /// Mutable annotations attached to this feature.
+    pub fn e_annotations_mut(&mut self) -> &mut Vec<EAnnotation> {
+        &mut self.annotations
+    }
+    /// Append an annotation (EMF `eAnnotations().add`).
+    pub fn add_annotation(&mut self, ann: EAnnotation) {
+        self.annotations.push(ann);
+    }
+    /// Look up an annotation by its source URI (EMF `getEAnnotation(String)`).
+    pub fn annotation(&self, source: &str) -> Option<&EAnnotation> {
+        self.annotations.iter().find(|a| a.source() == source)
     }
 }
 

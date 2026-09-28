@@ -74,6 +74,8 @@ jobs:
         run: bash tools/conformance/build_edit_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-edit reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-common reference/artop-cpp/cpp/emf-cpp/emf-ecore-util
       - name: Build and run C++ oracle (emf-acceleo)
         run: bash tools/conformance/build_acceleo_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-acceleo reference/artop-cpp/cpp/emf-cpp/emf-xcore reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-common
+      - name: Build and run C++ oracle (emf-xcore)
+        run: bash tools/conformance/build_xcore_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-xcore reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-common
       - name: Build and run C++ oracle (emf-sphinx)
         run: bash tools/conformance/build_sphinx_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-sphinx reference/artop-cpp/cpp/emf-cpp/emf-xmi reference/artop-cpp/cpp/emf-cpp/emf-edit reference/artop-cpp/cpp/emf-cpp/emf-ecore-util reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-common
       - name: Build and run C++ oracle (emf-xmi)
@@ -92,6 +94,8 @@ jobs:
         run: python3 tools/conformance/compare.py --oracle tools/conformance/build/edit_oracle.json --cases tools/conformance/cases_edit.tsv --pkg emf-edit
       - name: Compare Rust vs oracle (emf-acceleo)
         run: python3 tools/conformance/compare.py --oracle tools/conformance/build/acceleo_oracle.json --cases tools/conformance/cases_acceleo.tsv --pkg emf-acceleo
+      - name: Compare Rust vs oracle (emf-xcore)
+        run: python3 tools/conformance/compare.py --oracle tools/conformance/build/xcore_oracle.json --cases tools/conformance/cases_xcore.tsv --pkg emf-xcore
       - name: Compare Rust vs oracle (emf-sphinx)
         run: python3 tools/conformance/compare.py --oracle tools/conformance/build/sphinx_oracle.json --cases tools/conformance/cases_sphinx.tsv --pkg emf-sphinx
       - name: Compare Rust vs oracle (emf-xmi)

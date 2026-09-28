@@ -1,0 +1,37 @@
+# C++(参考, oracle) 测试 ↔ Rust(移植) 测试的等价映射表 —— emf-xcore 模块
+#
+# 列: group<TAB>cpp_test<TAB>rust_test<TAB>pkg
+#   group    : emf-xcore 内的来源文件(XcoreParserTests / XcoreGeneratorTests /
+#              XcoreResourceTests / XcoreRealSampleTests)
+#   cpp_test : C++ 单元测试名(来自 emf-cpp/emf-xcore/tests/XcoreTests.cpp, EMF_TEST 注册)
+#   rust_test: 对应的 Rust 测试路径(cargo test -p emf-xcore <name> -- --exact)
+#   pkg      : 所属 crate(emf-xcore)
+#
+# 规则:
+#   - 已映射且 Rust 同名校验通过 => PASS(行为等价)
+#   - 已映射但 Rust 测试缺失 => PENDING(等价待实现, 可接受)
+#   - 未映射的 C++ 测试 => PENDING(尚未核对), 逐步补齐
+#   - 已映射但 Rust 测试失败 => REGRESSION(必须修复)
+# 以 # 开头的行为注释, 忽略。
+#
+# 差异(详见 crates/emf-xcore/tests/cpp_parity_xcore.rs 头部与 docs/PARITY_TRACKER.md):
+#   - EPackage 在本移植中是值类型(PackageRef)而非 EObject, 故 XcoreResource.contents()
+#     返回单元素 Vec<PackageRef>; C++ 断言的是 EObject* 列表。
+#   - 属性类型映射在 Rust 侧以 EStructuralFeature.type_name("EString"…) 表达,
+#     而非 C++ 的 EDataType 指针。
+
+group	cpp_test	rust_test	pkg
+XcoreParserTests	XcoreParser_BasicClass	xcore_parser_basic_class	emf-xcore
+XcoreParserTests	XcoreParser_ExtendsAndEnum	xcore_parser_extends_and_enum	emf-xcore
+XcoreParserTests	XcoreParser_AnnotationsAndModifiers	xcore_parser_annotations_and_modifiers	emf-xcore
+XcoreGeneratorTests	XcoreGenerator_DeriveEPackage	xcore_generator_derive_epackage	emf-xcore
+XcoreGeneratorTests	XcoreGenerator_Inheritance	xcore_generator_inheritance	emf-xcore
+XcoreGeneratorTests	XcoreGenerator_TypeMapping	xcore_generator_type_mapping	emf-xcore
+XcoreGeneratorTests	XcoreGenerator_EOperation_Completeness	xcore_generator_e_operation_completeness	emf-xcore
+XcoreGeneratorTests	XcoreGenerator_EOpposite_Bidirectional	xcore_generator_e_opposite_bidirectional	emf-xcore
+XcoreGeneratorTests	XcoreGenerator_EAnnotation_Propagation	xcore_generator_e_annotation_propagation	emf-xcore
+XcoreGeneratorTests	XcoreGenerator_GenModel_Generation	xcore_generator_gen_model_generation	emf-xcore
+XcoreResourceTests	XcoreResource_LoadFromString	xcore_resource_load_from_string	emf-xcore
+XcoreResourceTests	XcoreStandaloneSetup_Registers	xcore_standalone_setup_registers	emf-xcore
+XcoreRealSampleTests	Xcore_RealSample_DesignPrinciples	xcore_real_sample_design_principles	emf-xcore
+XcoreRealSampleTests	Xcore_RealSample_EAttributeContained	xcore_real_sample_e_attribute_contained	emf-xcore

@@ -1,35 +1,25 @@
 //! Recursive-descent parser for the Xcore DSL.
 //!
-//! The grammar supported here is the widely-used textual EMF notation. A
-//! minimal example:
+//! Port of C++ `emf-ecore/xcore/XcoreParser.cpp` (aligned to Java
+//! `org.eclipse.emf.ecore.xcore.resource.XcoreResource`'s parser part). The
+//! grammar covered:
 //!
-//! ```xcore
-//! @GenModel
-//! package books {
-//!   @UUID
-//!   class Book extends NamedElement {
-//!     String title
-//!     Book #chapters     // `#` marks a containment reference
-//!   }
-//! }
-//! ```
-//!
-//! Concrete grammar nodes (see [`dsl`] for the AST):
-//!
-//! - Annotations are `@key` or `@key.value` lines.
-//! - A package is `package name { decl* }`.
-//! - A class is `[interface|abstract class|class] Name [extends A, B] { feature* }`.
-//! - A feature is `Type [multiplicity] [#] name [= default]`, where a leading
-//!   `#` marks a containment reference. The multiplicity symbol (`?`, `*`, `+`)
-//!   sits between the type and the name.
-//! - `@DataType Name [= BackingType]` declares a data type.
-//! - `@Enum Name { A [= 0], B, ... }` declares an enumeration.
-
-use std::collections::BTreeMap;
+//! - `//` line and `/* */` block comments.
+//! - `annotation "uri" as Name` directives.
+//! - `@Directive` / `@Directive(k=v, k2="str")` annotations.
+//! - `package qualified.name { decl* }` (braces optional — Xcore's canonical
+//!   form is brace-less, with top-level declarations following the package).
+//! - `[abstract|interface] class Name [extends A, B] { member* }`.
+//! - members: attributes / `contains`/`refers` references / `op` operations.
+//! - member modifiers: `final|readonly|volatile|transient|unsettable|derived|id|unique|resolve`.
+//! - `Type[multi]? name [= default] [opposite Name] [get { body }]`.
+//! - `op ReturnType name(params) [throws E1, E2] { body }`.
+//! - `enum Name { LIT [= v], ... }`.
+//! - `type Name wraps qualified.TypeName`.
 
 use crate::dsl::{
-    Annotation, DataTypeDecl, EClassDecl, EEnumDecl, EEnumLiteralDecl, FeatureDecl, FeatureKind,
-    Multiplicity, PackageDecl, TypedElement,
+    Annotation, AnnotationDirective, AttributeDecl, ClassDecl, DataTypeDecl, EnumDecl,
+    EnumLiteralDecl, OperationDecl, PackageDecl, ParameterDecl, ReferenceDecl, ReferenceKind,
 };
 
 /// A single error produced while parsing Xcore source text.
@@ -56,135 +46,69 @@ impl std::fmt::Display for ParseError {
 impl std::error::Error for ParseError {}
 
 /// The result of parsing a complete Xcore file.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ParsedFile {
-    /// Annotations attached at file scope.
-    pub annotations: Vec<Annotation>,
     /// The top-level package declaration, if present.
     pub package: Option<PackageDecl>,
 }
 
 impl ParsedFile {
     /// Convenience accessor for the package class list.
-    pub fn classes(&self) -> &[EClassDecl] {
+    pub fn classes(&self) -> &[ClassDecl] {
         self.package.as_ref().map_or(&[], |p| &p.classes)
     }
 }
 
-/// Built-in primitive type names that classify a feature as an attribute.
-///
-/// Both the `E*` spellings and the lowercase Java/Xcore primitives (`int`,
-/// `boolean`, ...) are recognised, matching C++ `XcoreGenerator::resolveClassifier`
-/// which maps `int`→`EInt`, `boolean`→`EBoolean`, etc.
-const BUILTIN_DATA_TYPES: &[&str] = &[
-    "String",
-    "Boolean",
-    "Int",
-    "Integer",
-    "EInt",
-    "Long",
-    "ELong",
-    "Short",
-    "EShort",
-    "Byte",
-    "EByte",
-    "Float",
-    "EFloat",
-    "Double",
-    "EDouble",
-    "BigDecimal",
-    "BigInteger",
-    "Date",
-    "EString",
-    "EDate",
-    "EChar",
-    "Char",
-    "EBoolean",
-    "EBigDecimal",
-    "EBigInteger",
-    "Object",
-    // Lowercase Xcore/Java primitives (C++ `XcoreGenerator` type mapping).
-    "string",
-    "boolean",
-    "int",
-    "integer",
-    "long",
-    "short",
-    "byte",
-    "float",
-    "double",
-    "char",
+/// Attribute/reference modifier keywords (C++ `kAttrModifiers`).
+const ATTR_MODIFIERS: &[&str] = &[
+    "final",
+    "readonly",
+    "volatile",
+    "transient",
+    "unsettable",
+    "derived",
+    "id",
+    "unique",
+    "resolve",
 ];
 
-/// Classify a feature's kind. A `#` prefix forces containment reference;
-/// otherwise we use the package data-type registry to disambiguate.
-fn resolve_kind(force_reference: bool, type_name: &str, datatypes: &[String]) -> FeatureKind {
-    if force_reference {
-        FeatureKind::Reference
-    } else if BUILTIN_DATA_TYPES.contains(&type_name) || datatypes.iter().any(|d| d == type_name) {
-        FeatureKind::Attribute
-    } else {
-        FeatureKind::Reference
-    }
+/// A parsed modifier chain preceding a class member (C++ `MemberMods`).
+#[derive(Debug, Clone, Default)]
+struct MemberMods {
+    annotations: Vec<Annotation>,
+    read_only: bool,
+    volatile: bool,
+    transient: bool,
+    unsettable: bool,
+    derived: bool,
+    id: bool,
+    resolve: bool,
 }
 
-/// Resolve each feature's kind now that the whole package is known.
-fn resolve_kinds(pkg: &mut PackageDecl) {
-    let datatypes: Vec<String> = pkg
-        .data_types
-        .iter()
-        .flat_map(|d| {
-            let mut names = vec![d.name.clone()];
-            if let Some(ic) = &d.instance_class {
-                names.push(ic.clone());
-            }
-            names
-        })
-        .collect();
-    for class in &mut pkg.classes {
-        for f in &mut class.features {
-            f.kind = resolve_kind(f.containment, &f.ty.type_name, &datatypes);
-        }
-    }
+/// Which kind of member a token sequence declares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MemberKind {
+    Attribute,
+    Reference,
+    Operation,
 }
 
-struct Lexer {
+fn is_ident_part(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+struct Parser {
     chars: Vec<char>,
     pos: usize,
-    line: usize,
-    col: usize,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-enum Tok {
-    Ident(String),
-    KwPackage,
-    KwClass,
-    KwInterface,
-    KwAbstract,
-    KwExtends,
-    At(String),
-    Hash,
-    LBrace,
-    RBrace,
-    Comma,
-    Eq,
-    Question,
-    Star,
-    Plus,
-    Colon,
-    StringLit(String),
-    IntLit(i64),
-    Eof,
-}
+type PResult<T> = Result<T, ParseError>;
 
-impl Lexer {
+impl Parser {
     fn new(src: &str) -> Self {
         Self {
             chars: src.chars().collect(),
             pos: 0,
-            line: 1,
-            col: 1,
         }
     }
 
@@ -192,531 +116,722 @@ impl Lexer {
         self.chars.get(self.pos).copied()
     }
 
-    fn bump(&mut self) -> Option<char> {
-        let c = self.chars.get(self.pos).copied()?;
-        self.pos += 1;
-        if c == '\n' {
-            self.line += 1;
-            self.col = 1;
-        } else {
-            self.col += 1;
-        }
-        Some(c)
-    }
-
-    fn skip_trivia(&mut self) {
-        loop {
-            match self.peek() {
-                Some(c) if c.is_whitespace() => {
-                    self.bump();
-                }
-                Some('/') if self.chars.get(self.pos + 1) == Some(&'/') => {
-                    while let Some(c) = self.bump() {
-                        if c == '\n' {
-                            break;
-                        }
-                    }
-                }
-                Some('/') if self.chars.get(self.pos + 1) == Some(&'*') => {
-                    self.bump();
-                    self.bump();
-                    while let Some(c) = self.bump() {
-                        if c == '*' && self.peek() == Some('/') {
-                            self.bump();
-                            break;
-                        }
-                    }
-                }
-                _ => break,
+    fn err_at(&self, pos: usize, message: impl Into<String>) -> ParseError {
+        let mut line = 1usize;
+        let mut column = 1usize;
+        for c in self.chars.iter().take(pos.min(self.chars.len())) {
+            if *c == '\n' {
+                line += 1;
+                column = 1;
+            } else {
+                column += 1;
             }
         }
-    }
-
-    fn tokenize(self) -> Result<Vec<(Tok, usize, usize)>, ParseError> {
-        let mut lexer = self;
-        let mut out = Vec::new();
-        loop {
-            lexer.skip_trivia();
-            let (line, column) = (lexer.line, lexer.col);
-            let c = match lexer.peek() {
-                Some(c) => c,
-                None => {
-                    out.push((Tok::Eof, line, column));
-                    break;
-                }
-            };
-            let tok = match c {
-                '{' => {
-                    lexer.bump();
-                    Tok::LBrace
-                }
-                '}' => {
-                    lexer.bump();
-                    Tok::RBrace
-                }
-                ',' => {
-                    lexer.bump();
-                    Tok::Comma
-                }
-                '=' => {
-                    lexer.bump();
-                    Tok::Eq
-                }
-                '#' => {
-                    lexer.bump();
-                    Tok::Hash
-                }
-                '?' => {
-                    lexer.bump();
-                    Tok::Question
-                }
-                '*' => {
-                    lexer.bump();
-                    Tok::Star
-                }
-                '+' => {
-                    lexer.bump();
-                    Tok::Plus
-                }
-                ':' => {
-                    lexer.bump();
-                    Tok::Colon
-                }
-                '@' => {
-                    lexer.bump();
-                    let mut key = String::new();
-                    while let Some(ch) = lexer.peek() {
-                        if is_ident_char(ch) {
-                            key.push(ch);
-                            lexer.bump();
-                        } else {
-                            break;
-                        }
-                    }
-                    if key.is_empty() {
-                        return Err(ParseError {
-                            line,
-                            column,
-                            message: "expected annotation name after '@'".into(),
-                        });
-                    }
-                    Tok::At(key)
-                }
-                '"' => {
-                    lexer.bump();
-                    let mut s = String::new();
-                    loop {
-                        match lexer.bump() {
-                            Some('"') => break,
-                            Some('\\') => match lexer.bump() {
-                                Some('n') => s.push('\n'),
-                                Some('t') => s.push('\t'),
-                                Some('r') => s.push('\r'),
-                                Some(other) => s.push(other),
-                                None => {
-                                    return Err(ParseError {
-                                        line,
-                                        column,
-                                        message: "unterminated string literal".into(),
-                                    })
-                                }
-                            },
-                            Some(ch) => s.push(ch),
-                            None => {
-                                return Err(ParseError {
-                                    line,
-                                    column,
-                                    message: "unterminated string literal".into(),
-                                })
-                            }
-                        }
-                    }
-                    Tok::StringLit(s)
-                }
-                ch if ch.is_ascii_digit() || ch == '-' => {
-                    let mut num = String::new();
-                    while let Some(ch) = lexer.peek() {
-                        if ch.is_ascii_digit() || (ch == '-' && num.is_empty()) {
-                            num.push(ch);
-                            lexer.bump();
-                        } else {
-                            break;
-                        }
-                    }
-                    let parsed = num.parse::<i64>().map_err(|_| ParseError {
-                        line,
-                        column,
-                        message: format!("invalid integer literal `{num}`"),
-                    })?;
-                    Tok::IntLit(parsed)
-                }
-                ch if is_ident_start(ch) => {
-                    let mut name = String::new();
-                    while let Some(ch) = lexer.peek() {
-                        if is_ident_char(ch) {
-                            name.push(ch);
-                            lexer.bump();
-                        } else {
-                            break;
-                        }
-                    }
-                    match name.as_str() {
-                        "package" => Tok::KwPackage,
-                        "class" => Tok::KwClass,
-                        "interface" => Tok::KwInterface,
-                        "abstract" => Tok::KwAbstract,
-                        "extends" => Tok::KwExtends,
-                        _ => Tok::Ident(name),
-                    }
-                }
-                other => {
-                    return Err(ParseError {
-                        line,
-                        column,
-                        message: format!("unexpected character `{other}`"),
-                    })
-                }
-            };
-            out.push((tok, line, column));
-        }
-        Ok(out)
-    }
-}
-
-fn is_ident_start(c: char) -> bool {
-    c.is_alphabetic() || c == '_'
-}
-
-fn is_ident_char(c: char) -> bool {
-    c.is_alphanumeric() || c == '_' || c == '-' || c == '.'
-}
-
-struct Parser {
-    toks: Vec<(Tok, usize, usize)>,
-    pos: usize,
-}
-
-type PResult<T> = Result<T, ParseError>;
-
-impl Parser {
-    fn peek(&self) -> &Tok {
-        &self.toks[self.pos].0
-    }
-
-    fn err(&self) -> ParseError {
-        let (_, line, column) = self.toks[self.pos];
         ParseError {
             line,
             column,
-            message: format!("unexpected token `{:?}`", self.peek()),
+            message: message.into(),
         }
     }
 
-    fn advance(&mut self) {
-        if self.pos + 1 < self.toks.len() {
-            self.pos += 1;
-        }
+    fn err(&self, message: impl Into<String>) -> ParseError {
+        self.err_at(self.pos, message)
     }
 
-    fn expect(&mut self, tok: &Tok, _what: &str) -> PResult<()> {
-        if self.peek() == tok {
-            self.advance();
-            Ok(())
-        } else {
-            Err(self.err())
-        }
-    }
-
-    fn expect_ident(&mut self) -> PResult<String> {
-        match self.peek().clone() {
-            Tok::Ident(s) => {
-                self.advance();
-                Ok(s)
+    fn skip_ws_and_comments(&mut self) {
+        while let Some(c) = self.peek() {
+            if c.is_whitespace() {
+                self.pos += 1;
+                continue;
             }
-            _ => Err(self.err()),
+            if c == '/' && self.chars.get(self.pos + 1) == Some(&'/') {
+                self.pos += 2;
+                while let Some(c) = self.peek() {
+                    self.pos += 1;
+                    if c == '\n' {
+                        break;
+                    }
+                }
+                continue;
+            }
+            if c == '/' && self.chars.get(self.pos + 1) == Some(&'*') {
+                self.pos += 2;
+                while self.pos + 1 < self.chars.len()
+                    && !(self.chars[self.pos] == '*' && self.chars[self.pos + 1] == '/')
+                {
+                    self.pos += 1;
+                }
+                if self.pos + 1 < self.chars.len() {
+                    self.pos += 2;
+                }
+                continue;
+            }
+            break;
         }
     }
 
-    fn eat_comma(&mut self) -> bool {
-        if matches!(self.peek(), Tok::Comma) {
-            self.advance();
+    fn peek_char(&mut self, c: char) -> bool {
+        self.skip_ws_and_comments();
+        self.peek() == Some(c)
+    }
+
+    fn consume_char(&mut self, c: char) -> bool {
+        if self.peek_char(c) {
+            self.pos += 1;
             true
         } else {
             false
         }
     }
 
-    /// Consume `@key` / `@key.value` annotations that directly precede a decl.
-    /// Stops at the special `@DataType` / `@Enum` declaration markers.
-    fn annotations(&mut self) -> PResult<Vec<Annotation>> {
-        let mut out = Vec::new();
-        while let Tok::At(key) = self.peek().clone() {
-            let base = key.split('.').next().unwrap_or("");
-            if base == "DataType" || base == "Enum" {
+    fn expect_char(&mut self, c: char, what: &str) -> PResult<()> {
+        if self.consume_char(c) {
+            Ok(())
+        } else {
+            Err(self.err(format!("expected '{c}' {what}")))
+        }
+    }
+
+    /// Match `kw`, requiring the following char to be a non-identifier char.
+    fn match_keyword(&mut self, kw: &str) -> bool {
+        self.skip_ws_and_comments();
+        let n = kw.chars().count();
+        if self.pos + n > self.chars.len() {
+            return false;
+        }
+        let matched = kw
+            .chars()
+            .enumerate()
+            .all(|(i, kc)| self.chars[self.pos + i] == kc);
+        if !matched {
+            return false;
+        }
+        let after = self.pos + n;
+        if let Some(c) = self.chars.get(after) {
+            if is_ident_part(*c) {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn consume_keyword(&mut self, kw: &str) -> bool {
+        if self.match_keyword(kw) {
+            self.pos += kw.chars().count();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn parse_identifier(&mut self) -> PResult<String> {
+        self.skip_ws_and_comments();
+        let start = self.pos;
+        while let Some(c) = self.peek() {
+            if is_ident_part(c) {
+                self.pos += 1;
+            } else {
                 break;
             }
-            self.advance();
-            let (name, value) = match key.split_once('.') {
-                Some((n, v)) => (n.to_string(), Some(v.to_string())),
-                None => (key.clone(), None),
-            };
-            out.push(Annotation {
-                key: name,
-                value,
-                details: BTreeMap::new(),
-            });
+        }
+        if self.pos == start {
+            return Err(self.err("expected identifier"));
+        }
+        Ok(self.chars[start..self.pos].iter().collect())
+    }
+
+    fn parse_qualified_name(&mut self) -> PResult<String> {
+        let mut name = self.parse_identifier()?;
+        while self.peek_char('.') {
+            self.pos += 1;
+            name.push('.');
+            name.push_str(&self.parse_identifier()?);
+        }
+        Ok(name)
+    }
+
+    fn parse_string_literal(&mut self) -> PResult<String> {
+        self.skip_ws_and_comments();
+        self.expect_char('"', "for string literal")?;
+        let mut out = String::new();
+        while let Some(c) = self.peek() {
+            if c == '"' {
+                break;
+            }
+            self.pos += 1;
+            if c == '\\' {
+                if let Some(e) = self.peek() {
+                    self.pos += 1;
+                    match e {
+                        'n' => out.push('\n'),
+                        't' => out.push('\t'),
+                        'r' => out.push('\r'),
+                        '"' => out.push('"'),
+                        '\\' => out.push('\\'),
+                        other => {
+                            out.push('\\');
+                            out.push(other);
+                        }
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        self.expect_char('"', "to close string literal")?;
+        Ok(out)
+    }
+
+    fn parse_integer(&mut self) -> PResult<i64> {
+        self.skip_ws_and_comments();
+        let start = self.pos;
+        if matches!(self.peek(), Some('-') | Some('+')) {
+            self.pos += 1;
+        }
+        while matches!(self.peek(), Some(c) if c.is_ascii_digit()) {
+            self.pos += 1;
+        }
+        if self.pos == start {
+            return Err(self.err("expected integer"));
+        }
+        let text: String = self.chars[start..self.pos].iter().collect();
+        text.parse::<i64>()
+            .map_err(|_| self.err_at(start, format!("invalid integer `{text}`")))
+    }
+
+    // ===== annotations =====
+
+    /// Parse zero or more `@Directive` / `@Directive(k=v, ...)`.
+    fn parse_annotations(&mut self) -> PResult<Vec<Annotation>> {
+        let mut out = Vec::new();
+        while self.peek_char('@') {
+            self.pos += 1; // consume '@'
+            let mut a = Annotation::new(self.parse_identifier()?);
+            if self.peek_char('(') {
+                self.pos += 1; // consume '('
+                self.skip_ws_and_comments();
+                while !self.peek_char(')') {
+                    let key = self.parse_identifier()?;
+                    self.expect_char('=', "in annotation detail")?;
+                    self.skip_ws_and_comments();
+                    let val = if self.peek_char('"') {
+                        self.parse_string_literal()?
+                    } else {
+                        let start = self.pos;
+                        while let Some(c) = self.peek() {
+                            if c == ',' || c == ')' || c.is_whitespace() {
+                                break;
+                            }
+                            self.pos += 1;
+                        }
+                        self.chars[start..self.pos].iter().collect()
+                    };
+                    a.details.push((key, val));
+                    self.skip_ws_and_comments();
+                    if self.peek_char(',') {
+                        self.pos += 1;
+                        self.skip_ws_and_comments();
+                    }
+                }
+                self.expect_char(')', "to close annotation details")?;
+            }
+            out.push(a);
+            self.skip_ws_and_comments();
         }
         Ok(out)
     }
 
-    /// Match an `@DataType` / `@Enum` declaration marker and return its base.
-    fn at_decl(&mut self, base: &str) -> PResult<()> {
-        match self.peek().clone() {
-            Tok::At(key)
-                if key == base
-                    || key == format!("{base}.")
-                    || key.starts_with(&format!("{base}.")) =>
-            {
-                self.advance();
-                Ok(())
+    /// Parse `annotation "uri" as Name` directives into `pkg`.
+    fn parse_annotation_directives(&mut self, pkg: &mut PackageDecl) -> PResult<()> {
+        while self.match_keyword("annotation") {
+            self.consume_keyword("annotation");
+            let source_uri = self.parse_string_literal()?;
+            if !self.consume_keyword("as") {
+                return Err(self.err("expected 'as' after annotation URI"));
             }
-            _ => Err(self.err()),
+            let name = self.parse_identifier()?;
+            pkg.annotation_directives
+                .push(AnnotationDirective { name, source_uri });
         }
+        Ok(())
     }
 
-    fn package(&mut self, anns: Vec<Annotation>) -> PResult<PackageDecl> {
-        self.expect(&Tok::KwPackage, "expected `package`")?;
-        let name = self.expect_ident()?;
-        let mut pkg = PackageDecl {
-            name,
-            annotations: anns,
-            ..Default::default()
-        };
-        self.expect(&Tok::LBrace, "expected `{` to open package body")?;
-        loop {
-            let anns = self.annotations()?;
-            match self.peek() {
-                Tok::KwClass | Tok::KwInterface | Tok::KwAbstract => {
-                    pkg.classes.push(self.class_(anns)?);
+    // ===== package =====
+
+    fn parse_package(&mut self) -> PResult<PackageDecl> {
+        let mut pkg = PackageDecl::default();
+
+        // Package-level annotations before `package` (e.g. `@Ecore(nsURI=...)`).
+        let pkg_annots = self.parse_annotations()?;
+        for a in pkg_annots {
+            if a.directive_name == "Ecore" {
+                for (k, v) in &a.details {
+                    if k == "nsURI" {
+                        pkg.ns_uri = v.clone();
+                    } else if k == "nsPrefix" {
+                        pkg.ns_prefix = v.clone();
+                    }
                 }
-                Tok::At(key) if key == "DataType" || key.starts_with("DataType.") => {
-                    pkg.data_types.push(self.data_type(anns)?);
-                }
-                Tok::At(key) if key == "Enum" || key.starts_with("Enum.") => {
-                    pkg.enums.push(self.enum_(anns)?);
-                }
-                Tok::RBrace => {
-                    self.advance();
-                    break;
-                }
-                Tok::Eof => break,
-                _ => return Err(self.err()),
             }
+            pkg.annotations.push(a);
         }
+
+        if !self.consume_keyword("package") {
+            return Err(self.err("expected 'package'"));
+        }
+        pkg.name = self.parse_qualified_name()?;
+
+        // Directives directly after the package header.
+        self.parse_annotation_directives(&mut pkg)?;
+
+        // Body: either brace-delimited or running to EOF / next `package`.
+        if self.peek_char('{') {
+            self.pos += 1; // consume '{'
+            self.parse_package_body(&mut pkg, true)?;
+        } else {
+            self.parse_package_body(&mut pkg, false)?;
+        }
+
+        // Defaults (align to Java XcorePackageManager).
+        if pkg.ns_prefix.is_empty() {
+            pkg.ns_prefix = match pkg.name.rsplit_once('.') {
+                Some((_, last)) => last.to_string(),
+                None => pkg.name.clone(),
+            };
+        }
+        if pkg.ns_uri.is_empty() {
+            pkg.ns_uri = format!("http://{}", pkg.name);
+        }
+
         Ok(pkg)
     }
 
-    fn class_(&mut self, anns: Vec<Annotation>) -> PResult<EClassDecl> {
-        let (mut interface, mut abstract_, mut concrete) = (false, false, false);
-        match self.peek() {
-            Tok::KwInterface => {
-                interface = true;
-                self.advance();
-            }
-            Tok::KwAbstract => {
-                abstract_ = true;
-                self.advance();
-                self.expect(&Tok::KwClass, "expected `class` after `abstract`")?;
-            }
-            Tok::KwClass => {
-                concrete = true;
-                self.advance();
-            }
-            _ => return Err(self.err()),
-        }
-        let name = self.expect_ident()?;
-        let mut super_types = Vec::new();
-        if matches!(self.peek(), Tok::KwExtends) {
-            self.advance();
-            loop {
-                super_types.push(self.expect_ident()?);
-                if !self.eat_comma() {
+    /// Parse the package body. When `braced`, stop at the closing `}`; otherwise
+    /// stop at EOF or the next `package` keyword.
+    fn parse_package_body(&mut self, pkg: &mut PackageDecl, braced: bool) -> PResult<()> {
+        self.skip_ws_and_comments();
+        loop {
+            if braced {
+                if self.peek_char('}') {
+                    self.pos += 1;
                     break;
                 }
+            } else if self.pos >= self.chars.len() || self.match_keyword("package") {
+                break;
             }
-        }
-        let mut features = Vec::new();
-        if matches!(self.peek(), Tok::LBrace) {
-            self.advance();
-            loop {
-                let fanns = self.annotations()?;
-                match self.peek() {
-                    Tok::RBrace => {
-                        self.advance();
-                        break;
-                    }
-                    Tok::Eof => break,
-                    _ => features.push(self.feature(fanns)?),
+            if self.pos >= self.chars.len() {
+                if braced {
+                    return Err(self.err("unexpected end of input, expected '}'"));
                 }
+                break;
             }
+
+            if self.match_keyword("annotation") {
+                self.parse_annotation_directives(pkg)?;
+                continue;
+            }
+            if self.consume_keyword("import") {
+                self.parse_qualified_name()?;
+                if self.consume_keyword("as") {
+                    self.parse_identifier()?;
+                }
+                continue;
+            }
+
+            let annots = self.parse_annotations()?;
+            if self.match_keyword("class")
+                || self.match_keyword("abstract")
+                || self.match_keyword("interface")
+            {
+                let mut cls = self.parse_class()?;
+                cls.annotations = annots;
+                pkg.classes.push(cls);
+            } else if self.match_keyword("enum") {
+                let mut e = self.parse_enum()?;
+                e.annotations = annots;
+                pkg.enums.push(e);
+            } else if self.match_keyword("type") {
+                let mut dt = self.parse_data_type()?;
+                dt.annotations = annots;
+                pkg.data_types.push(dt);
+            } else {
+                return Err(self.err("expected class/enum/type in package body"));
+            }
+            self.skip_ws_and_comments();
         }
-        Ok(EClassDecl {
-            name,
-            concrete,
-            interface,
-            abstract_,
-            super_types,
-            features,
-            annotations: anns,
-        })
+        Ok(())
     }
 
-    fn data_type(&mut self, anns: Vec<Annotation>) -> PResult<DataTypeDecl> {
-        self.at_decl("DataType")?;
-        let name = self.expect_ident()?;
-        let mut instance_class = None;
-        if matches!(self.peek(), Tok::Eq) {
-            self.advance();
-            instance_class = Some(self.expect_ident()?);
+    fn parse_class(&mut self) -> PResult<ClassDecl> {
+        let mut cls = ClassDecl::default();
+        if self.consume_keyword("abstract") {
+            cls.is_abstract = true;
+            if !self.consume_keyword("class") {
+                return Err(self.err("expected 'class' after 'abstract'"));
+            }
+        } else if self.consume_keyword("interface") {
+            cls.is_interface = true;
+            if !self.consume_keyword("class") {
+                return Err(self.err("expected 'class' after 'interface'"));
+            }
+        } else if !self.consume_keyword("class") {
+            return Err(self.err("expected 'class'"));
         }
+        cls.name = self.parse_identifier()?;
+        if self.consume_keyword("extends") {
+            cls.super_types.push(self.parse_qualified_name()?);
+            while self.consume_char(',') {
+                cls.super_types.push(self.parse_qualified_name()?);
+            }
+        }
+        self.expect_char('{', "to open class body")?;
+        self.parse_class_body(&mut cls)?;
+        self.expect_char('}', "to close class body")?;
+        Ok(cls)
+    }
+
+    fn parse_enum(&mut self) -> PResult<EnumDecl> {
+        if !self.consume_keyword("enum") {
+            return Err(self.err("expected 'enum'"));
+        }
+        let mut e = EnumDecl {
+            name: self.parse_identifier()?,
+            ..Default::default()
+        };
+        self.expect_char('{', "to open enum body")?;
+        self.skip_ws_and_comments();
+        let mut next_val = 0i32;
+        while !self.peek_char('}') {
+            let lit_annots = self.parse_annotations()?;
+            let name = self.parse_identifier()?;
+            let (value, next) = if self.consume_char('=') {
+                let v = self.parse_integer()? as i32;
+                (Some(v), v + 1)
+            } else {
+                (Some(next_val), next_val + 1)
+            };
+            e.literals.push(EnumLiteralDecl {
+                name: name.clone(),
+                value,
+                literal: name,
+                annotations: lit_annots,
+            });
+            next_val = next;
+            self.skip_ws_and_comments();
+            if self.peek_char(',') {
+                self.pos += 1;
+                self.skip_ws_and_comments();
+            }
+        }
+        self.expect_char('}', "to close enum body")?;
+        Ok(e)
+    }
+
+    fn parse_data_type(&mut self) -> PResult<DataTypeDecl> {
+        if !self.consume_keyword("type") {
+            return Err(self.err("expected 'type'"));
+        }
+        let name = self.parse_identifier()?;
+        if !self.consume_keyword("wraps") {
+            return Err(self.err("expected 'wraps' in type declaration"));
+        }
+        let wrapped_class_name = self.parse_qualified_name()?;
         Ok(DataTypeDecl {
             name,
-            instance_class,
-            annotations: anns,
-            serializable: true,
-        })
-    }
-
-    fn enum_(&mut self, anns: Vec<Annotation>) -> PResult<EEnumDecl> {
-        self.at_decl("Enum")?;
-        let name = self.expect_ident()?;
-        let mut literals = Vec::new();
-        if matches!(self.peek(), Tok::LBrace) {
-            self.advance();
-            loop {
-                if matches!(self.peek(), Tok::RBrace) {
-                    self.advance();
-                    break;
-                }
-                let lit_name = self.expect_ident()?;
-                let value = if matches!(self.peek(), Tok::Eq) {
-                    self.advance();
-                    match self.peek().clone() {
-                        Tok::IntLit(v) => {
-                            self.advance();
-                            Some(v as i32)
-                        }
-                        Tok::Ident(i) => {
-                            self.advance();
-                            i.parse::<i32>().ok()
-                        }
-                        _ => return Err(self.err()),
-                    }
-                } else {
-                    None
-                };
-                literals.push(EEnumLiteralDecl {
-                    name: lit_name,
-                    value,
-                    literal: None,
-                });
-                if !self.eat_comma() && !matches!(self.peek(), Tok::RBrace) {
-                    return Err(self.err());
-                }
-            }
-        }
-        Ok(EEnumDecl {
-            name,
-            annotations: anns,
-            literals,
+            wrapped_class_name,
             ..Default::default()
         })
     }
 
-    /// Parse one feature: `Type [mult] [#] name [= default]`.
-    fn feature(&mut self, _anns: Vec<Annotation>) -> PResult<FeatureDecl> {
-        let type_name = self.expect_ident()?;
-        let multiplicity = self.multiplicity();
-        let containment = if matches!(self.peek(), Tok::Hash) {
-            self.advance();
-            true
-        } else {
-            false
-        };
-        let name = self.expect_ident()?;
-        let default = if matches!(self.peek(), Tok::Eq) {
-            self.advance();
-            match self.peek().clone() {
-                Tok::StringLit(s) => {
-                    self.advance();
-                    Some(s)
-                }
-                Tok::Ident(s) => {
-                    self.advance();
-                    Some(s)
-                }
-                Tok::IntLit(i) => {
-                    self.advance();
-                    Some(i.to_string())
-                }
-                _ => return Err(self.err()),
+    fn parse_class_body(&mut self, cls: &mut ClassDecl) -> PResult<()> {
+        self.skip_ws_and_comments();
+        while !self.peek_char('}') {
+            if self.pos >= self.chars.len() {
+                return Err(self.err("unexpected end of input in class body"));
             }
-        } else {
-            None
-        };
-        Ok(FeatureDecl {
-            kind: FeatureKind::Attribute, // resolved by `resolve_kinds`
-            name,
-            ty: TypedElement {
-                type_name,
-                multiplicity,
-            },
-            containment,
-            const_flag: false,
-            unique: true,
-            ordered: true,
-            default,
-            annotations: Vec::new(),
-        })
+            let mods = self.parse_member_mods()?;
+            match self.classify_member() {
+                MemberKind::Operation => {
+                    let op = self.parse_operation(&mods)?;
+                    cls.operations.push(op);
+                }
+                MemberKind::Reference => {
+                    let r = self.parse_reference(&mods)?;
+                    cls.references.push(r);
+                }
+                MemberKind::Attribute => {
+                    let a = self.parse_attribute(&mods)?;
+                    cls.attributes.push(a);
+                }
+            }
+            self.skip_ws_and_comments();
+            // Members may be separated by an optional comma.
+            if self.peek_char(',') {
+                self.pos += 1;
+                self.skip_ws_and_comments();
+            }
+        }
+        Ok(())
     }
 
-    fn multiplicity(&mut self) -> Multiplicity {
-        match self.peek() {
-            Tok::Question => {
-                self.advance();
-                Multiplicity::ZeroToOne
-            }
-            Tok::Star => {
-                self.advance();
-                Multiplicity::ZeroToMany
-            }
-            Tok::Plus => {
-                self.advance();
-                Multiplicity::OneToMany
-            }
-            _ => Multiplicity::One,
+    /// Determine the member kind at the current position without consuming.
+    fn classify_member(&mut self) -> MemberKind {
+        let save = self.pos;
+        let is_op = self.match_keyword("op");
+        let is_ref = self.match_keyword("contains") || self.match_keyword("refers");
+        self.pos = save;
+        if is_op {
+            MemberKind::Operation
+        } else if is_ref {
+            MemberKind::Reference
+        } else {
+            MemberKind::Attribute
         }
+    }
+
+    fn parse_member_mods(&mut self) -> PResult<MemberMods> {
+        let mut m = MemberMods {
+            resolve: true,
+            ..Default::default()
+        };
+        m.annotations = self.parse_annotations()?;
+        loop {
+            let mut matched = false;
+            for kw in ATTR_MODIFIERS {
+                if self.match_keyword(kw) {
+                    self.consume_keyword(kw);
+                    matched = true;
+                    match *kw {
+                        "readonly" => m.read_only = true,
+                        "volatile" => m.volatile = true,
+                        "transient" => m.transient = true,
+                        "unsettable" => m.unsettable = true,
+                        "derived" => m.derived = true,
+                        "id" => m.id = true,
+                        "resolve" => {
+                            self.skip_ws_and_comments();
+                            // `resolve false` disables; `resolve true` / bare
+                            // `resolve` keep the default (`true`).
+                            let negated = self.consume_keyword("false");
+                            if !negated {
+                                self.consume_keyword("true");
+                            }
+                            m.resolve = !negated;
+                        }
+                        _ => {}
+                    }
+                    break;
+                }
+            }
+            if !matched {
+                break;
+            }
+        }
+        Ok(m)
+    }
+
+    fn parse_attribute(&mut self, mods: &MemberMods) -> PResult<AttributeDecl> {
+        let mut attr = AttributeDecl {
+            annotations: mods.annotations.clone(),
+            type_name: self.parse_qualified_name()?,
+            ..Default::default()
+        };
+        attr.multi = self.parse_multiplicity()?;
+        attr.name = self.parse_identifier()?;
+        attr.read_only = mods.read_only;
+        attr.volatile = mods.volatile;
+        attr.transient = mods.transient;
+        attr.unsettable = mods.unsettable;
+        attr.derived = mods.derived;
+        attr.id = mods.id;
+        if self.consume_char('=') {
+            self.skip_ws_and_comments();
+            attr.default_value_literal = Some(if self.peek_char('"') {
+                self.parse_string_literal()?
+            } else {
+                let start = self.pos;
+                while let Some(c) = self.peek() {
+                    if c.is_whitespace() || c == ',' || c == '}' {
+                        break;
+                    }
+                    self.pos += 1;
+                }
+                self.chars[start..self.pos].iter().collect()
+            });
+        }
+        self.skip_ws_and_comments();
+        if self.match_keyword("get") {
+            self.consume_keyword("get");
+            attr.getter_body = Some(self.parse_brace_body()?);
+            attr.derived = true;
+        }
+        Ok(attr)
+    }
+
+    fn parse_reference(&mut self, mods: &MemberMods) -> PResult<ReferenceDecl> {
+        let mut r = ReferenceDecl {
+            annotations: mods.annotations.clone(),
+            read_only: mods.read_only,
+            volatile: mods.volatile,
+            transient: mods.transient,
+            unsettable: mods.unsettable,
+            derived: mods.derived,
+            resolve_proxies: mods.resolve,
+            ..Default::default()
+        };
+        if self.consume_keyword("contains") {
+            r.kind = ReferenceKind::Containment;
+        } else if self.consume_keyword("refers") {
+            r.kind = ReferenceKind::NonContainment;
+        } else {
+            return Err(self.err("expected 'contains' or 'refers'"));
+        }
+        r.type_name = self.parse_qualified_name()?;
+        r.multi = self.parse_multiplicity()?;
+        r.name = self.parse_identifier()?;
+        if self.consume_keyword("opposite") {
+            r.opposite_name = Some(self.parse_identifier()?);
+        }
+        self.skip_ws_and_comments();
+        if self.match_keyword("get") {
+            self.consume_keyword("get");
+            r.getter_body = Some(self.parse_brace_body()?);
+            r.derived = true;
+        }
+        Ok(r)
+    }
+
+    fn parse_operation(&mut self, mods: &MemberMods) -> PResult<OperationDecl> {
+        if !self.consume_keyword("op") {
+            return Err(self.err("expected 'op'"));
+        }
+        let mut op = OperationDecl {
+            annotations: mods.annotations.clone(),
+            type_name: self.parse_qualified_name()?,
+            ..Default::default()
+        };
+        op.name = self.parse_identifier()?;
+        self.expect_char('(', "to open op params")?;
+        self.skip_ws_and_comments();
+        while !self.peek_char(')') {
+            let type_name = self.parse_qualified_name()?;
+            let name = self.parse_identifier()?;
+            if self.peek_char('[') {
+                self.pos += 1;
+                self.expect_char(']', "in param multiplicity")?;
+            }
+            op.parameters.push(ParameterDecl { name, type_name });
+            self.skip_ws_and_comments();
+            if self.peek_char(',') {
+                self.pos += 1;
+                self.skip_ws_and_comments();
+            }
+        }
+        self.expect_char(')', "to close op params")?;
+        if self.consume_keyword("throws") {
+            op.exceptions.push(self.parse_qualified_name()?);
+            while self.consume_char(',') {
+                op.exceptions.push(self.parse_qualified_name()?);
+            }
+        }
+        if self.peek_char('{') {
+            op.body = Some(self.parse_brace_body()?);
+        }
+        Ok(op)
+    }
+
+    /// Parse a multiplicity suffix `[...]`. Returns `true` for an unbounded
+    /// (many) upper bound (C++ `parseMultiplicity`).
+    fn parse_multiplicity(&mut self) -> PResult<bool> {
+        if !self.peek_char('[') {
+            return Ok(false);
+        }
+        self.pos += 1; // consume '['
+        self.skip_ws_and_comments();
+        let mut multi = false;
+        if self.peek_char('*') || self.peek_char(']') {
+            multi = true;
+        } else {
+            let lower = self.parse_integer()?;
+            self.skip_ws_and_comments();
+            if self.peek_char('.') {
+                self.pos += 1;
+                if self.peek_char('.') {
+                    self.pos += 1;
+                }
+                self.skip_ws_and_comments();
+                if self.peek_char('*') {
+                    multi = true;
+                    self.pos += 1;
+                } else {
+                    let upper = self.parse_integer()?;
+                    multi = lower != upper;
+                }
+            }
+        }
+        while self.pos < self.chars.len() && self.chars[self.pos] != ']' {
+            self.pos += 1;
+        }
+        self.expect_char(']', "to close multiplicity")?;
+        Ok(multi)
+    }
+
+    /// Parse `{ ... }`, returning the inner text verbatim (C++ `parseBraceBody`).
+    fn parse_brace_body(&mut self) -> PResult<String> {
+        self.expect_char('{', "to open brace body")?;
+        let mut depth = 1i32;
+        let mut body = String::new();
+        while self.pos < self.chars.len() && depth > 0 {
+            let c = self.chars[self.pos];
+            self.pos += 1;
+            match c {
+                '{' => {
+                    depth += 1;
+                    body.push(c);
+                }
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                    body.push(c);
+                }
+                '"' => {
+                    body.push(c);
+                    while self.pos < self.chars.len() && self.chars[self.pos] != '"' {
+                        body.push(self.chars[self.pos]);
+                        self.pos += 1;
+                    }
+                    if self.pos < self.chars.len() {
+                        body.push(self.chars[self.pos]);
+                        self.pos += 1;
+                    }
+                }
+                _ => body.push(c),
+            }
+        }
+        Ok(body)
     }
 }
 
 /// Parse Xcore source text into a [`ParsedFile`].
+///
+/// Aligned to C++ `XcoreParser::parse`, which always delegates to
+/// `parsePackage`. A file's first meaningful token is either a package-level
+/// annotation (`@Ecore(nsURI=...)`) or the `package` keyword itself.
 pub fn parse(src: &str) -> Result<ParsedFile, ParseError> {
-    let lexer = Lexer::new(src);
-    let toks = lexer.tokenize()?;
-    let mut p = Parser { toks, pos: 0 };
-    let mut file = ParsedFile {
-        annotations: p.annotations()?,
-        package: None,
-    };
-    if matches!(p.peek(), Tok::KwPackage) {
-        let mut pkg = p.package(std::mem::take(&mut file.annotations))?;
-        resolve_kinds(&mut pkg);
-        file.package = Some(pkg);
+    let mut p = Parser::new(src);
+    p.skip_ws_and_comments();
+    if p.match_keyword("package") || p.peek_char('@') {
+        let pkg = p.parse_package()?;
+        p.skip_ws_and_comments();
+        if p.pos != p.chars.len() {
+            return Err(p.err("unexpected trailing content after package"));
+        }
+        Ok(ParsedFile { package: Some(pkg) })
+    } else {
+        Ok(ParsedFile { package: None })
     }
-    if p.peek() != &Tok::Eof {
-        return Err(p.err());
-    }
-    Ok(file)
 }
 
 #[cfg(test)]
@@ -724,76 +839,106 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_simple_class() {
-        let src = "package books {\n\
-            class Book extends NamedElement {\n\
-                String title\n\
-                Book #chapters\n\
-            }\n\
-        }";
+    fn parses_basic_class_with_members() {
+        let src = r#"
+            package demo
+            class Foo {
+                String name
+                int count
+                contains Bar[] bars
+                op String greet() { "hi" }
+            }
+            class Bar {
+                boolean active
+            }
+        "#;
         let file = parse(src).expect("parse ok");
         let pkg = file.package.unwrap();
-        assert_eq!(pkg.name, "books");
-        let book = pkg.class("Book").unwrap();
-        assert!(book.concrete);
-        assert_eq!(book.super_types, vec!["NamedElement".to_string()]);
-        assert_eq!(book.features.len(), 2);
-        assert_eq!(book.features[0].kind, FeatureKind::Attribute);
-        assert_eq!(book.features[0].name, "title");
-        assert_eq!(book.features[0].ty.multiplicity, Multiplicity::One);
-        assert_eq!(book.features[1].kind, FeatureKind::Reference);
-        assert!(book.features[1].containment);
-        assert_eq!(book.features[1].name, "chapters");
+        assert_eq!(pkg.name, "demo");
+        assert_eq!(pkg.classes.len(), 2);
+        let foo = pkg.class("Foo").unwrap();
+        assert_eq!(foo.attributes.len(), 2);
+        assert_eq!(foo.references.len(), 1);
+        assert_eq!(foo.operations.len(), 1);
+        assert_eq!(foo.references[0].type_name, "Bar");
+        assert_eq!(foo.references[0].kind, ReferenceKind::Containment);
+        assert!(foo.references[0].multi);
+        assert_eq!(foo.operations[0].name, "greet");
+        assert_eq!(foo.operations[0].type_name, "String");
     }
 
     #[test]
-    fn parses_multiplicity_and_datatypes() {
-        let src = "package m {\n\
-            @DataType String = java.lang.String\n\
-            class C {\n\
-                String *names\n\
-                Int? count\n\
-            }\n\
-            @Enum Color { RED, GREEN = 1, BLUE }\n\
-        }";
-        let file = parse(src).expect("parse ok");
-        let pkg = file.package.unwrap();
+    fn parses_braced_package() {
+        let src = "package demo { class Foo { String name } }";
+        let pkg = parse(src).unwrap().package.unwrap();
+        assert_eq!(pkg.name, "demo");
+        assert_eq!(pkg.classes.len(), 1);
+        assert_eq!(pkg.class("Foo").unwrap().attributes.len(), 1);
+    }
+
+    #[test]
+    fn parses_extends_and_enum_auto_increment() {
+        let src = r#"
+            package example
+            class Base { String id }
+            class Derived extends Base { refers Base parent }
+            enum Color { RED = 0, GREEN, BLUE }
+        "#;
+        let pkg = parse(src).unwrap().package.unwrap();
+        assert_eq!(pkg.classes.len(), 2);
+        assert_eq!(pkg.classes[1].super_types, vec!["Base".to_string()]);
+        assert_eq!(pkg.enums.len(), 1);
+        let e = &pkg.enums[0];
+        assert_eq!(e.literals.len(), 3);
+        assert_eq!(e.literals[0].value, Some(0));
+        assert_eq!(e.literals[1].value, Some(1));
+        assert_eq!(e.literals[2].value, Some(2));
+    }
+
+    #[test]
+    fn parses_annotations_and_modifiers() {
+        let src = r#"
+            @Ecore(nsURI="http://test", nsPrefix="t")
+            package test
+            annotation "http://www.eclipse.org/emf/2002/Ecore" as Ecore
+            class Node {
+                @Ecore(name="NODE")
+                derived long average get { 0 }
+                readonly String label
+                id String uuid
+            }
+        "#;
+        let pkg = parse(src).unwrap().package.unwrap();
+        assert_eq!(pkg.ns_uri, "http://test");
+        assert_eq!(pkg.ns_prefix, "t");
+        assert_eq!(pkg.annotation_directives.len(), 1);
+        let node = pkg.class("Node").unwrap();
+        assert_eq!(node.attributes.len(), 3);
+        assert!(node.attributes[0].derived);
+        assert!(node.attributes[0].getter_body.is_some());
+        assert!(node.attributes[1].read_only);
+        assert!(node.attributes[2].id);
+    }
+
+    #[test]
+    fn parses_data_type_wraps() {
+        let src = r#"
+            package nodes
+            type String wraps java.lang.String
+            class Node { String[] property }
+        "#;
+        let pkg = parse(src).unwrap().package.unwrap();
         assert_eq!(pkg.data_types.len(), 1);
-        assert_eq!(
-            pkg.data_types[0].instance_class.as_deref(),
-            Some("java.lang.String")
-        );
-        let c = pkg.class("C").unwrap();
-        assert_eq!(c.features[0].ty.multiplicity, Multiplicity::ZeroToMany);
-        assert!(c.features[0].ty.multiplicity.is_many());
-        assert_eq!(c.features[1].ty.multiplicity, Multiplicity::ZeroToOne);
-        assert!(c.features[1].ty.multiplicity.is_optional());
-        let enu = pkg.enums.first().unwrap();
-        assert_eq!(enu.literals.len(), 3);
-        assert_eq!(enu.literals[1].value, Some(1));
+        assert_eq!(pkg.data_types[0].name, "String");
+        assert_eq!(pkg.data_types[0].wrapped_class_name, "java.lang.String");
+        assert!(pkg.class("Node").unwrap().attributes[0].multi);
     }
 
     #[test]
-    fn parses_annotations() {
-        let src = "@GenModel\npackage p {\n    @UUID\n    class A { }\n}";
-        let file = parse(src).expect("parse ok");
-        let pkg = file.package.unwrap();
-        assert_eq!(pkg.annotations[0].key, "GenModel");
-        assert_eq!(pkg.class("A").unwrap().annotations[0].key, "UUID");
-    }
-
-    #[test]
-    fn parses_abstract_interface() {
-        let src = "package p {\n\
-            interface IFace\n\
-            abstract class Base\n\
-            class Impl extends Base, IFace\n\
-        }";
-        let file = parse(src).expect("parse ok");
-        let pkg = file.package.unwrap();
-        assert!(pkg.class("IFace").unwrap().interface);
-        assert!(pkg.class("Base").unwrap().abstract_);
-        assert!(pkg.class("Impl").unwrap().is_instantiable());
+    fn default_ns_prefix_and_uri() {
+        let pkg = parse("package com.example.demo").unwrap().package.unwrap();
+        assert_eq!(pkg.ns_prefix, "demo");
+        assert_eq!(pkg.ns_uri, "http://com.example.demo");
     }
 
     #[test]
