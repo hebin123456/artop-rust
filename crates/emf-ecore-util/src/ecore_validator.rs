@@ -122,7 +122,7 @@ impl EcoreValidator {
                 "The operation has no name",
             ));
         }
-        if !op.parameters().iter().all(|p| *p != *"") {
+        if !op.parameters().iter().all(|p| !p.name().is_empty()) {
             ok = false;
             chain.add(Diagnostic::new(
                 Severity::Error,

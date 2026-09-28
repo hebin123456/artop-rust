@@ -29,7 +29,7 @@
 | DynamicEObjectImplTests.cpp | ✅ cpp_parity_ecore_dyn_eobject（24；eClass / 属性 get·set·isSet·unset / 单值 containment：adopt 设 child eContainer·feature / 多值 containment：eGet 空表·增后 isSet·unset 清空 / eContents 单·多·混合收集 / 覆盖属性·child 全对齐。
    Rust 以 `DynamicEObject` 值存储 + `Weak<parent>` 容器回链 + `adopt_single`/`adopt_many` 助手模拟 C++ 指针式 `eSet(containment, child)`；差异：feature 按名访问、eContents 按 featureID 序） |
 | EClassImplTests.cpp | ✅ cpp_parity_ecore_eclass（12；create/featureID/abstract·interface/get-by-ID/isSuperTypeOf/eAllSuperTypes·Attributes·References·StructuralFeatures·featureCount/ID-marked 全对齐；
-   按签名对 C++ 差异：is_super_type_of 严格不自反（C++ 自反 true）、eAllOperations 继承聚合缺、getEIDAttribute 全层查找缺（Rust id_feature 仅本类）） |
+   按签名对 C++ 差异：is_super_type_of 严格不自反（C++ 自反 true）、getEIDAttribute 全层查找缺（Rust id_feature 仅本类）；**eAllOperations 继承聚合已补**（`EClass::e_all_operations`，祖先优先+按名去重，供 RuntimeBehavior P0-2 使用）） |
 | EPackageImplTests.cpp | ✅ cpp_parity_ecore_epackage（3；create/get-classifier/registry put·get·remove/accessors 全对齐） |
 | ETypedElementImplTests.cpp | ✅ cpp_parity_ecore_etyped_element（12；默认值 lower0·upper1·ordered·unique / setType→type_name / isMany（`upper==-1‖upper>1`，含 upper=0 非多值）/ bounds·ordered·unique setter / kind / **EGenericType：懒加载创建·复用同一实例·setEType 同步 eClassifier·eType 跟进·union（eTypeArguments）·wildcard（eUpperBound·eLowerBound）·isEGenericTypeParameterized（eTypeParameter‖eTypeArguments）** 全对齐。
    ⏳ 余 C++ 的 `eGet·eSet·eIsSet·eUnset` 反射块（以 feature 指针驱动）与 ETypeProxy 无 Rust 对照：Rust 特征按名访问，无特征指针反射入口 |
@@ -45,7 +45,7 @@
 | C++ 测试 | Rust 状态 |
 |---|---|
 | XMILoaderTests.cpp | ✅ 12 条全部映射（`load_*` / 注册 / builtin EString / same-package eType·superTypes / EEnum·EDataType）|
-| RuntimeBehaviorTests.cpp | 🔶 14 条中 13 条对齐（eClass/eGet·eSet·eIsSet·eUnset、containment eContainer·**eContainingFeature·eContainmentFeature**、eContents、多值 containment、**eResource 未入资源为 None**）；⏳ 余 1 条 EOperation/EAnnotation/EGenericType/ETypeParameter 解析 Rust 元模型无对应 |
+| RuntimeBehaviorTests.cpp | ✅ 14 条全部对齐（eClass/eGet·eSet·eIsSet·eUnset、containment eContainer·**eContainingFeature·eContainmentFeature**、eContents、多值 containment、**eResource 未入资源为 None**；**P0-2 元模型元素保真：`EOperation`(+`eType` 返回类型)·`EParameter`(+`eType`)·`EAnnotation`(+details)·`ETypeParameter`·`eGenericSuperTypes`→`eSuperTypes` 派生** 全对齐）。loader 侧新增 `load_class_operations`/`load_class_annotations` + 泛型块解析，元模型补 `EClass::e_all_operations`/`e_type_parameters`、`EAnnotation::detail`、`EOperation::set_abstract`） |
 | XMISaverTests.cpp | ✅ cpp_parity_xmi_saver（13；EPackage 元模型文档：空根/包元数据 name·nsURI·nsPrefix/ecore:EPackage·xmi·xsi 命名空间声明/EClass·EAttribute·EReference·EEnum 输出/eType 内建 href·`#//同包` 形式/upperBound·containment·abstract·iD·resolveProxies/jsonEncoding·xmlDeclaration·xmiVersion 选项/EEnum 自增 value="" 省略 全对齐。
    Rust 新增 `emf_xmi::metamodel_saver`（EPackage→<ecore:EPackage>）补齐元模型序列化） |
 | RoundtripTests.cpp | ✅ cpp_parity_xmi_roundtrip（9；load→save→reload 后 name·nsURI·nsPrefix/classifier 数·名/feature name·type·containment·upperBound/defaultValueLiteral/两次 save 幂等/EEnum literal name·value·literal/abstract·eSuperTypes/空包幂等/iD·resolveProxies 保持 全对齐。

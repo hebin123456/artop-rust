@@ -510,13 +510,13 @@ impl EReference {
 pub struct EOperation {
     /// Operation name.
     name: String,
-    /// Parameter names.
-    parameters: Vec<String>,
+    /// Owned parameters (EMF `eParameters`).
+    parameters: Vec<EParameter>,
     /// Whether abstract.
     is_abstract: bool,
     /// The operation id within its class.
     operation_id: i32,
-    /// Return type data-type name, if known.
+    /// Return type name, if known (EMF `eType`, a classifier/data-type name).
     return_type: Option<String>,
 }
 
@@ -532,17 +532,25 @@ impl EOperation {
     pub fn name(&self) -> &str {
         &self.name
     }
-    /// Parameter names.
-    pub fn parameters(&self) -> &[String] {
+    /// Parameters, in declaration order (EMF `eParameters`).
+    pub fn parameters(&self) -> &[EParameter] {
         &self.parameters
     }
-    /// Append a parameter name.
+    /// Append a parameter by name (type unknown).
     pub fn add_parameter(&mut self, name: impl Into<String>) {
-        self.parameters.push(name.into());
+        self.parameters.push(EParameter::new(name));
+    }
+    /// Append a fully-built parameter.
+    pub fn add_eparameter(&mut self, parameter: EParameter) {
+        self.parameters.push(parameter);
     }
     /// Whether abstract.
     pub fn is_abstract(&self) -> bool {
         self.is_abstract
+    }
+    /// Set the abstract flag.
+    pub fn set_abstract(&mut self, abstract_: bool) {
+        self.is_abstract = abstract_;
     }
     /// Whether an operation ever has a return value.
     pub fn return_type(&self) -> Option<&str> {
@@ -586,5 +594,32 @@ impl EParameter {
     /// Type name.
     pub fn type_name(&self) -> Option<&str> {
         self.type_name.as_deref()
+    }
+    /// Set the type name (EMF `EParameter.eType`, by name).
+    pub fn set_type_name(&mut self, t: impl Into<String>) {
+        self.type_name = Some(t.into());
+    }
+}
+
+/// A type parameter of a classifier (EMF `ETypeParameter`, e.g. the `T` in
+/// `class Container<T>`).
+#[derive(Debug, Clone, Default)]
+pub struct ETypeParameter {
+    /// Parameter name.
+    name: String,
+}
+
+impl ETypeParameter {
+    /// New type parameter.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into() }
+    }
+    /// Parameter name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    /// Set the parameter name.
+    pub fn set_name(&mut self, name: impl Into<String>) {
+        self.name = name.into();
     }
 }

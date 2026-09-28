@@ -61,6 +61,7 @@ pub use invocation::EInvocationDelegate;
 pub use package::{make_package_ref, EFactory, EPackage, PackageRef, PackageRegistry};
 pub use structural::{
     EAttribute, EGenericType, EOperation, EParameter, EReference, EStructuralFeature,
+    ETypeParameter,
 };
 
 /// Alias for the shared value type (re-exported for crate ergonomics).

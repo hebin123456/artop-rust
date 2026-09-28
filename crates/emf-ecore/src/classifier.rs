@@ -5,7 +5,7 @@
 //! lists parent names and the `e_all_*` query family walks the graph.
 
 use crate::annotation::EAnnotation;
-use crate::structural::{EOperation, EStructuralFeature};
+use crate::structural::{EOperation, EStructuralFeature, ETypeParameter};
 use crate::Val;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -220,6 +220,8 @@ pub struct EClass {
     features: Vec<EStructuralFeature>,
     /// Locally declared operations.
     operations: Vec<EOperation>,
+    /// Generic type parameters (EMF `EClassifier.eTypeParameters`).
+    type_parameters: Vec<ETypeParameter>,
     /// Annotations attached to this class (EMF `EClass.eAnnotations`).
     annotations: Vec<EAnnotation>,
     /// Compiled fallback: default feature values keyed by feature id.
@@ -355,6 +357,40 @@ impl EClass {
     /// Append an own operation.
     pub fn add_operation(&mut self, op: EOperation) {
         self.operations.push(op);
+    }
+
+    /// `eAllOperations`: inherited operations (ancestors-first) followed by own
+    /// operations, deduplicated by name (EMF `getEAllOperations`).
+    pub fn e_all_operations(&self, package: &crate::package::PackageRegistry) -> Vec<EOperation> {
+        let mut out: Vec<EOperation> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut push = |ops: &[EOperation]| {
+            for op in ops {
+                if seen.insert(op.name().to_string()) {
+                    out.push(op.clone());
+                }
+            }
+        };
+        for name in self.e_all_super_types(package) {
+            if let Some(cls) = package.find_class(&name) {
+                push(cls.e_operations());
+            }
+        }
+        push(&self.operations);
+        out
+    }
+
+    /// `eTypeParameters`: generic type parameters declared by this class.
+    pub fn e_type_parameters(&self) -> &[ETypeParameter] {
+        &self.type_parameters
+    }
+    /// Mutable `eTypeParameters`.
+    pub fn e_type_parameters_mut(&mut self) -> &mut Vec<ETypeParameter> {
+        &mut self.type_parameters
+    }
+    /// Append a generic type parameter.
+    pub fn add_type_parameter(&mut self, tp: ETypeParameter) {
+        self.type_parameters.push(tp);
     }
 
     /// `eAnnotations`: annotations attached to this class.

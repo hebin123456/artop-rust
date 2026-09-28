@@ -47,6 +47,14 @@ impl EAnnotation {
         &mut self.details
     }
 
+    /// Look up a detail value by key (EMF `EAnnotation.getDetail(String)`).
+    pub fn detail(&self, key: &str) -> Option<&str> {
+        self.details
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+    }
+
     /// Set a detail entry (EMF `EAnnotation.setDetail`): replaces the entry
     /// for an existing key, or appends a new one.
     pub fn set_detail(&mut self, key: impl Into<String>, value: impl Into<String>) {

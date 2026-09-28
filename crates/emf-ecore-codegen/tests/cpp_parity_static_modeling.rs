@@ -11,7 +11,7 @@
 
 use std::path::{Path, PathBuf};
 
-use emf_ecore::{DynamicEObject, EClass, PackageRegistry};
+use emf_ecore::{DynamicEObject, EClass, EPackage, PackageRegistry};
 use emf_ecore_codegen::GenModel;
 
 fn sample_ecore() -> PathBuf {
@@ -20,6 +20,10 @@ fn sample_ecore() -> PathBuf {
 
 fn model() -> GenModel {
     GenModel::load_path(sample_ecore()).unwrap()
+}
+
+fn load_ecore(xml: &str) -> EPackage {
+    emf_ecore_codegen::loader::load_ecore_package(xml).unwrap()
 }
 
 // ---------------------------------------------------------------------------
@@ -150,4 +154,91 @@ fn loads_and_registers_into_registry() {
             .len(),
         2
     );
+}
+
+// ---------------------------------------------------------------------------
+//  RuntimeBehaviorTests.cpp :: P0-2 metamodel-element preservation on load
+// ---------------------------------------------------------------------------
+
+const K_ECORE_WITH_OP_AND_ANN: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="srv" nsURI="http://example.com/srv/1.0" nsPrefix="srv">
+  <eClassifiers xsi:type="ecore:EClass" name="Service">
+    <eAnnotations source="http://example.com/doc">
+      <details key="author" value="emf"/>
+      <details key="version" value="2"/>
+    </eAnnotations>
+    <eOperations name="invoke" lowerBound="0" upperBound="1" eType="#//Result">
+      <eParameters name="request" eType="#//Request"/>
+    </eOperations>
+    <eStructuralFeatures xsi:type="ecore:EAttribute" name="id"
+        eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+  </eClassifiers>
+  <eClassifiers xsi:type="ecore:EClass" name="Result"/>
+  <eClassifiers xsi:type="ecore:EClass" name="Request"/>
+</ecore:EPackage>"##;
+
+/// Runtime_LoadEcore_EOperationAndAnnotation_Preserved: loading must not drop
+/// `EOperation` / `EParameter` / `EAnnotation` (Java SAXXMIHandler parity).
+#[test]
+fn load_ecore_eoperation_and_annotation_preserved() {
+    let pkg = load_ecore(K_ECORE_WITH_OP_AND_ANN);
+    assert!(pkg.find_class("Service").is_some(), "Service class");
+
+    // EOperation (via eAllOperations; Service has no supertypes).
+    let mut reg = PackageRegistry::new();
+    reg.register(emf_ecore::make_package_ref(pkg));
+    let svc = reg.find_class("Service").unwrap();
+    let ops = svc.e_all_operations(&reg);
+    assert_eq!(ops.len(), 1);
+    assert_eq!(ops[0].name(), "invoke");
+    assert_eq!(ops[0].return_type(), Some("Result"));
+
+    // EParameter with resolved type.
+    let params = ops[0].parameters();
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].name(), "request");
+    assert_eq!(params[0].type_name(), Some("Request"));
+
+    // EAnnotation with details.
+    let anns = svc.e_annotations();
+    assert_eq!(anns.len(), 1);
+    assert_eq!(anns[0].source(), "http://example.com/doc");
+    assert_eq!(anns[0].detail("author"), Some("emf"));
+    assert_eq!(anns[0].detail("version"), Some("2"));
+
+    // EStructuralFeature still parses alongside the new builders.
+    assert!(svc.e_structural_features().iter().any(|f| f.name() == "id"));
+}
+
+const K_ECORE_GENERIC: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore"
+    name="gen" nsURI="http://example.com/gen/1.0" nsPrefix="gen">
+  <eClassifiers xsi:type="ecore:EClass" name="Base"/>
+  <eClassifiers xsi:type="ecore:EClass" name="Container">
+    <eTypeParameters name="T"/>
+    <eGenericSuperTypes eClassifier="#//Base"/>
+  </eClassifiers>
+</ecore:EPackage>"##;
+
+/// Runtime_LoadEcore_TypeParameterAndGenericSuper_Preserved: `eTypeParameters`
+/// and `eGenericSuperTypes` (derived into `eSuperTypes`).
+#[test]
+fn load_ecore_type_parameter_and_generic_super_preserved() {
+    let pkg = load_ecore(K_ECORE_GENERIC);
+    let cont = pkg.find_class("Container").expect("Container class");
+
+    let tps = cont.e_type_parameters();
+    assert_eq!(tps.len(), 1);
+    assert_eq!(tps[0].name(), "T");
+
+    // eGenericSuperTypes -> eSuperTypes derived path.
+    assert_eq!(cont.e_super_types().len(), 1);
+    assert_eq!(cont.e_super_types()[0], "Base");
 }

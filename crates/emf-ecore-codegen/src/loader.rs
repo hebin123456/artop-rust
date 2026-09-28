@@ -13,8 +13,11 @@
 //! so the result registers cleanly into a [`PackageRegistry`].
 
 use emf_ecore::structural::FeatureKind;
-use emf_ecore::{EClass, EClassKind, EDataType, EEnum, EPackage, EStructuralFeature};
-use emf_xmi::parser::parse;
+use emf_ecore::{
+    EAnnotation, EClass, EClassKind, EDataType, EEnum, EOperation, EPackage, EParameter,
+    EStructuralFeature, ETypeParameter,
+};
+use emf_xmi::parser::{parse, XmlNode};
 
 /// Parse an `.ecore` document (string) into an owned [`EPackage`].
 pub fn load_ecore_package(src: &str) -> Result<EPackage, String> {
@@ -57,7 +60,20 @@ pub fn load_ecore_package(src: &str) -> Result<EPackage, String> {
                     cls.set_instance_class_name(icn);
                 }
                 load_class_features(classifier, &mut cls);
-                // Super types (EMF eSuperTypes, usually a comma-separated href list).
+                load_class_operations(classifier, &mut cls);
+                load_class_annotations(classifier, &mut cls);
+                for tp in classifier
+                    .children
+                    .iter()
+                    .filter(|c| c.local == "eTypeParameters")
+                {
+                    cls.add_type_parameter(ETypeParameter::new(
+                        tp.attr("name").unwrap_or("unnamed"),
+                    ));
+                }
+                // Super types. EMF exposes both `eSuperTypes` (non-generic) and
+                // `eGenericSuperTypes`; the latter carries an `eClassifier` href
+                // from which `eSuperTypes` is derived.
                 if let Some(supers) = classifier.attr("eSuperTypes") {
                     for s in supers
                         .split(',')
@@ -65,6 +81,18 @@ pub fn load_ecore_package(src: &str) -> Result<EPackage, String> {
                         .filter(|s| !s.is_empty())
                     {
                         cls.add_super_type(href_tail(s)).ok();
+                    }
+                }
+                for gst in classifier
+                    .children
+                    .iter()
+                    .filter(|c| c.local == "eGenericSuperTypes")
+                {
+                    if let Some(bound) = gst.attr("eClassifier") {
+                        let name = href_tail(bound);
+                        if !name.is_empty() {
+                            cls.add_super_type(name).ok();
+                        }
                     }
                 }
                 pkg.add_class(cls);
@@ -113,7 +141,7 @@ pub fn load_ecore_package(src: &str) -> Result<EPackage, String> {
 }
 
 /// Fill `cls` with structural features parsed from `<eStructuralFeatures>`.
-fn load_class_features(classifier: &emf_xmi::parser::XmlNode, cls: &mut EClass) {
+fn load_class_features(classifier: &XmlNode, cls: &mut EClass) {
     for feat in classifier
         .children
         .iter()
@@ -157,6 +185,48 @@ fn load_class_features(classifier: &emf_xmi::parser::XmlNode, cls: &mut EClass) 
             }
             cls.add_feature(f);
         }
+    }
+}
+
+/// Fill `cls` with operations parsed from `<eOperations>` (each with its nested
+/// `<eParameters>`), EMF `eOperations` / `EOperation.eParameters`.
+fn load_class_operations(classifier: &XmlNode, cls: &mut EClass) {
+    for op in classifier
+        .children
+        .iter()
+        .filter(|c| c.local == "eOperations")
+    {
+        let mut operation = EOperation::new(op.attr("name").unwrap_or("unnamed"));
+        if op.attr("abstract") == Some("true") {
+            operation.set_abstract(true);
+        }
+        if let Some(et) = op.attr("eType").map(href_tail).filter(|s| !s.is_empty()) {
+            operation.set_return_type(et);
+        }
+        for p in op.children.iter().filter(|c| c.local == "eParameters") {
+            let mut param = EParameter::new(p.attr("name").unwrap_or("unnamed"));
+            if let Some(pt) = p.attr("eType").map(href_tail).filter(|s| !s.is_empty()) {
+                param.set_type_name(pt);
+            }
+            operation.add_eparameter(param);
+        }
+        cls.add_operation(operation);
+    }
+}
+
+/// Fill `cls` with annotations parsed from `<eAnnotations>` (EMF
+/// `EModelElement.eAnnotations`, with `<details key= value=>` entries).
+fn load_class_annotations(classifier: &XmlNode, cls: &mut EClass) {
+    for ann in classifier
+        .children
+        .iter()
+        .filter(|c| c.local == "eAnnotations")
+    {
+        let mut annotation = EAnnotation::new(ann.attr("source").unwrap_or(""));
+        for d in ann.children.iter().filter(|c| c.local == "details") {
+            annotation.add_detail(d.attr("key").unwrap_or(""), d.attr("value").unwrap_or(""));
+        }
+        cls.add_annotation(annotation);
     }
 }
 
