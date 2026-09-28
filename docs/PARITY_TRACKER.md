@@ -131,10 +131,14 @@
 | XSDSchemaTests.cpp | 🔶 C++ 空；Rust sample 对照（sample_schema_tests：schema 级 targetNamespace/elementFormDefault/import/include） |
 | XSDParserTests.cpp | ✅ 解析器已实现（parse_schema）+ sample 对照（BookType 序列/粒子/facet/minMax/unbounded/any） |
 | XSDComponentsTests.cpp | ✅ 元模型已实现（XSDElementDeclaration/XSDAttributeDeclaration/XSDComplexTypeDefinition）+ sample 对照（type_by_name/element_by_name/全局元素属性） |
-| XSDValidatorTests.cpp | 🔶 C++ 空；Rust facet 语义单测 + sample 对照（XsdFacet 构造/Display、XsdUse Display） |
+| XSDValidatorTests.cpp | ✅ 已移植 `XSDValidator`（`crates/emf-xsd/src/validator.rs`）+ `pattern`：覆盖实例校验全流程与全部诊断码（`root_not_found`/`parse_error`/`element_in_simple_type`/`extra_children`/`unexpected_child`/`choice_mismatch`/`all_mismatch`/`minLength`/`maxLength`/`length`/`pattern`/`enumeration`/`minInclusive`/`maxInclusive`/`minExclusive`/`maxExclusive`/`required_attr`）；`tests/xsd_validator.rs` 15 测试 |
 | XSDFacetTests.cpp | ✅ 已实现（10 种 facet 构造/Display 单测） |
 | P5_XSDSchemaIncorporateTests.cpp | 🔶 C++ 空；未实现（需 XSDValidator/Incorporation 语义，后续补齐） |
 | XSDPackageTests.cpp | ✅ 新增 schema 级 `<xs:annotation>` 收集修复（对齐 complexType），12 测试全绿 |
+
+> **emf-xsd 差异说明**：
+> - C++ `XSDValidator.h` 为空、`.cpp` 为简化草图（sequence 仅按「每粒子吃 1 个子元素」循环、缺失必填子元素检查为占位、`term` 为空时会解引用空指针），测试文件全空。Rust 端保留同样的公开形态与诊断码，但按 Java `org.eclipse.xsd` 语义补全：content model 遵循 `minOccurs`/`maxOccurs`（贪心+回溯），必填属性以 `use="required"` 判定（Rust 元模型无 `scope`，C++ 近似用 `scope==GLOBAL`）。
+> - `pattern` facet 不引入外部 crate，改用 crate 内 `pattern::regex_full_match`（Thompson NFA，支持字面量/`.`/字符类/`\d \w \s`/量词/`|`/分组/锚点；`\p{…}` 宽松匹配；完整匹配语义对齐 C++ `std::regex_match`）。
 
 ## emf-ecore-codegen
 | C++ 测试 | Rust 状态 |

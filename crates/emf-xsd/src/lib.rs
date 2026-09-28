@@ -6,9 +6,13 @@
 //! a general-purpose, artop-agnostic building block: generated AUTOSAR
 //! (`.arxml`) validation and `.ecore`/`.xsd` tooling sit on top of it.
 
+pub mod pattern;
+pub mod validator;
 pub mod xsd_metamodel;
 pub mod xsd_parser;
 
+/// Validate an XML instance document against an [`XSDSchema`].
+pub use validator::{XSDDiagnostic, XSDValidator, XSDValidatorOptions};
 /// The `XSDSchema` root metamodel type.
 pub use xsd_metamodel::XSDSchema;
 /// Parse a schema document into an [`XSDSchema`].
