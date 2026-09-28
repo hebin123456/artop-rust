@@ -17,9 +17,7 @@
 //! saver so string-find parity assertions in `XMISaverTests.cpp` hold.
 
 use emf_ecore::datatype::names;
-use emf_ecore::{
-    EDataType, EEnum, EPackage, EStructuralFeature, ECORE_NS_PREFIX, ECORE_NS_URI,
-};
+use emf_ecore::{EDataType, EEnum, EPackage, EStructuralFeature, ECORE_NS_PREFIX, ECORE_NS_URI};
 
 use super::options::XmiOptions;
 use super::xml_escape::escape_attr;
@@ -94,16 +92,14 @@ impl<'a> MetamodelWriter<'a> {
         }
 
         // Root: <ecore:EPackage> with namespace + package attributes.
+        self.out.push_str(&format!(
+            "<{}:EPackage xmi:version=\"{}\"\n",
+            ECORE_NS_PREFIX, self.opts.xmi_version
+        ));
         self.out
-            .push_str(&format!("<{}:EPackage xmi:version=\"{}\"\n", ECORE_NS_PREFIX, self.opts.xmi_version));
-        self.out.push_str(&format!(
-            "    xmlns:xmi=\"{}\"\n",
-            crate::saver::XMI_NS
-        ));
-        self.out.push_str(&format!(
-            "    xmlns:xsi=\"{}\"\n",
-            crate::saver::XSI_NS
-        ));
+            .push_str(&format!("    xmlns:xmi=\"{}\"\n", crate::saver::XMI_NS));
+        self.out
+            .push_str(&format!("    xmlns:xsi=\"{}\"\n", crate::saver::XSI_NS));
         self.out.push_str(&format!(
             "    xmlns:{}=\"{}\"\n",
             ECORE_NS_PREFIX, ECORE_NS_URI
@@ -124,11 +120,8 @@ impl<'a> MetamodelWriter<'a> {
 
         self.write_classifiers();
         self.depth -= 1;
-        self.out.push_str(&format!(
-            "{}</{}:EPackage>\n",
-            self.ind(),
-            ECORE_NS_PREFIX
-        ));
+        self.out
+            .push_str(&format!("{}</{}:EPackage>\n", self.ind(), ECORE_NS_PREFIX));
 
         std::mem::take(&mut self.out)
     }
@@ -162,7 +155,10 @@ impl<'a> MetamodelWriter<'a> {
                     .iter()
                     .map(|s| format!("#//{}", s))
                     .collect();
-                open.push_str(&format!(" eSuperTypes=\"{}\"", escape_attr(&supers.join(" "))));
+                open.push_str(&format!(
+                    " eSuperTypes=\"{}\"",
+                    escape_attr(&supers.join(" "))
+                ));
             }
             let has_features = !cls.e_structural_features().is_empty();
             if !has_features {
@@ -177,7 +173,8 @@ impl<'a> MetamodelWriter<'a> {
                 self.write_feature(f);
             }
             self.depth -= 1;
-            self.out.push_str(&format!("{}</eClassifiers>\n", self.ind()));
+            self.out
+                .push_str(&format!("{}</eClassifiers>\n", self.ind()));
         }
 
         for dt in self.pkg.data_types() {
@@ -192,9 +189,15 @@ impl<'a> MetamodelWriter<'a> {
     fn write_feature(&mut self, f: &EStructuralFeature) {
         let indent = self.ind();
         let base = if f.is_reference() {
-            format!("{}<eStructuralFeatures xsi:type=\"{}:EReference\"", indent, ECORE_NS_PREFIX)
+            format!(
+                "{}<eStructuralFeatures xsi:type=\"{}:EReference\"",
+                indent, ECORE_NS_PREFIX
+            )
         } else {
-            format!("{}<eStructuralFeatures xsi:type=\"{}:EAttribute\"", indent, ECORE_NS_PREFIX)
+            format!(
+                "{}<eStructuralFeatures xsi:type=\"{}:EAttribute\"",
+                indent, ECORE_NS_PREFIX
+            )
         };
         let mut s = base;
         s.push_str(&format!(" name=\"{}\"", escape_attr(f.name())));
@@ -212,7 +215,10 @@ impl<'a> MetamodelWriter<'a> {
         // eType
         let type_name = f.type_name().unwrap_or("EString");
         let href = if is_ecore_builtin(type_name) {
-            format!("{}:EDataType {}#//{}", ECORE_NS_PREFIX, ECORE_NS_URI, type_name)
+            format!(
+                "{}:EDataType {}#//{}",
+                ECORE_NS_PREFIX, ECORE_NS_URI, type_name
+            )
         } else {
             format!("#//{}", type_name)
         };
@@ -284,6 +290,7 @@ impl<'a> MetamodelWriter<'a> {
             self.out.push_str(&s);
         }
         self.depth -= 1;
-        self.out.push_str(&format!("{}</eClassifiers>\n", self.ind()));
+        self.out
+            .push_str(&format!("{}</eClassifiers>\n", self.ind()));
     }
 }

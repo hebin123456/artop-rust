@@ -50,10 +50,7 @@ impl XMIResourceSet {
         if let Some(existing) = self.find_by_uri(&uri) {
             return existing;
         }
-        let res = Rc::new(RefCell::new(XMIResource::new(
-            uri,
-            self.registry.clone(),
-        )));
+        let res = Rc::new(RefCell::new(XMIResource::new(uri, self.registry.clone())));
         self.resources.push(Rc::clone(&res));
         res
     }
@@ -61,7 +58,11 @@ impl XMIResourceSet {
     /// EMF `getResource(uri, loadOnDemand)`: the resource at `uri`, if present.
     /// With no file scheme nothing is demand-loaded here (in-memory URIs), so
     /// `load_on_demand` is accepted but only the in-set lookup applies.
-    pub fn get_resource(&self, uri: &Uri, _load_on_demand: bool) -> Option<Rc<RefCell<XMIResource>>> {
+    pub fn get_resource(
+        &self,
+        uri: &Uri,
+        _load_on_demand: bool,
+    ) -> Option<Rc<RefCell<XMIResource>>> {
         self.find_by_uri(uri)
     }
 

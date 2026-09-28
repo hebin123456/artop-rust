@@ -54,7 +54,8 @@ fn empty_package_emits_epackage_root() {
 fn save_epackage_structure() {
     let out = save(&simple_package());
     assert!(
-        out.find("<?xml version=\"1.0\" encoding=\"UTF-8\"?>").is_some(),
+        out.find("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
+            .is_some(),
         "{out}"
     );
     assert!(out.find("<ecore:EPackage").is_some(), "{out}");
@@ -102,10 +103,8 @@ fn save_epackage_eclass_out() {
 fn save_eattribute_etype_ecore_builtin() {
     let out = save(&simple_package());
     assert!(
-        out.find(
-            "eType=\"ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString\""
-        )
-        .is_some(),
+        out.find("eType=\"ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString\"")
+            .is_some(),
         "{out}"
     );
 }
@@ -174,7 +173,8 @@ fn options_custom_encoding() {
     opts.encoding = "ASCII".to_string();
     let out = save_ecore_package(&simple_package(), &opts);
     assert!(
-        out.find("<?xml version=\"1.0\" encoding=\"ASCII\"?>").is_some(),
+        out.find("<?xml version=\"1.0\" encoding=\"ASCII\"?>")
+            .is_some(),
         "{out}"
     );
 }
@@ -277,17 +277,13 @@ fn save_etype_for_int_and_boolean_builtins() {
 
     let out = save(&pkg);
     assert!(
-        out.find(
-            "eType=\"ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt\""
-        )
-        .is_some(),
+        out.find("eType=\"ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt\"")
+            .is_some(),
         "{out}"
     );
     assert!(
-        out.find(
-            "eType=\"ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean\""
-        )
-        .is_some(),
+        out.find("eType=\"ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean\"")
+            .is_some(),
         "{out}"
     );
 }

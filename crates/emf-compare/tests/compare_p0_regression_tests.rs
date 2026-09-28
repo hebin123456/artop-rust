@@ -35,7 +35,10 @@ fn compare_models(left: &ObjectRef, right: &ObjectRef) -> Comparison {
 
 /// Count of diffs of a given `DiffKind` (C++ `countDiffs`).
 fn count_diffs(comp: &Comparison, kind: DiffKind) -> usize {
-    comp.differences().iter().filter(|d| d.kind() == kind).count()
+    comp.differences()
+        .iter()
+        .filter(|d| d.kind() == kind)
+        .count()
 }
 
 // ===== P0-1: 自动 ID 匹配 =====
@@ -58,14 +61,8 @@ fn compare_p0_auto_id_match_same_id_different_attr_matches_as_different() {
 #[test]
 fn compare_p0_auto_id_match_different_order_still_pairs_by_id() {
     let m = shop_meta();
-    let left = build_shop(
-        &m,
-        &[("A".into(), "a".into()), ("B".into(), "b".into())],
-    );
-    let right = build_shop(
-        &m,
-        &[("B".into(), "b".into()), ("A".into(), "a".into())],
-    );
+    let left = build_shop(&m, &[("A".into(), "a".into()), ("B".into(), "b".into())]);
+    let right = build_shop(&m, &[("B".into(), "b".into()), ("A".into(), "a".into())]);
     let comp = compare_models(&left, &right);
     assert_eq!(count_diffs(&comp, DiffKind::Change), 0);
     assert_eq!(count_diffs(&comp, DiffKind::Add), 0);
@@ -140,7 +137,10 @@ fn compare_p0_multi_value_conflict_real_when_both_sides_add_different() {
     let right = build_shop(&m, &[("A".into(), "a".into()), ("C".into(), "c".into())]);
     let comp = emf_compare::compare3(Some(&left), Some(&right), Some(&origin));
     assert!(comp.conflicts().len() > 0);
-    let has_real = comp.conflicts().iter().any(|c| c.kind() == ConflictKind::Real);
+    let has_real = comp
+        .conflicts()
+        .iter()
+        .any(|c| c.kind() == ConflictKind::Real);
     assert!(has_real);
 }
 
@@ -152,7 +152,10 @@ fn compare_p0_multi_value_conflict_pseudo_when_both_sides_add_same() {
     let left = build_shop(&m, &[("A".into(), "a".into()), ("B".into(), "b".into())]);
     let right = build_shop(&m, &[("A".into(), "a".into()), ("B".into(), "b".into())]);
     let comp = emf_compare::compare3(Some(&left), Some(&right), Some(&origin));
-    let has_pseudo = comp.conflicts().iter().any(|c| c.kind() == ConflictKind::Pseudo);
+    let has_pseudo = comp
+        .conflicts()
+        .iter()
+        .any(|c| c.kind() == ConflictKind::Pseudo);
     assert!(has_pseudo);
 }
 

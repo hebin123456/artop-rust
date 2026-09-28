@@ -30,14 +30,17 @@ fn compare_models(left: &ObjectRef, right: &ObjectRef) -> Comparison {
 
 /// Count of diffs of a given `DiffKind` (C++ `countDiffs`).
 fn count_diffs(comp: &Comparison, kind: DiffKind) -> usize {
-    comp.differences().iter().filter(|d| d.kind() == kind).count()
+    comp.differences()
+        .iter()
+        .filter(|d| d.kind() == kind)
+        .count()
 }
 
 /// Whether a `CHANGE` diff exists on a named attribute (C++ `hasChangeDiffOn`).
 fn has_change_on(comp: &Comparison, attr: &str) -> bool {
-    comp.differences().iter().any(|d| {
-        d.kind() == DiffKind::Change && d.attribute_name() == attr
-    })
+    comp.differences()
+        .iter()
+        .any(|d| d.kind() == DiffKind::Change && d.attribute_name() == attr)
 }
 
 // ===== Test 1: two identical models -> 0 diff =====
@@ -98,8 +101,16 @@ fn compare_e2e_multi_attribute_change_produces_multiple_diffs() {
 #[test]
 fn compare_e2e_reordered_children_produces_move_diff() {
     let m = library_meta();
-    let left = build_library(&m, "Lib", &[("B1".into(), 1), ("B2".into(), 2), ("B3".into(), 3)]);
-    let right = build_library(&m, "Lib", &[("B1".into(), 1), ("B3".into(), 3), ("B2".into(), 2)]);
+    let left = build_library(
+        &m,
+        "Lib",
+        &[("B1".into(), 1), ("B2".into(), 2), ("B3".into(), 3)],
+    );
+    let right = build_library(
+        &m,
+        "Lib",
+        &[("B1".into(), 1), ("B3".into(), 3), ("B2".into(), 2)],
+    );
     let comp = compare_models(&left, &right);
     assert!(count_diffs(&comp, DiffKind::Move) > 0);
 }
@@ -108,8 +119,16 @@ fn compare_e2e_reordered_children_produces_move_diff() {
 #[test]
 fn compare_e2e_lcs_move_minimal_move_set() {
     let m = library_meta();
-    let left = build_library(&m, "Lib", &[("B1".into(), 1), ("B2".into(), 2), ("B3".into(), 3)]);
-    let right = build_library(&m, "Lib", &[("B1".into(), 1), ("B3".into(), 3), ("B2".into(), 2)]);
+    let left = build_library(
+        &m,
+        "Lib",
+        &[("B1".into(), 1), ("B2".into(), 2), ("B3".into(), 3)],
+    );
+    let right = build_library(
+        &m,
+        "Lib",
+        &[("B1".into(), 1), ("B3".into(), 3), ("B2".into(), 2)],
+    );
     let comp = compare_models(&left, &right);
     assert_eq!(count_diffs(&comp, DiffKind::Move), 1);
 }
@@ -121,12 +140,22 @@ fn compare_e2e_lcs_move_full_reversal() {
     let left = build_library(
         &m,
         "Lib",
-        &[("A".into(), 1), ("B".into(), 2), ("C".into(), 3), ("D".into(), 4)],
+        &[
+            ("A".into(), 1),
+            ("B".into(), 2),
+            ("C".into(), 3),
+            ("D".into(), 4),
+        ],
     );
     let right = build_library(
         &m,
         "Lib",
-        &[("D".into(), 4), ("C".into(), 3), ("B".into(), 2), ("A".into(), 1)],
+        &[
+            ("D".into(), 4),
+            ("C".into(), 3),
+            ("B".into(), 2),
+            ("A".into(), 1),
+        ],
     );
     let comp = compare_models(&left, &right);
     assert_eq!(count_diffs(&comp, DiffKind::Move), 3);
@@ -175,7 +204,10 @@ fn compare_e2e_three_way_real_conflict_detected() {
     let comp = emf_compare::compare3(Some(&left), Some(&right), Some(&origin));
     assert!(comp.is_three_way());
     assert!(comp.conflicts().len() > 0);
-    let has_real = comp.conflicts().iter().any(|c| c.kind() == ConflictKind::Real);
+    let has_real = comp
+        .conflicts()
+        .iter()
+        .any(|c| c.kind() == ConflictKind::Real);
     assert!(has_real);
 }
 
@@ -187,7 +219,10 @@ fn compare_e2e_three_way_pseudo_conflict_detected() {
     let left = build_library(&m, "Same", &[("B1".into(), 10)]);
     let right = build_library(&m, "Same", &[("B1".into(), 10)]);
     let comp = emf_compare::compare3(Some(&left), Some(&right), Some(&origin));
-    let has_pseudo = comp.conflicts().iter().any(|c| c.kind() == ConflictKind::Pseudo);
+    let has_pseudo = comp
+        .conflicts()
+        .iter()
+        .any(|c| c.kind() == ConflictKind::Pseudo);
     assert!(has_pseudo);
 }
 

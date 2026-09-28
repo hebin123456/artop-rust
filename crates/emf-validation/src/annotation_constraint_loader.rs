@@ -24,7 +24,7 @@
 use crate::constraint::{Constraint, ConstraintMode, Severity};
 use crate::constraint_parser;
 use crate::e_validator::EValidator;
-use emf_ecore::{EClass, EAnnotation};
+use emf_ecore::{EAnnotation, EClass};
 
 /// Ecore OCL annotation source URI (aligned to Java `EAnnotation.source`).
 pub const OCL_SOURCE: &str = "http://www.eclipse.org/emf/2002/Ecore/OCL";
@@ -34,17 +34,15 @@ pub const CONSTRAINTS_SOURCE: &str = "http://www.eclipse.org/emf/2002/Ecore/Cons
 
 /// Find the annotation with the given `source` on `e_class`, if any.
 fn find_annotation<'a>(e_class: &'a EClass, source: &str) -> Option<&'a EAnnotation> {
-    e_class.e_annotations().iter().find(|a| a.source() == source)
+    e_class
+        .e_annotations()
+        .iter()
+        .find(|a| a.source() == source)
 }
 
 /// Compile a single expression into a `Constraint` and register it, mirroring
 /// the C++ `registerCompiled`/`compileOne` construction.
-fn register_one(
-    validator: &mut EValidator,
-    name: &str,
-    expr: &str,
-    source: &str,
-) -> bool {
+fn register_one(validator: &mut EValidator, name: &str, expr: &str, source: &str) -> bool {
     if name.is_empty() || expr.is_empty() {
         return false;
     }

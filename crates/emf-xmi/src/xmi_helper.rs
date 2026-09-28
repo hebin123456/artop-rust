@@ -142,7 +142,10 @@ mod tests {
 
     #[test]
     fn split_qname_cases() {
-        assert_eq!(split_qname("ecore:EClass"), ("ecore".into(), "EClass".into()));
+        assert_eq!(
+            split_qname("ecore:EClass"),
+            ("ecore".into(), "EClass".into())
+        );
         assert_eq!(split_qname("EPackage"), (String::new(), "EPackage".into()));
         assert_eq!(split_qname(""), (String::new(), String::new()));
     }
@@ -176,7 +179,10 @@ mod tests {
         assert_eq!(strip_fragment_slash("//EString"), "EString");
         assert_eq!(strip_fragment_slash("/Library"), "Library");
         assert_eq!(strip_fragment_slash("Book"), "Book");
-        assert_eq!(strip_fragment_slash("//Container/feature.name"), "Container/feature.name");
+        assert_eq!(
+            strip_fragment_slash("//Container/feature.name"),
+            "Container/feature.name"
+        );
         assert_eq!(strip_fragment_slash(""), "");
     }
 

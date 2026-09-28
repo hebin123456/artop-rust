@@ -32,8 +32,7 @@ use emf_ecore::{make_package_ref, DynamicEObject, PackageRegistry};
 use emf_ecore_codegen::loader::load_ecore_package;
 use emf_xmi::XMIResource;
 
-const K_BASE_ECORE: &str =
-    r##"<?xml version="1.0" encoding="UTF-8"?>
+const K_BASE_ECORE: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -52,8 +51,7 @@ const K_BASE_ECORE: &str =
 </ecore:EPackage>
 "##;
 
-const K_EXT_ECORE: &str =
-    r##"<?xml version="1.0" encoding="UTF-8"?>
+const K_EXT_ECORE: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -90,14 +88,17 @@ fn dyn_of(reg: &PackageRegistry, class: &str) -> ObjectRef {
 /// The AnnotatedLibrary class declaration (used for reflection on the
 /// meta-model), resolved against the shared registry.
 fn annotated_library(reg: &PackageRegistry) -> emf_ecore::EClass {
-    reg.find_class("AnnotatedLibrary").expect("AnnotatedLibrary")
+    reg.find_class("AnnotatedLibrary")
+        .expect("AnnotatedLibrary")
 }
 
 /// 1) AnnotatedLibrary inherits Library (cross-package eSuperTypes).
 #[test]
 fn annotated_library_inherits_library() {
     let (reg, ext) = register();
-    let ann = ext.find_class("AnnotatedLibrary").expect("AnnotatedLibrary");
+    let ann = ext
+        .find_class("AnnotatedLibrary")
+        .expect("AnnotatedLibrary");
     let sups = ann.e_super_types();
     assert_eq!(sups.len(), 1);
     assert_eq!(sups[0], "Library");
@@ -111,7 +112,9 @@ fn annotated_library_inherits_library() {
 #[test]
 fn own_features_accessible() {
     let (reg, ext) = register();
-    let ann = ext.find_class("AnnotatedLibrary").expect("AnnotatedLibrary");
+    let ann = ext
+        .find_class("AnnotatedLibrary")
+        .expect("AnnotatedLibrary");
     let own = ann.e_structural_features();
     assert_eq!(own.len(), 2, "own features are note + highlighted");
     let _ = annotated_library(&reg);
@@ -130,7 +133,9 @@ fn own_features_accessible() {
 #[test]
 fn inherited_features_in_all_features() {
     let (reg, ext) = register();
-    let ann = ext.find_class("AnnotatedLibrary").expect("AnnotatedLibrary");
+    let ann = ext
+        .find_class("AnnotatedLibrary")
+        .expect("AnnotatedLibrary");
     let all = ann.e_all_structural_features(&reg);
     assert!(
         all.len() >= 4,
@@ -171,8 +176,7 @@ fn set_inherited_attribute() {
 fn set_own_attribute() {
     let (reg, _) = register();
     let obj = dyn_of(&reg, "AnnotatedLibrary");
-    obj.borrow_mut()
-        .e_set("note", Val::String("A note".into()));
+    obj.borrow_mut().e_set("note", Val::String("A note".into()));
     assert_eq!(
         obj.borrow().e_get("note"),
         Some(Val::String("A note".into()))
@@ -209,12 +213,17 @@ fn add_to_own_containment() {
 #[test]
 fn cross_package_containment_e_type() {
     let (reg, ext) = register();
-    let ann = ext.find_class("AnnotatedLibrary").expect("AnnotatedLibrary");
+    let ann = ext
+        .find_class("AnnotatedLibrary")
+        .expect("AnnotatedLibrary");
     let feat = ann
         .feature_by_name("highlighted", &reg)
         .expect("highlighted feature");
     assert!(feat.is_reference(), "highlighted is a reference");
-    assert!(feat.is_containment(), "highlighted is a containment reference");
+    assert!(
+        feat.is_containment(),
+        "highlighted is a containment reference"
+    );
     assert!(feat.is_many(), "highlighted is upperBound=-1");
     assert_eq!(feat.type_name().unwrap(), "Book");
     let book = reg.find_class("Book").expect("Book resolves");
@@ -225,7 +234,9 @@ fn cross_package_containment_e_type() {
 #[test]
 fn all_containments_include_inherited() {
     let (reg, ext) = register();
-    let ann = ext.find_class("AnnotatedLibrary").expect("AnnotatedLibrary");
+    let ann = ext
+        .find_class("AnnotatedLibrary")
+        .expect("AnnotatedLibrary");
     let containments: Vec<_> = ann
         .e_all_references(&reg)
         .into_iter()

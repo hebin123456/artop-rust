@@ -101,7 +101,9 @@ fn ext_package_loaded_after_base() {
 #[test]
 fn cross_package_super_types_resolved() {
     let (reg, base, ext) = register_base_and_ext();
-    let ann = ext.find_class("AnnotatedLibrary").expect("AnnotatedLibrary");
+    let ann = ext
+        .find_class("AnnotatedLibrary")
+        .expect("AnnotatedLibrary");
     let sups = ann.e_super_types();
     assert_eq!(sups.len(), 1);
     assert_eq!(sups[0], "Library");
@@ -115,7 +117,9 @@ fn cross_package_super_types_resolved() {
 #[test]
 fn cross_package_e_type_highlighted_resolves() {
     let (reg, _, ext) = register_base_and_ext();
-    let ann = ext.find_class("AnnotatedLibrary").expect("AnnotatedLibrary");
+    let ann = ext
+        .find_class("AnnotatedLibrary")
+        .expect("AnnotatedLibrary");
     let feat = ann
         .e_structural_features()
         .iter()
@@ -172,7 +176,10 @@ fn load_sample_library_ecore() {
     };
     let pkg = emf_ecore_codegen::loader::load_ecore_package(&src).unwrap();
     assert_eq!(pkg.name(), "library");
-    assert_eq!(pkg.ns_uri().unwrap().to_string(), "http://example.com/e2e/library");
+    assert_eq!(
+        pkg.ns_uri().unwrap().to_string(),
+        "http://example.com/e2e/library"
+    );
     assert_eq!(pkg.classes().len(), 3);
     assert!(pkg.find_class("Library").is_some());
     assert!(pkg.find_class("Book").is_some());
@@ -217,10 +224,15 @@ fn sample_cross_file_super_types_resolved() {
     let mut reg = PackageRegistry::new();
     reg.register(std::rc::Rc::new(std::cell::RefCell::new(base)));
     reg.register(std::rc::Rc::new(std::cell::RefCell::new(ext.clone())));
-    let ann = ext.find_class("AnnotatedLibrary").expect("AnnotatedLibrary");
+    let ann = ext
+        .find_class("AnnotatedLibrary")
+        .expect("AnnotatedLibrary");
     let sups = ann.e_super_types();
     assert_eq!(sups.len(), 1);
-    assert_eq!(reg.find_class(&sups[0]).map(|c| c.name().to_string()), Some("Library".to_string()));
+    assert_eq!(
+        reg.find_class(&sups[0]).map(|c| c.name().to_string()),
+        Some("Library".to_string())
+    );
 }
 
 /// 10) Sample cross-file eType: BookCollection.books -> Book.

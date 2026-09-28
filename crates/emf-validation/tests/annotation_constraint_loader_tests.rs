@@ -5,9 +5,7 @@
 //! `EValidator`, evaluating them against a `DynamicEObject`.
 
 use emf_ecore::{DynamicEObject, EAnnotation, EClass, EClassKind, EStructuralFeature, Val};
-use emf_validation::annotation_constraint_loader::{
-    self, CONSTRAINTS_SOURCE, OCL_SOURCE,
-};
+use emf_validation::annotation_constraint_loader::{self, CONSTRAINTS_SOURCE, OCL_SOURCE};
 use emf_validation::e_validator::EValidator;
 
 /// Build a `Foo` EClass carrying a `name` (EString) attribute.
@@ -59,10 +57,7 @@ fn ocl_constraint_name_empty_fails() {
     annotation_constraint_loader::load_ocl_constraints(&mut v, obj.class());
     let diags = v.validate(&obj);
     assert_eq!(diags.len(), 1);
-    assert_eq!(
-        diags[0].severity(),
-        emf_common::diagnostic::Severity::Error
-    );
+    assert_eq!(diags[0].severity(), emf_common::diagnostic::Severity::Error);
 }
 
 // ===== scenario: named constraints — only the declared invariant runs =====

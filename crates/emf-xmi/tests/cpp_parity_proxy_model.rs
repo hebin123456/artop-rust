@@ -89,17 +89,18 @@ fn resolve_proxy_resolves_via_resource_set() {
     let mut rs = XMIResourceSet::new(reg.clone());
 
     // target resource holds an object that acts as the reference target.
-    let target_res =
-        rs.create_resource(Uri::parse("http://example.com/target.xmi"));
+    let target_res = rs.create_resource(Uri::parse("http://example.com/target.xmi"));
     let target = new_node(&reg);
     target
         .borrow_mut()
         .e_set("name", Val::String("Target".into()));
-    target_res.borrow_mut().resource_mut().add_to_contents(target.clone());
+    target_res
+        .borrow_mut()
+        .resource_mut()
+        .add_to_contents(target.clone());
 
     // caller resource (holder) — present so the set has "caller.xmi" too.
-    let _caller_res =
-        rs.create_resource(Uri::parse("http://example.com/caller.xmi"));
+    let _caller_res = rs.create_resource(Uri::parse("http://example.com/caller.xmi"));
 
     // A proxy pointing at the target resource root.
     let proxy = new_node(&reg);
@@ -192,9 +193,7 @@ fn resource_set_get_eobject_with_fragment_finds_root() {
     let res = rs.create_resource(Uri::parse("http://example.com/test2.xmi"));
     // The C++ test adds an EPackage named "testPkg"; here the root is a Node.
     let pkg = new_node(&reg);
-    res.borrow_mut()
-        .resource_mut()
-        .add_to_contents(pkg.clone());
+    res.borrow_mut().resource_mut().add_to_contents(pkg.clone());
 
     let found = rs
         .get_eobject(&Uri::parse("http://example.com/test2.xmi"), true)

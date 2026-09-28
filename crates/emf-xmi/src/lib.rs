@@ -13,6 +13,7 @@ pub mod metamodel_saver;
 pub mod options;
 pub mod parser;
 pub mod saver;
+pub mod xmi_helper;
 pub mod xmi_resource;
 pub mod xmi_resource_factory;
 pub mod xmi_resource_set;
@@ -20,8 +21,8 @@ pub mod xml_escape;
 pub mod xml_helper;
 pub mod xml_load_impl;
 pub mod xml_save_impl;
-pub mod xmi_helper;
 
+pub use metamodel_saver::save_ecore_package;
 pub use xmi_helper::{
     escape_xml_attr, escape_xml_attr_with_limit, escape_xml_text, escape_xml_text_with_limit,
     split_href, split_qname, strip_fragment_slash, HrefParts, K_ECORE_NS_URI, K_XMI_NS_URI,
@@ -33,7 +34,6 @@ pub use xmi_resource_set::XMIResourceSet;
 pub use xml_helper::{FeatureKind, XMLHelper};
 pub use xml_load_impl::{XMLLoad, XMLLoadImpl};
 pub use xml_save_impl::{XMLLoader, XMLSave, XMLSaveImpl, XMLoaderImpl};
-pub use metamodel_saver::save_ecore_package;
 
 pub mod xml_base_handler {
     //! Port target: C++ source unit for `xml_base_handler`.

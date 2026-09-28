@@ -97,7 +97,10 @@ fn strip_fragment_no_slash() {
 
 #[test]
 fn strip_fragment_path_style() {
-    assert_eq!(strip_fragment_slash("//Container/feature.name"), "Container/feature.name");
+    assert_eq!(
+        strip_fragment_slash("//Container/feature.name"),
+        "Container/feature.name"
+    );
 }
 
 #[test]
@@ -217,7 +220,10 @@ fn xml_helper_namespace_context_pop_clears() {
     assert_eq!(h.get_uri("ec"), Some(K_ECORE_NS_URI));
     h.pop_context();
     // After popping, the prefix is no longer visible (C++ returns "").
-    assert_eq!(h.get_uri("ec").map(|s| s.to_string()).unwrap_or_default(), "");
+    assert_eq!(
+        h.get_uri("ec").map(|s| s.to_string()).unwrap_or_default(),
+        ""
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -235,7 +241,10 @@ fn xml_helper_namespace_context_nested() {
     assert_eq!(h.get_uri("b"), Some("urn:b"));
     h.pop_context();
     // Inner-before-outer pop: b invisible, a still visible.
-    assert_eq!(h.get_uri("b").map(|s| s.to_string()).unwrap_or_default(), "");
+    assert_eq!(
+        h.get_uri("b").map(|s| s.to_string()).unwrap_or_default(),
+        ""
+    );
     assert_eq!(h.get_uri("a"), Some("urn:a"));
     h.pop_context();
 }

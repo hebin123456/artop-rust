@@ -30,8 +30,7 @@ use emf_xmi::XMIResource;
 
 const NS_URI: &str = "http://example.com/emfdemo/library";
 
-const K_ECORE: &str =
-    r##"<?xml version="1.0" encoding="UTF-8"?>
+const K_ECORE: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 <ecore:EPackage xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -138,7 +137,14 @@ fn meta_model_registered_to_registry() {
     reg.register(make_package_ref(pkg));
     assert!(reg.contains_key(NS_URI), "registry resolves by nsURI");
     // Classifiers present for all instance shapes the sample files use.
-    for cls in ["Library", "Book", "Magazine", "Author", "Publisher", "Address"] {
+    for cls in [
+        "Library",
+        "Book",
+        "Magazine",
+        "Author",
+        "Publisher",
+        "Address",
+    ] {
         assert!(reg.find_class(cls).is_some(), "class {cls} registered");
     }
 }

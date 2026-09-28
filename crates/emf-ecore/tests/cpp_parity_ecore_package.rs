@@ -23,7 +23,14 @@ fn ecore_package_initialize() {
 #[test]
 fn meta_classes_non_null() {
     let pkg = ecore_package();
-    for name in ["EClass", "EAttribute", "EReference", "EPackage", "EEnum", "EDataType"] {
+    for name in [
+        "EClass",
+        "EAttribute",
+        "EReference",
+        "EPackage",
+        "EEnum",
+        "EDataType",
+    ] {
         let guard = pkg.borrow();
         let cls = guard.find_class(name).expect("meta-class registered");
         assert_eq!(cls.name(), name);

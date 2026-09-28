@@ -41,11 +41,7 @@ impl EObjectEList {
     }
 
     /// New list bound to a class, an owning object and a feature id.
-    pub fn with_owner(
-        data_class: emf_ecore::EClass,
-        owner: ObjectRef,
-        feature_id: i32,
-    ) -> Self {
+    pub fn with_owner(data_class: emf_ecore::EClass, owner: ObjectRef, feature_id: i32) -> Self {
         let owner = std::rc::Rc::downgrade(&owner);
         Self {
             data_class,

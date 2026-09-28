@@ -102,10 +102,9 @@ mod tests {
         }
         let ds = Diagnostician::validate(&*handle.borrow(), &reg, None);
         assert!(!ds.is_empty());
-        assert!(
-            ds.iter()
-                .all(|d| d.severity() == emf_common::diagnostic::Severity::Warning)
-        );
+        assert!(ds
+            .iter()
+            .all(|d| d.severity() == emf_common::diagnostic::Severity::Warning));
     }
 
     #[test]

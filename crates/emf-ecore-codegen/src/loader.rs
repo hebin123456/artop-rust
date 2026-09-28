@@ -136,8 +136,7 @@ fn load_class_features(classifier: &emf_xmi::parser::XmlNode, cls: &mut EClass) 
             .unwrap_or(0);
 
         if xsi_type.ends_with("EReference") {
-            let mut f =
-                EStructuralFeature::new(name, FeatureKind::Reference, lower, upper);
+            let mut f = EStructuralFeature::new(name, FeatureKind::Reference, lower, upper);
             f.set_type_name(et.clone());
             if feat.attr("containment") == Some("true") {
                 f.set_containment(true);

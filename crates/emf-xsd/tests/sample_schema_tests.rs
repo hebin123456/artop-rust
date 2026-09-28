@@ -5,8 +5,8 @@
 //! sequence+any+minMaxOccurs、属性 use=required、全局元素与属性）。
 
 use emf_xsd::xsd_metamodel::{
-    XSDComplexTypeDefinition, XSDCompositor, XsdCompositorKind, XsdFacet, XsdForm,
-    XsdParticleKind, XsdTypeRef, XsdUse,
+    XSDComplexTypeDefinition, XSDCompositor, XsdCompositorKind, XsdFacet, XsdForm, XsdParticleKind,
+    XsdTypeRef, XsdUse,
 };
 use emf_xsd::xsd_parser::parse_schema;
 
@@ -64,7 +64,10 @@ fn find_element_particle<'a>(
     })
 }
 
-fn complex_of<'a>(s: &'a emf_xsd::xsd_metamodel::XSDSchema, name: &str) -> &'a XSDComplexTypeDefinition {
+fn complex_of<'a>(
+    s: &'a emf_xsd::xsd_metamodel::XSDSchema,
+    name: &str,
+) -> &'a XSDComplexTypeDefinition {
     match s.type_by_name(name) {
         Some(XsdTypeRef::Complex(t)) => t,
         other => panic!("expected complex type {name}, got {other:?}"),
@@ -93,7 +96,10 @@ fn sample_schema_level_attributes() {
         schema.imports[0].namespace.as_deref(),
         Some("http://www.w3.org/XML/1998/namespace")
     );
-    assert_eq!(schema.imports[0].schema_location.as_deref(), Some("xml.xsd"));
+    assert_eq!(
+        schema.imports[0].schema_location.as_deref(),
+        Some("xml.xsd")
+    );
 
     // includes：唯一 include → common.xsd
     assert_eq!(schema.includes.len(), 1);
@@ -117,7 +123,11 @@ fn sample_schema_annotation() {
     // appinfo：仅一条，source=None，文本含 "app-specific"
     assert_eq!(ann.appinfo.len(), 1);
     assert_eq!(ann.appinfo[0].0, None);
-    assert!(ann.appinfo[0].1.contains("app-specific"), "appinfo text = {:?}", ann.appinfo[0].1);
+    assert!(
+        ann.appinfo[0].1.contains("app-specific"),
+        "appinfo text = {:?}",
+        ann.appinfo[0].1
+    );
 }
 
 #[test]
@@ -150,7 +160,9 @@ fn sample_schema_types_and_globals() {
     }
 
     // 全局元素 library / book 存在，并可反查其全局类型
-    let library = schema.element_by_name("library").expect("global element library");
+    let library = schema
+        .element_by_name("library")
+        .expect("global element library");
     assert_eq!(library.type_name.as_deref(), Some("tns:LibraryType"));
     assert_eq!(library.min_occurs, 1);
     assert_eq!(library.max_occurs, 1);
@@ -242,12 +254,18 @@ fn facets_construct_and_display() {
         (XsdFacet::Length(5), "length=5"),
         (XsdFacet::MinLength(1), "minLength=1"),
         (XsdFacet::MaxLength(10), "maxLength=10"),
-        (XsdFacet::Pattern("[0-9]{10,13}".into()), "pattern=[0-9]{10,13}"),
+        (
+            XsdFacet::Pattern("[0-9]{10,13}".into()),
+            "pattern=[0-9]{10,13}",
+        ),
         (XsdFacet::MinInclusive("0".into()), "minInclusive=0"),
         (XsdFacet::MaxInclusive("100".into()), "maxInclusive=100"),
         (XsdFacet::MinExclusive("1.5".into()), "minExclusive=1.5"),
         (XsdFacet::MaxExclusive("99".into()), "maxExclusive=99"),
-        (XsdFacet::WhiteSpace("collapse".into()), "whiteSpace=collapse"),
+        (
+            XsdFacet::WhiteSpace("collapse".into()),
+            "whiteSpace=collapse",
+        ),
         (XsdFacet::Enumeration("red".into()), "enumeration=red"),
     ];
     for (facet, expect) in cases {

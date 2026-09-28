@@ -620,19 +620,17 @@ impl Parser {
         if self.peek() == &Tok::Not {
             self.advance();
             let operand = self.parse_unary();
-            return Box::new(move |ctx, target| {
-                V::Bool(!to_bool(&operand(ctx, target)))
-            });
+            return Box::new(move |ctx, target| V::Bool(!to_bool(&operand(ctx, target))));
         }
         if self.peek() == &Tok::Minus {
             self.advance();
             let operand = self.parse_unary();
-            return Box::new(move |ctx, target| {
-                match v_as_number(&operand(ctx, target)) {
+            return Box::new(
+                move |ctx, target| match v_as_number(&operand(ctx, target)) {
                     Some(n) => V::Double(-n),
                     None => V::Null,
-                }
-            });
+                },
+            );
         }
         self.parse_relational()
     }
@@ -960,12 +958,10 @@ impl Parser {
             let val = src(ctx, target);
             match val {
                 V::This => read_attr(target, &name),
-                V::Tuple(parts) => {
-                    match parts.iter().find(|(n, _)| n == &name) {
-                        Some((_, v)) => v.clone(),
-                        None => V::Null,
-                    }
-                }
+                V::Tuple(parts) => match parts.iter().find(|(n, _)| n == &name) {
+                    Some((_, v)) => v.clone(),
+                    None => V::Null,
+                },
                 V::Object(o) => {
                     let oo = o.borrow();
                     read_attr(&*oo, &name)
@@ -1444,9 +1440,7 @@ impl Parser {
             }
             keyed.sort_by(|a, b| {
                 if let (Some(an), Some(bn)) = (v_as_number(&a.0), v_as_number(&b.0)) {
-                    return an
-                        .partial_cmp(&bn)
-                        .unwrap_or(std::cmp::Ordering::Equal);
+                    return an.partial_cmp(&bn).unwrap_or(std::cmp::Ordering::Equal);
                 }
                 if let (Some(aa), Some(bb)) = (v_as_string(&a.0), v_as_string(&b.0)) {
                     return aa.cmp(bb);
@@ -1457,12 +1451,7 @@ impl Parser {
         })
     }
 
-    fn make_method_call(
-        &self,
-        src: ExprEval,
-        name: &str,
-        args: Vec<ExprEval>,
-    ) -> ExprEval {
+    fn make_method_call(&self, src: ExprEval, name: &str, args: Vec<ExprEval>) -> ExprEval {
         let name = name.to_string();
         Box::new(move |ctx, target| {
             let val = src(ctx, target);
@@ -1701,12 +1690,7 @@ pub fn compile(expr: &str) -> Box<Evaluator> {
 }
 
 /// Parse an expression into a `Constraint` (mirror of the C++ `parse` helper).
-pub fn parse(
-    _source: &str,
-    name: &str,
-    expr: &str,
-    severity: Severity,
-) -> Constraint {
+pub fn parse(_source: &str, name: &str, expr: &str, severity: Severity) -> Constraint {
     Constraint::new(
         compile(expr),
         name, // id mirrors the C++ construction (name-based)

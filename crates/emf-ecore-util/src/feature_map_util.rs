@@ -10,9 +10,9 @@
 //! the descriptive API in `emf-ecore` — no domain metamodel (AUTOSAR, ...) is
 //! referenced (see `docs/PROGRESS.md`).
 
+use crate::feature_map::{Entry, FeatureMap};
 use emf_common::value::Val;
 use emf_ecore::{EClass, EStructuralFeature};
-use crate::feature_map::{Entry, FeatureMap};
 
 /// The pseudo data-type whose name identifies a `FeatureMap` (EMF
 /// `EFeatureMapEntry`'s type is `EValue   *`; the `EFeatureMap` data type
@@ -122,7 +122,10 @@ impl FeatureMapUtil {
     /// Unqualified names yield an empty namespace (C++ `decodeFeatureName`).
     pub fn decode_feature_name(qualified: &str) -> (String, String) {
         match qualified.find('#') {
-            Some(pos) => (qualified[..pos].to_string(), qualified[pos + 1..].to_string()),
+            Some(pos) => (
+                qualified[..pos].to_string(),
+                qualified[pos + 1..].to_string(),
+            ),
             None => (String::new(), qualified.to_string()),
         }
     }

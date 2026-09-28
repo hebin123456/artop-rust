@@ -131,13 +131,11 @@ fn instantiate_and_save_produces_xmi() {
         .e_set("name", Val::String("Central Library".into()));
 
     let b0 = dyn_of(&reg, "Book");
-    b0.borrow_mut()
-        .e_set("title", Val::String("Book A".into()));
+    b0.borrow_mut().e_set("title", Val::String("Book A".into()));
     b0.borrow_mut().e_set("pages", Val::Int(100));
 
     let b1 = dyn_of(&reg, "Book");
-    b1.borrow_mut()
-        .e_set("title", Val::String("Book B".into()));
+    b1.borrow_mut().e_set("title", Val::String("Book B".into()));
     b1.borrow_mut().e_set("pages", Val::Int(200));
 
     lib.borrow_mut()
@@ -250,9 +248,11 @@ fn package_resolvable_from_registry() {
 fn multi_root_save_wrapped_in_xmi_xmi() {
     let reg = registry();
     let w0 = dyn_of(&reg, "Writer");
-    w0.borrow_mut().e_set("name", Val::String("Author A".into()));
+    w0.borrow_mut()
+        .e_set("name", Val::String("Author A".into()));
     let w1 = dyn_of(&reg, "Writer");
-    w1.borrow_mut().e_set("name", Val::String("Author B".into()));
+    w1.borrow_mut()
+        .e_set("name", Val::String("Author B".into()));
 
     let out = save(&reg, &[w0, w1]);
     assert!(out.contains("<xmi:XMI"), "{out}");

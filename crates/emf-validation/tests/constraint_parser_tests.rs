@@ -8,8 +8,8 @@
 use emf_common::eobject::EObject;
 use emf_common::value::{ObjectRef, Val};
 use emf_ecore::{
-    node_to_object, DynamicEObject, EClass, EClassKind, EStructuralFeature, EPackage,
-    PackageRegistry, adopt_many, adopt_single, make_package_ref,
+    adopt_many, adopt_single, make_package_ref, node_to_object, DynamicEObject, EClass, EClassKind,
+    EPackage, EStructuralFeature, PackageRegistry,
 };
 use emf_validation::constraint::Severity;
 use emf_validation::constraint_parser::{compile, compile_value, parse};
@@ -252,10 +252,7 @@ fn ocl_exists_one_satisfies_is_true() {
             make_plain_element(&e_cls, "c"),
         ],
     );
-    assert!(ev(
-        "self.elements->exists(x | x.shortName = 'target')",
-        &c
-    ));
+    assert!(ev("self.elements->exists(x | x.shortName = 'target')", &c));
 }
 
 #[test]
@@ -269,10 +266,7 @@ fn ocl_exists_none_satisfy_is_false() {
             make_plain_element(&e_cls, "b"),
         ],
     );
-    assert!(!ev(
-        "self.elements->exists(x | x.shortName = 'target')",
-        &c
-    ));
+    assert!(!ev("self.elements->exists(x | x.shortName = 'target')", &c));
 }
 
 #[test]
@@ -280,10 +274,7 @@ fn ocl_exists_empty_collection_is_false() {
     let (c_cls, e_cls) = meta();
     let c = new_container(&c_cls);
     let _ = &e_cls;
-    assert!(!ev(
-        "self.elements->exists(x | x.shortName = 'target')",
-        &c
-    ));
+    assert!(!ev("self.elements->exists(x | x.shortName = 'target')", &c));
 }
 
 // ===== single reference treated as singleton =====
@@ -431,10 +422,7 @@ fn ocl_path_navigation_self_attr() {
     let (c_cls, e_cls) = meta();
     let c = new_container(&c_cls);
     set_elements(&c, vec![make_plain_element(&e_cls, "hello")]);
-    assert!(ev(
-        "self.elements->forAll(x | x.shortName <> '')",
-        &c
-    ));
+    assert!(ev("self.elements->forAll(x | x.shortName <> '')", &c));
 }
 
 #[test]
@@ -563,7 +551,10 @@ fn ocl_complex_forall_with_or_and_implies() {
     let c = new_container(&c_cls);
     set_elements(
         &c,
-        vec![make_element(&e_cls, "a", 3), make_element(&e_cls, "zero", 0)],
+        vec![
+            make_element(&e_cls, "a", 3),
+            make_element(&e_cls, "zero", 0),
+        ],
     );
     assert!(ev(
         "self.elements->forAll(x | x.count > 0 or x.shortName = 'zero')",
@@ -626,10 +617,7 @@ fn ocl_let_binds_attribute() {
 fn ocl_let_scope_is_removed_after_body() {
     let (c_cls, _) = meta();
     let c = new_container(&c_cls);
-    assert!(ev(
-        "let x = 5 in (let y = 10 in y > 5) and x = 5",
-        &c
-    ));
+    assert!(ev("let x = 5 in (let y = 10 in y > 5) and x = 5", &c));
 }
 
 // ===== collection comprehensions =====
@@ -978,7 +966,10 @@ fn ocl_nested_collect_flattens_inner_collect() {
     let e1 = make_plain_element(&e_cls, "e1");
     set_children(
         &e0,
-        vec![make_plain_element(&e_cls, "a"), make_plain_element(&e_cls, "b")],
+        vec![
+            make_plain_element(&e_cls, "a"),
+            make_plain_element(&e_cls, "b"),
+        ],
     );
     set_children(&e1, vec![make_plain_element(&e_cls, "d")]);
     set_elements(&c, vec![e0, e1]);
@@ -1004,7 +995,10 @@ fn ocl_nested_select_with_exists_in_body() {
     let e1 = make_plain_element(&e_cls, "e1");
     set_children(
         &e0,
-        vec![make_plain_element(&e_cls, "a"), make_plain_element(&e_cls, "b")],
+        vec![
+            make_plain_element(&e_cls, "a"),
+            make_plain_element(&e_cls, "b"),
+        ],
     );
     set_children(&e1, vec![make_plain_element(&e_cls, "d")]);
     set_elements(&c, vec![e0, e1]);
@@ -1026,7 +1020,10 @@ fn ocl_nested_forall_deep_quantifier() {
     let e1 = make_plain_element(&e_cls, "e1");
     set_children(
         &e0,
-        vec![make_plain_element(&e_cls, "a"), make_plain_element(&e_cls, "b")],
+        vec![
+            make_plain_element(&e_cls, "a"),
+            make_plain_element(&e_cls, "b"),
+        ],
     );
     set_children(&e1, vec![make_plain_element(&e_cls, "d")]);
     set_elements(&c, vec![e0, e1]);
@@ -1039,7 +1036,10 @@ fn ocl_nested_forall_deep_quantifier() {
     let p = make_plain_element(&e_cls, "p");
     set_children(
         &p,
-        vec![make_plain_element(&e_cls, ""), make_plain_element(&e_cls, "ok")],
+        vec![
+            make_plain_element(&e_cls, ""),
+            make_plain_element(&e_cls, "ok"),
+        ],
     );
     set_elements(&c2, vec![p]);
     assert!(!ev(
@@ -1174,10 +1174,7 @@ fn ocl_count_occurrences() {
         "self.elements->collect(x | x.shortName)->count('z') = 0",
         &c
     ));
-    assert!(ev(
-        "self.elements->count(self.elements->first()) = 1",
-        &c
-    ));
+    assert!(ev("self.elements->count(self.elements->first()) = 1", &c));
 }
 
 #[test]
@@ -1278,7 +1275,10 @@ fn ocl_flatten_nested_elists() {
     let e1 = make_plain_element(&e_cls, "e1");
     set_children(
         &e0,
-        vec![make_plain_element(&e_cls, "a"), make_plain_element(&e_cls, "b")],
+        vec![
+            make_plain_element(&e_cls, "a"),
+            make_plain_element(&e_cls, "b"),
+        ],
     );
     set_children(&e1, vec![make_plain_element(&e_cls, "d")]);
     set_elements(&c, vec![e0, e1]);
@@ -1327,7 +1327,10 @@ fn ocl_as_set_deduplicates() {
             make_plain_element(&e_cls, "b"),
         ],
     );
-    assert!(ev("self.elements->collect(x | x.shortName)->size() = 4", &c));
+    assert!(ev(
+        "self.elements->collect(x | x.shortName)->size() = 4",
+        &c
+    ));
     assert!(ev(
         "self.elements->collect(x | x.shortName)->asSet()->size() = 2",
         &c
@@ -1463,8 +1466,14 @@ fn ocl_tuple_literal_and_field_access() {
 fn ocl_tuple_literal_with_type_annotation() {
     let (c_cls, _) = meta();
     let c = new_container(&c_cls);
-    assert!(ev("Tuple { a : Integer = 42, b : String = 'hi' }.a = 42", &c));
-    assert!(ev("Tuple { a : Integer = 42, b : String = 'hi' }.b = 'hi'", &c));
+    assert!(ev(
+        "Tuple { a : Integer = 42, b : String = 'hi' }.a = 42",
+        &c
+    ));
+    assert!(ev(
+        "Tuple { a : Integer = 42, b : String = 'hi' }.b = 'hi'",
+        &c
+    ));
 }
 
 #[test]
@@ -1479,29 +1488,44 @@ fn ocl_tuple_access_missing_part_is_null() {
 fn ocl_tuple_equality_same_parts_is_equal() {
     let (c_cls, _) = meta();
     let c = new_container(&c_cls);
-    assert!(ev("Tuple { a = 1, b = 'x' } = Tuple { a = 1, b = 'x' }", &c));
+    assert!(ev(
+        "Tuple { a = 1, b = 'x' } = Tuple { a = 1, b = 'x' }",
+        &c
+    ));
 }
 
 #[test]
 fn ocl_tuple_equality_order_independent() {
     let (c_cls, _) = meta();
     let c = new_container(&c_cls);
-    assert!(ev("Tuple { a = 1, b = 'x' } = Tuple { b = 'x', a = 1 }", &c));
+    assert!(ev(
+        "Tuple { a = 1, b = 'x' } = Tuple { b = 'x', a = 1 }",
+        &c
+    ));
 }
 
 #[test]
 fn ocl_tuple_inequality_different_values() {
     let (c_cls, _) = meta();
     let c = new_container(&c_cls);
-    assert!(ev("Tuple { a = 1, b = 'x' } <> Tuple { a = 2, b = 'x' }", &c));
-    assert!(ev("Tuple { a = 1, b = 'x' } <> Tuple { a = 1, b = 'y' }", &c));
+    assert!(ev(
+        "Tuple { a = 1, b = 'x' } <> Tuple { a = 2, b = 'x' }",
+        &c
+    ));
+    assert!(ev(
+        "Tuple { a = 1, b = 'x' } <> Tuple { a = 1, b = 'y' }",
+        &c
+    ));
 }
 
 #[test]
 fn ocl_tuple_inequality_different_parts() {
     let (c_cls, _) = meta();
     let c = new_container(&c_cls);
-    assert!(ev("Tuple { a = 1, b = 'x' } <> Tuple { a = 1, c = 'x' }", &c));
+    assert!(ev(
+        "Tuple { a = 1, b = 'x' } <> Tuple { a = 1, c = 'x' }",
+        &c
+    ));
     assert!(ev("Tuple { a = 1, b = 'x' } <> Tuple { a = 1 }", &c));
 }
 
@@ -1534,7 +1558,10 @@ fn ocl_tuple_in_collect_grouping() {
 fn ocl_tuple_nested_tuple() {
     let (c_cls, _) = meta();
     let c = new_container(&c_cls);
-    assert!(ev("Tuple { outer = Tuple { inner = 7 } }.outer.inner = 7", &c));
+    assert!(ev(
+        "Tuple { outer = Tuple { inner = 7 } }.outer.inner = 7",
+        &c
+    ));
 }
 
 #[test]

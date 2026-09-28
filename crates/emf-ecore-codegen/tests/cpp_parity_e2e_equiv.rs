@@ -107,7 +107,10 @@ fn roundtrip_package_metadata_preserved() {
     let a = load(K_JAVA_STYLE_ECORE);
     let b = reload(&save(&a));
     assert_eq!(b.name(), a.name());
-    assert_eq!(b.ns_uri().map(|u| u.to_string()), a.ns_uri().map(|u| u.to_string()));
+    assert_eq!(
+        b.ns_uri().map(|u| u.to_string()),
+        a.ns_uri().map(|u| u.to_string())
+    );
     assert_eq!(b.ns_prefix(), a.ns_prefix());
 }
 
@@ -179,8 +182,8 @@ fn save_idempotent() {
 /// metadata retained (nsURI `http://example.com/e2e/library`).
 #[test]
 fn load_sample_file_save_back() {
-    let path: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/samples/multi/library.ecore");
+    let path: PathBuf =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/samples/multi/library.ecore");
     let src = std::fs::read_to_string(&path).unwrap();
     let pkg = load(&src);
     assert_eq!(pkg.name(), "library");
@@ -191,7 +194,10 @@ fn load_sample_file_save_back() {
 
     let out = save(&pkg);
     assert!(out.contains("name=\"library\""), "{out}");
-    assert!(out.contains("nsURI=\"http://example.com/e2e/library\""), "{out}");
+    assert!(
+        out.contains("nsURI=\"http://example.com/e2e/library\""),
+        "{out}"
+    );
     assert!(out.contains("xsi:type=\"ecore:EClass\""), "{out}");
     assert!(out.contains("containment=\"true\""), "{out}");
 }

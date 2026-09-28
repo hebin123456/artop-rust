@@ -40,7 +40,10 @@ fn type_mapper_default_values() {
     // C++: defaultValueLiteral("EString","hello") == std::string("hello")
     //      ("EInt","42") == "42"; ("EBoolean","true") == "true";
     //      ("EString","") == "".
-    assert_eq!(default_value_literal("EString", "hello"), "String::from(\"hello\")");
+    assert_eq!(
+        default_value_literal("EString", "hello"),
+        "String::from(\"hello\")"
+    );
     assert_eq!(default_value_literal("EInt", "42"), "42");
     assert_eq!(default_value_literal("EBoolean", "true"), "true");
     assert_eq!(default_value_literal("EString", ""), "");
@@ -51,7 +54,7 @@ fn type_mapper_default_values() {
 fn type_mapper_include_intent_covered_by_scalar_types() {
     // C++ maps <string>/<cstdint> includes by the emitted type. In Rust the
     // corresponding guarantee is that every scalar attribute maps to a concrete
-    // primitive/String type with no extra include surface. Covers the 
+    // primitive/String type with no extra include surface. Covers the
     // intent of TypeMapper_IncludeFor ("std::string" -> <string>, "int32_t"
     // -> <cstdint>, "bool" -> none): no String is ever mapped to bare bool/int.
     assert_ne!(attr_rust_type("EString", false), "bool");
@@ -73,5 +76,8 @@ fn type_mapper_unknown_datatype_falls_back_to_string() {
     use emf_ecore::EStructuralFeature;
     let mut f = EStructuralFeature::attribute("label");
     f.set_type_name("EString");
-    assert_eq!(emf_ecore_codegen::typing::field_rust_type(&f), "Option<String>");
+    assert_eq!(
+        emf_ecore_codegen::typing::field_rust_type(&f),
+        "Option<String>"
+    );
 }

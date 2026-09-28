@@ -47,15 +47,17 @@ fn multi_file_supertype_resolves_across_packages() {
     assert_eq!(pkg_b.ns_prefix(), "pkgB");
 
     // [A1] pkgA declares EClass "A".
-    let cls_a = pkg_a
-        .find_class("A")
-        .expect("a.xmi must declare EClass A");
+    let cls_a = pkg_a.find_class("A").expect("a.xmi must declare EClass A");
     assert_eq!(cls_a.name(), "A");
 
     // [A3/A4] B.eSuperTypes references a.xmi#//A -> recorded as super type "A".
     let b = pkg_b.find_class("B").expect("b.xmi must declare EClass B");
     assert!(!b.e_super_types().is_empty(), "B must declare a super type");
-    assert_eq!(b.e_super_types()[0], "A", "cross-doc href tail is the class name");
+    assert_eq!(
+        b.e_super_types()[0],
+        "A",
+        "cross-doc href tail is the class name"
+    );
     let sup = b.e_super_types()[0].clone();
 
     // Register both packages into ONE registry and resolve the reference to a

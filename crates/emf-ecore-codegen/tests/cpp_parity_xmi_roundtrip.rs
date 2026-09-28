@@ -63,7 +63,10 @@ fn roundtrip_ecore_package_metadata_preserved() {
     let saved = save(&p1);
     let p2 = load(&saved);
     assert_eq!(p2.name(), p1.name());
-    assert_eq!(p2.ns_uri().map(|u| u.to_string()), p1.ns_uri().map(|u| u.to_string()));
+    assert_eq!(
+        p2.ns_uri().map(|u| u.to_string()),
+        p1.ns_uri().map(|u| u.to_string())
+    );
     assert_eq!(p2.ns_prefix(), p1.ns_prefix());
     assert_eq!(p2.name(), "library");
     assert_eq!(p2.ns_prefix(), "library");

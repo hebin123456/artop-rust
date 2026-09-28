@@ -10,11 +10,11 @@ use emf_ecore::{
     adopt_single, make_package_ref, node_to_object, DynNode, DynamicEObject, EClass, EClassKind,
     EDataType, EPackage, EStructuralFeature, PackageRegistry,
 };
-use emf_ecore_util::equality_helper::EqualityHelper;
 use emf_ecore_util::ecore_util::{
     convert_to_string, copy, copy_all, create_from_string, e_all_contents, equals, equals_value,
     get_e_classifier, get_id, get_uri, is_ancestor_of, remove, resolve, resolve_all, set_id,
 };
+use emf_ecore_util::equality_helper::EqualityHelper;
 
 // ---------- helpers ----------
 
@@ -144,8 +144,14 @@ fn equals_same_class_different_values_false() {
 
 #[test]
 fn equals_value_string() {
-    assert!(equals_value(Some(&Val::string("x")), Some(&Val::string("x"))));
-    assert!(!equals_value(Some(&Val::string("x")), Some(&Val::string("y"))));
+    assert!(equals_value(
+        Some(&Val::string("x")),
+        Some(&Val::string("x"))
+    ));
+    assert!(!equals_value(
+        Some(&Val::string("x")),
+        Some(&Val::string("y"))
+    ));
 }
 
 #[test]
@@ -338,7 +344,10 @@ fn get_all_contents_single_child() {
     let reg = tree_registry();
     let parent_cls = reg.find_class("Parent").unwrap();
     let child_cls = reg.find_class("Child").unwrap();
-    let parent: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(parent_cls.clone(), reg.clone())));
+    let parent: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(
+        parent_cls.clone(),
+        reg.clone(),
+    )));
     let child: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(child_cls, reg)));
     adopt_single(&parent, "child", &child);
     let p_obj = node_to_object(&parent);
@@ -353,9 +362,14 @@ fn get_all_contents_nested_depth_first() {
     let reg = tree_registry();
     let parent_cls = reg.find_class("Parent").unwrap();
     let child_cls = reg.find_class("Child").unwrap();
-    let parent: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(parent_cls.clone(), reg.clone())));
-    let child1: DynNode =
-        Rc::new(RefCell::new(DynamicEObject::new_in(parent_cls, reg.clone())));
+    let parent: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(
+        parent_cls.clone(),
+        reg.clone(),
+    )));
+    let child1: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(
+        parent_cls,
+        reg.clone(),
+    )));
     let grandchild: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(child_cls, reg)));
     adopt_single(&parent, "child", &child1);
     adopt_single(&child1, "child", &grandchild);
@@ -373,7 +387,10 @@ fn remove_single_valued_containment() {
     let reg = tree_registry();
     let parent_cls = reg.find_class("Parent").unwrap();
     let child_cls = reg.find_class("Child").unwrap();
-    let parent: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(parent_cls, reg.clone())));
+    let parent: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(
+        parent_cls,
+        reg.clone(),
+    )));
     let child: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(child_cls, reg)));
     adopt_single(&parent, "child", &child);
     let c_obj = node_to_object(&child);
@@ -411,7 +428,10 @@ fn copy_deep_copy_containment() {
     let reg = tree_registry();
     let parent_cls = reg.find_class("Parent").unwrap();
     let child_cls = reg.find_class("Child").unwrap();
-    let parent: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(parent_cls, reg.clone())));
+    let parent: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(
+        parent_cls,
+        reg.clone(),
+    )));
     let child: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(child_cls, reg)));
     set(&(node_to_object(&child)), "cname", Val::String("c1".into()));
     adopt_single(&parent, "child", &child);
@@ -420,7 +440,10 @@ fn copy_deep_copy_containment() {
 
     let cp = copy(&p_obj).expect("copy succeeds");
     assert!(!Rc::ptr_eq(&cp, &p_obj));
-    let cp_child = cp.borrow().e_get("child").and_then(|v| v.as_object().cloned());
+    let cp_child = cp
+        .borrow()
+        .e_get("child")
+        .and_then(|v| v.as_object().cloned());
     let cp_child = cp_child.expect("copied parent has child");
     assert!(!Rc::ptr_eq(&cp_child, &c_obj), "child copy is a new object");
     assert_eq!(str_of(&cp_child, "cname"), "c1");

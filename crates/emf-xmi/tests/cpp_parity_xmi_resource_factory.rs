@@ -78,6 +78,9 @@ fn custom_extension_registration() {
 fn direct_create() {
     let r = XMIResourceFactory::create_resource(uri("inmemory://x"));
     // create_resource always yields a concrete XMIResource (C++ `!= null`).
-    let xres = r.as_any().downcast_ref::<XMIResource>().expect("direct create -> XMIResource");
+    let xres = r
+        .as_any()
+        .downcast_ref::<XMIResource>()
+        .expect("direct create -> XMIResource");
     assert_eq!(xres.uri().to_string(), "inmemory://x");
 }

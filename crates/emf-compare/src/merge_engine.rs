@@ -386,9 +386,7 @@ fn remap_value(v: &Val, map: &MergedMap) -> Val {
             Some(mapped) => Val::Object(mapped),
             None => Val::Object(o.clone()),
         },
-        Val::List(items) => {
-            Val::List(items.iter().map(|x| remap_value(x, map)).collect())
-        }
+        Val::List(items) => Val::List(items.iter().map(|x| remap_value(x, map)).collect()),
         other => other.clone(),
     }
 }
@@ -408,7 +406,9 @@ fn containing_feature(container: &ObjectRef, child: &ObjectRef) -> Option<String
             continue;
         }
         let v = dy.e_get_feature(&f);
-        if single_object(&v).map(|o| Rc::ptr_eq(&o, child)).unwrap_or(false)
+        if single_object(&v)
+            .map(|o| Rc::ptr_eq(&o, child))
+            .unwrap_or(false)
             || object_list(&v).iter().any(|o| Rc::ptr_eq(o, child))
         {
             return Some(f.name().to_string());
@@ -539,9 +539,7 @@ fn clone_subtree_node(src: &ObjectRef) -> DynNode {
     // Copy non-containment values (atomic attributes and plain references).
     let feats = dy.all_structural_features();
     for (name, val) in &dy.dynamic_settings {
-        let is_containment = feats
-            .iter()
-            .any(|f| f.name() == name && f.is_containment());
+        let is_containment = feats.iter().any(|f| f.name() == name && f.is_containment());
         if is_containment {
             continue;
         }

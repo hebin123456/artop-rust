@@ -36,12 +36,7 @@ fn diff_engine_produces_diff_on_different() {
     let right_book = children(&right_lib)[0].clone();
 
     let mut comp = Comparison::new();
-    comp.add_match(
-        Some(left_book),
-        Some(right_book),
-        MatchKind::Different,
-        0.0,
-    );
+    comp.add_match(Some(left_book), Some(right_book), MatchKind::Different, 0.0);
     emf_compare::diff_engine::do_diff(&mut comp);
 
     assert!(comp.differences().len() >= 1);

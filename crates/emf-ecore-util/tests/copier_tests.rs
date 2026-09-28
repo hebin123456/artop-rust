@@ -189,7 +189,10 @@ fn ecore_util_copy_with_containment_deep_copy() {
     let mut reg = PackageRegistry::new();
     reg.register(make_package_ref(pkg));
 
-    let root: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(cls.clone(), reg.clone())));
+    let root: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(
+        cls.clone(),
+        reg.clone(),
+    )));
     root.borrow_mut().e_set_by_name("name", Val::string("root"));
     let kid: DynNode = Rc::new(RefCell::new(DynamicEObject::new_in(cls, reg)));
     kid.borrow_mut().e_set_by_name("name", Val::string("kid"));

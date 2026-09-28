@@ -23,7 +23,9 @@
 
 use emf_common::eobject::EObject;
 use emf_common::value::{ObjectRef, Val};
-use emf_ecore::{adopt_many, node_to_object, DynNode, DynamicEObject, EClass, EClassKind, EStructuralFeature};
+use emf_ecore::{
+    adopt_many, node_to_object, DynNode, DynamicEObject, EClass, EClassKind, EStructuralFeature,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -169,10 +171,13 @@ pub fn build_lib_author(m: &LibAuthorMeta, author_name: &str, title: &str) -> Ob
     let book = node(m.book_cls.clone());
     book.borrow_mut().e_set("title", Val::String(title.into()));
     let author = node(m.author_cls.clone());
-    author.borrow_mut().e_set("name", Val::String(author_name.into()));
+    author
+        .borrow_mut()
+        .e_set("name", Val::String(author_name.into()));
     adopt_many(&lib, "books", &book);
     adopt_many(&lib, "authors", &author);
-    book.borrow_mut().e_set("author", Val::Object(node_to_object(&author)));
+    book.borrow_mut()
+        .e_set("author", Val::Object(node_to_object(&author)));
     node_to_object(&lib)
 }
 
@@ -183,7 +188,9 @@ pub fn build_lib_author_bob(m: &LibAuthorMeta, title: &str, add_bob: bool) -> Ob
     let book = node(m.book_cls.clone());
     book.borrow_mut().e_set("title", Val::String(title.into()));
     let alice = node(m.author_cls.clone());
-    alice.borrow_mut().e_set("name", Val::String("Alice".into()));
+    alice
+        .borrow_mut()
+        .e_set("name", Val::String("Alice".into()));
     adopt_many(&lib, "authors", &alice);
     let mut author_for_book = node_to_object(&alice);
     if add_bob {
@@ -192,7 +199,8 @@ pub fn build_lib_author_bob(m: &LibAuthorMeta, title: &str, add_bob: bool) -> Ob
         adopt_many(&lib, "authors", &bob);
         author_for_book = node_to_object(&bob);
     }
-    book.borrow_mut().e_set("author", Val::Object(author_for_book));
+    book.borrow_mut()
+        .e_set("author", Val::Object(author_for_book));
     adopt_many(&lib, "books", &book);
     node_to_object(&lib)
 }
@@ -238,7 +246,9 @@ pub fn build_parent(m: &BidirMeta, name: &str, child_name: Option<&str>) -> Obje
 
 /// Read a string feature value.
 pub fn read_str(o: &ObjectRef, name: &str) -> Option<String> {
-    o.borrow().e_get(name).and_then(|v| v.as_str().map(String::from))
+    o.borrow()
+        .e_get(name)
+        .and_then(|v| v.as_str().map(String::from))
 }
 
 /// Read an integer feature value.
@@ -252,7 +262,10 @@ pub fn read_int(o: &ObjectRef, name: &str) -> Option<i64> {
 /// flattened `children`).
 pub fn ref_list(o: &ObjectRef, name: &str) -> Vec<ObjectRef> {
     match o.borrow().e_get(name) {
-        Some(Val::List(items)) => items.iter().filter_map(|v| v.as_object().cloned()).collect(),
+        Some(Val::List(items)) => items
+            .iter()
+            .filter_map(|v| v.as_object().cloned())
+            .collect(),
         Some(Val::Object(x)) => vec![x.clone()],
         _ => Vec::new(),
     }

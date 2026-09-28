@@ -60,10 +60,7 @@ fn load_java_like_library_ecore() {
     // C++ asserts >= 4 classifiers: Library, Book (classes) + BookCategory
     // (enum) + MyString (data type).
     let total = pkg.classes().len() + pkg.enums().len() + pkg.data_types().len();
-    assert!(
-        total >= 4,
-        "expected at least 4 classifiers, found {total}"
-    );
+    assert!(total >= 4, "expected at least 4 classifiers, found {total}");
 
     // Library and Book resolve as classes.
     let lib = pkg.find_class("Library").expect("Library class");

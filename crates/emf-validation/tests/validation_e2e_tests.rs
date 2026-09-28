@@ -13,7 +13,8 @@ use emf_common::diagnostic::Diagnostic;
 use emf_common::eobject::EObject;
 use emf_common::value::ObjectRef;
 use emf_ecore::{
-    adopt_many, node_to_object, DynamicEObject, DynNode, EClass, EClassKind, EStructuralFeature, Val,
+    adopt_many, node_to_object, DynNode, DynamicEObject, EClass, EClassKind, EStructuralFeature,
+    Val,
 };
 use emf_validation::e_validator::EValidator;
 use emf_validation::live_validator::ValidationLiveAdapter;
@@ -119,7 +120,9 @@ fn static_all_null_required_ref_produces_no_null_required_ref() {
     let svc = default_service();
     let diags = svc.validate_all(&*lib.borrow());
     assert!(!diags.is_empty());
-    assert!(diags.iter().any(|d| d.source().contains("NoNullRequiredRef")));
+    assert!(diags
+        .iter()
+        .any(|d| d.source().contains("NoNullRequiredRef")));
 }
 
 // ===== 测试 4：动态变更校验 — eSet name="" 触发 LiveValidator listener =====
@@ -143,28 +146,30 @@ fn live_attach_set_empty_name_triggers_listener() {
     let received: Rc<RefCell<Vec<Diagnostic>>> = Rc::new(RefCell::new(Vec::new()));
     {
         let rec = Rc::clone(&received);
-        live.add_listener(Box::new(move |_target: &dyn EObject, diags: &[Diagnostic]| {
-            rec.borrow_mut().extend(diags.iter().cloned());
-        }));
+        live.add_listener(Box::new(
+            move |_target: &dyn EObject, diags: &[Diagnostic]| {
+                rec.borrow_mut().extend(diags.iter().cloned());
+            },
+        ));
     }
 
     // attach to the Library (root).
     live.attach(lib.clone());
 
     // A valid state produces no diagnostics.
-    lib_node.borrow_mut().e_set("name", Val::string("Still Valid"));
+    lib_node
+        .borrow_mut()
+        .e_set("name", Val::string("Still Valid"));
     let _ = live.validate_now(&*lib_node.borrow());
     assert_eq!(received.borrow().len(), 0);
 
     // Setting name to "" must produce a NoEmptyName diagnostic via the listener.
     lib_node.borrow_mut().e_set("name", Val::string(""));
     let _ = live.validate_now(&*lib_node.borrow());
-    assert!(
-        received
-            .borrow()
-            .iter()
-            .any(|d| d.source().contains("NoEmptyName"))
-    );
+    assert!(received
+        .borrow()
+        .iter()
+        .any(|d| d.source().contains("NoEmptyName")));
 
     live.detach();
 }

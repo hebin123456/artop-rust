@@ -185,8 +185,8 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
 
-    use emf_ecore::{EPackage, PackageRegistry};
     use emf_ecore::{make_package_ref, DynNode, DynamicEObject, EClass, EClassKind};
+    use emf_ecore::{EPackage, PackageRegistry};
 
     fn registry() -> PackageRegistry {
         let mut reg = PackageRegistry::new();
@@ -209,7 +209,10 @@ mod tests {
         let mut sw = DefaultEcoreSwitch::new();
         let obj = meta_obj("EClass");
         let r = sw.do_switch(&obj);
-        assert_eq!(r.map(|o| o.borrow().e_class().to_string()).unwrap(), "EClass");
+        assert_eq!(
+            r.map(|o| o.borrow().e_class().to_string()).unwrap(),
+            "EClass"
+        );
         assert_eq!(sw.seen, vec!["EClass".to_string()]);
     }
 

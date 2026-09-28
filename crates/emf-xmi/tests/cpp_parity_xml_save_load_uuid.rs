@@ -18,7 +18,7 @@ use emf_common::value::{ObjectRef, Val};
 use emf_ecore::{
     make_package_ref, DynamicEObject, EClass, EClassKind, EStructuralFeature, PackageRegistry,
 };
-use emf_xmi::{XMLLoader, XMIResource, XMLSave};
+use emf_xmi::{XMIResource, XMLLoader, XMLSave};
 
 const NS: &str = "http://example.com/library/1.0";
 

@@ -184,7 +184,10 @@ class {{name}}:\n\
     let mut l = Lists::new();
     // C++ supplies only one class row; the inner `features` list is absent so
     // the nested each emits nothing, but the outer "class Foo:" line renders.
-    l.insert("classes".to_string(), vec![row(&[("name", "Foo"), ("features", "")])]);
+    l.insert(
+        "classes".to_string(),
+        vec![row(&[("name", "Foo"), ("features", "")])],
+    );
     let out = jet(tmpl, &Vars::new(), &l);
     assert!(out.contains("class Foo:"), "out was: {out}");
 }

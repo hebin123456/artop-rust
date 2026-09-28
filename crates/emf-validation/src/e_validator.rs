@@ -23,7 +23,9 @@ pub const DIAGNOSTIC_SOURCE: &str = "org.eclipse.emf.validation";
 /// hold an empty string (C++ `noEmptyNameEval`). Objects without a `name`
 /// feature (or where it isn't set) pass.
 fn no_empty_name_eval(target: &dyn EObject) -> bool {
-    let name = target.e_get("name").and_then(|v| v.as_str().map(String::from));
+    let name = target
+        .e_get("name")
+        .and_then(|v| v.as_str().map(String::from));
     name.map(|n| !n.is_empty()).unwrap_or(true)
 }
 

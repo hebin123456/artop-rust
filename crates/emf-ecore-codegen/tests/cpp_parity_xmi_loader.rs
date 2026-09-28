@@ -30,7 +30,10 @@ const K_SIMPLE_ECORE: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 fn load_simple_epackage_metadata() {
     let pkg = load(K_SIMPLE_ECORE);
     assert_eq!(pkg.name(), "simple");
-    assert_eq!(pkg.ns_uri().unwrap().to_string(), "http://example.com/simple");
+    assert_eq!(
+        pkg.ns_uri().unwrap().to_string(),
+        "http://example.com/simple"
+    );
     assert_eq!(pkg.ns_prefix(), "sim");
     assert_eq!(pkg.classes().len(), 1);
 }

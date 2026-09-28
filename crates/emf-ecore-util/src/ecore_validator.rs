@@ -14,9 +14,7 @@
 //! method flags where they change behaviour.
 
 use emf_common::diagnostic::{Diagnostic, DiagnosticChain, Severity};
-use emf_ecore::{
-    EAttribute, EClass, EEnum, EOperation, EPackage, EReference, EStructuralFeature,
-};
+use emf_ecore::{EAttribute, EClass, EEnum, EOperation, EPackage, EReference, EStructuralFeature};
 
 /// Diagnostic source, aligned to EMF `org.eclipse.emf.ecore`.
 pub const DIAGNOSTIC_SOURCE: &str = "org.eclipse.emf.ecore";
@@ -37,7 +35,10 @@ pub mod codes {
 pub struct EcoreValidator;
 
 fn is_error_or_worse(chain: &DiagnosticChain) -> bool {
-    matches!(chain.worst(), Some(Severity::Error) | Some(Severity::Cancel))
+    matches!(
+        chain.worst(),
+        Some(Severity::Error) | Some(Severity::Cancel)
+    )
 }
 
 /// `EcoreValidator::isWellFormedURI`. Loose: non-empty and carries a colon.
@@ -280,11 +281,7 @@ impl EcoreValidator {
 
     // ===== EClass constraints =====
 
-    pub fn validate_e_class_at_most_one_id(
-        &self,
-        c: &EClass,
-        chain: &mut DiagnosticChain,
-    ) -> bool {
+    pub fn validate_e_class_at_most_one_id(&self, c: &EClass, chain: &mut DiagnosticChain) -> bool {
         let mut ids = 0;
         for f in c.e_structural_features() {
             if f.is_id() {
@@ -385,11 +382,7 @@ impl EcoreValidator {
         c: &EClass,
         chain: &mut DiagnosticChain,
     ) -> bool {
-        let feature_names: Vec<&str> = c
-            .e_structural_features()
-            .iter()
-            .map(|f| f.name())
-            .collect();
+        let feature_names: Vec<&str> = c.e_structural_features().iter().map(|f| f.name()).collect();
         let mut ok = true;
         for op in c.e_operations() {
             if feature_names.contains(&op.name()) {

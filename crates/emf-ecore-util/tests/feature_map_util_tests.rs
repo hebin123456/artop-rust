@@ -8,7 +8,7 @@
 
 use emf_common::value::Val;
 use emf_ecore::{EClass, EClassKind, EStructuralFeature};
-use emf_ecore_util::feature_map::{FeatureMap};
+use emf_ecore_util::feature_map::FeatureMap;
 use emf_ecore_util::feature_map_util::FeatureMapUtil;
 
 fn attr(name: &str, upper: i32) -> EStructuralFeature {

@@ -138,18 +138,12 @@ fn dynamic_xmi_roundtrips_preserving_fields() {
 
     let b0 = books[0].as_object().unwrap().borrow();
     assert_eq!(b0.e_class(), "Book");
-    assert_eq!(
-        b0.e_get("title"),
-        Some(Val::String("Book One".into()))
-    );
+    assert_eq!(b0.e_get("title"), Some(Val::String("Book One".into())));
     assert_eq!(b0.e_get("pages"), Some(Val::Int(100)));
 
     let b1 = books[1].as_object().unwrap().borrow();
     assert_eq!(b1.e_class(), "Book");
-    assert_eq!(
-        b1.e_get("title"),
-        Some(Val::String("Book Two".into()))
-    );
+    assert_eq!(b1.e_get("title"), Some(Val::String("Book Two".into())));
     assert_eq!(b1.e_get("pages"), Some(Val::Int(200)));
 }
 
@@ -174,8 +168,10 @@ fn static_and_dynamic_xmi_agree() {
     // C++ containment children carry the *feature* name (`<books>`), never
     // `library:Book`, so it counts `<books`. Both construction paths must emit
     // exactly two containment book elements.
-    let dyn_books = count_occurrences(&dynamic_xmi, "<books ") + count_occurrences(&dynamic_xmi, "<books/>");
-    let sta_books = count_occurrences(&static_xmi, "<books ") + count_occurrences(&static_xmi, "<books/>");
+    let dyn_books =
+        count_occurrences(&dynamic_xmi, "<books ") + count_occurrences(&dynamic_xmi, "<books/>");
+    let sta_books =
+        count_occurrences(&static_xmi, "<books ") + count_occurrences(&static_xmi, "<books/>");
     assert_eq!(dyn_books, 2, "dynamic document holds two book children");
     assert_eq!(sta_books, dyn_books, "static count matches dynamic");
 }

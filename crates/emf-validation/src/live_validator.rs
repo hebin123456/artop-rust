@@ -71,10 +71,7 @@ impl ValidationLiveAdapter {
 
     /// Register a live-validation listener. It is invoked with `(mutated
     /// target, diagnostics)` whenever a live validation runs on a target.
-    pub fn add_listener(
-        &mut self,
-        listener: impl FnMut(&dyn EObject, &[Diagnostic]) + 'static,
-    ) {
+    pub fn add_listener(&mut self, listener: impl FnMut(&dyn EObject, &[Diagnostic]) + 'static) {
         self.listeners.push(Box::new(listener));
     }
 
@@ -104,7 +101,9 @@ impl ValidationLiveAdapter {
         if !self.enabled {
             return Vec::new();
         }
-        let diags = self.validator.validate_mode(target, Some(ConstraintMode::Live));
+        let diags = self
+            .validator
+            .validate_mode(target, Some(ConstraintMode::Live));
         for l in &mut self.listeners {
             (l)(target, &diags);
         }

@@ -82,7 +82,8 @@ fn rec_positions(
     if !seen.insert(key) {
         return;
     }
-    out.entry(path.to_string()).or_insert_with(|| Rc::clone(obj));
+    out.entry(path.to_string())
+        .or_insert_with(|| Rc::clone(obj));
     let b: Ref<'_, dyn EObject> = obj.borrow();
     let dy = match emf_common::eobject::downcast_ref::<DynamicEObject>(&*b) {
         Some(d) => d,

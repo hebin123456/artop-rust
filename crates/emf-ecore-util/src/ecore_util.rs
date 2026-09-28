@@ -212,9 +212,7 @@ pub fn get_id(obj: &ObjectRef) -> String {
 /// attribute (EMF `EcoreUtil.setID`).
 pub fn set_id(obj: &ObjectRef, id: &str) -> bool {
     match id_feature_name(obj) {
-        Some(feat) => obj
-            .borrow_mut()
-            .e_set(&feat, Val::String(id.to_string())),
+        Some(feat) => obj.borrow_mut().e_set(&feat, Val::String(id.to_string())),
         None => false,
     }
 }
@@ -338,7 +336,8 @@ fn single_object(v: &Val) -> Option<ObjectRef> {
 
 /// The object refs held by a `Val::List`, if any.
 fn list(v: &Val) -> Option<Vec<Option<ObjectRef>>> {
-    v.as_list().map(|l| l.iter().map(|x| x.as_object().cloned()).collect())
+    v.as_list()
+        .map(|l| l.iter().map(|x| x.as_object().cloned()).collect())
 }
 
 /// Object identity key: the raw `Rc` pointer address.

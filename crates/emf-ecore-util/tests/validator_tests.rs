@@ -8,7 +8,9 @@ use emf_ecore::{
     EStructuralFeature as SF,
 };
 use emf_ecore_util::e_object_validator as eov;
-use emf_ecore_util::ecore_validator::{is_well_formed_java_identifier, is_well_formed_uri, EcoreValidator};
+use emf_ecore_util::ecore_validator::{
+    is_well_formed_java_identifier, is_well_formed_uri, EcoreValidator,
+};
 
 // ---------- helpers ----------
 
@@ -113,12 +115,24 @@ fn validate_every_proxy_resolves_no_cross_ref() {
 #[test]
 fn ecore_validator_codes_constants() {
     assert_eq!(emf_ecore_util::ecore_validator::codes::AT_MOST_ONE_ID, 1);
-    assert_eq!(emf_ecore_util::ecore_validator::codes::INTERFACE_IS_ABSTRACT, 25);
-    assert_eq!(emf_ecore_util::ecore_validator::codes::NO_CIRCULAR_SUPER_TYPES, 26);
-    assert_eq!(emf_ecore_util::ecore_validator::codes::UNIQUE_FEATURE_NAMES, 32);
+    assert_eq!(
+        emf_ecore_util::ecore_validator::codes::INTERFACE_IS_ABSTRACT,
+        25
+    );
+    assert_eq!(
+        emf_ecore_util::ecore_validator::codes::NO_CIRCULAR_SUPER_TYPES,
+        26
+    );
+    assert_eq!(
+        emf_ecore_util::ecore_validator::codes::UNIQUE_FEATURE_NAMES,
+        32
+    );
     assert_eq!(emf_ecore_util::ecore_validator::codes::VALID_TYPE, 40);
     assert_eq!(emf_ecore_util::ecore_validator::codes::WELL_FORMED_NAME, 44);
-    assert_eq!(emf_ecore_util::ecore_validator::codes::CONSISTENT_CONTAINER, 51);
+    assert_eq!(
+        emf_ecore_util::ecore_validator::codes::CONSISTENT_CONTAINER,
+        51
+    );
 }
 
 #[test]
@@ -202,8 +216,7 @@ fn disjoint_feature_and_operation_signatures_positive() {
     c.add_feature(attr("name").feature().clone());
     c.add_operation(EOperation::new("op"));
     let mut chain = DiagnosticChain::new();
-    assert!(plugin()
-        .validate_e_class_disjoint_feature_and_operation_signatures(&c, &mut chain));
+    assert!(plugin().validate_e_class_disjoint_feature_and_operation_signatures(&c, &mut chain));
 }
 
 #[test]
@@ -212,8 +225,7 @@ fn disjoint_feature_and_operation_signatures_negative() {
     c.add_feature(attr("doIt").feature().clone());
     c.add_operation(EOperation::new("doIt"));
     let mut chain = DiagnosticChain::new();
-    assert!(!plugin()
-        .validate_e_class_disjoint_feature_and_operation_signatures(&c, &mut chain));
+    assert!(!plugin().validate_e_class_disjoint_feature_and_operation_signatures(&c, &mut chain));
 }
 
 #[test]
@@ -404,8 +416,7 @@ fn eclassifier_well_formed_instance_type_name_positive() {
     let mut c = class_of("Foo");
     c.set_instance_class_name("java.lang.String");
     let mut chain = DiagnosticChain::new();
-    assert!(plugin()
-        .validate_e_classifier_well_formed_instance_type_name(&c, &mut chain));
+    assert!(plugin().validate_e_classifier_well_formed_instance_type_name(&c, &mut chain));
 }
 
 #[test]
@@ -413,8 +424,7 @@ fn eclassifier_well_formed_instance_type_name_negative() {
     let mut c = class_of("Foo");
     c.set_instance_class_name(".bad.");
     let mut chain = DiagnosticChain::new();
-    assert!(!plugin()
-        .validate_e_classifier_well_formed_instance_type_name(&c, &mut chain));
+    assert!(!plugin().validate_e_classifier_well_formed_instance_type_name(&c, &mut chain));
 }
 
 // EEnum.
@@ -457,7 +467,7 @@ fn data_type_stubs_positive() {
     assert!(v.validate_e_boolean(true, &mut chain));
     assert!(v.validate_e_int(42, &mut chain));
     assert!(v.validate_e_string("hello", &mut chain));
-    assert!(v.validate_e_double(3.14, &mut chain));
+    assert!(v.validate_e_double(2.75, &mut chain));
 }
 
 #[test]

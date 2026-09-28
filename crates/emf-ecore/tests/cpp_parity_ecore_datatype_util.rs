@@ -11,8 +11,8 @@
 //!   - There is no standalone `coerce`; type coercion is expressed by
 //!     `from_string(to_string(...))`, verified below.
 use emf_ecore::ecore_package::ecore_package;
-use emf_ecore::{datatype, ECORE_NS_URI};
 use emf_ecore::Val;
+use emf_ecore::{datatype, ECORE_NS_URI};
 
 #[test]
 fn e_string_from_to() {
@@ -40,13 +40,16 @@ fn e_boolean_from_to() {
 
 #[test]
 fn e_double_from_to() {
-    let v = datatype::from_string("EDouble", "3.14");
-    assert!(matches!(&v, Val::Double(d) if (*d - 3.14).abs() < 1e-9));
+    let v = datatype::from_string("EDouble", "2.75");
+    assert!(matches!(&v, Val::Double(d) if (*d - 2.75).abs() < 1e-9));
 }
 
 #[test]
 fn default_values() {
-    assert_eq!(datatype::default_value("EString"), Val::String(String::new()));
+    assert_eq!(
+        datatype::default_value("EString"),
+        Val::String(String::new())
+    );
     assert_eq!(datatype::default_value("EInt"), Val::Int(0));
     assert_eq!(datatype::default_value("EBoolean"), Val::Bool(false));
     assert_eq!(datatype::default_value("EDouble"), Val::Double(0.0));

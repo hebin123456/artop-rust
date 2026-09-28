@@ -159,7 +159,9 @@ impl Copier {
                         .set_container(Some((weak.clone(), name.clone())));
                     vals.push(Val::Object(cn.clone() as ObjectRef));
                 }
-                parent_unode.borrow_mut().e_set_by_name(&name, Val::List(vals));
+                parent_unode
+                    .borrow_mut()
+                    .e_set_by_name(&name, Val::List(vals));
             } else {
                 self.copy_one(&children[0])?;
                 let cn = self
@@ -167,7 +169,8 @@ impl Copier {
                     .get(&ptr(&children[0]))
                     .cloned()
                     .ok_or_else(|| "child copy node missing".to_string())?;
-                cn.borrow_mut().set_container(Some((weak.clone(), name.clone())));
+                cn.borrow_mut()
+                    .set_container(Some((weak.clone(), name.clone())));
                 parent_unode
                     .borrow_mut()
                     .e_set_by_name(&name, Val::Object(cn.clone() as ObjectRef));

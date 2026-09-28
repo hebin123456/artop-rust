@@ -42,8 +42,12 @@ fn e_validator_unregister() {
 fn e_validator_default_constraints_registered() {
     let mut v = EValidator::new();
     v.register_default_constraints();
-    assert!(v.get_constraint("emf.validation.default.no_empty_name").is_some());
-    assert!(v.get_constraint("emf.validation.default.no_null_required_ref").is_some());
+    assert!(v
+        .get_constraint("emf.validation.default.no_empty_name")
+        .is_some());
+    assert!(v
+        .get_constraint("emf.validation.default.no_null_required_ref")
+        .is_some());
 }
 
 // ===== validate =====

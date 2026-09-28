@@ -87,7 +87,9 @@ fn str_of(obj: &ObjectRef, feat: &str) -> String {
 }
 
 fn ref_of(obj: &ObjectRef, feat: &str) -> Option<ObjectRef> {
-    obj.borrow().e_get(feat).and_then(|v| v.as_object().map(|o| o.clone()))
+    obj.borrow()
+        .e_get(feat)
+        .and_then(|v| v.as_object().map(|o| o.clone()))
 }
 
 fn list_of(obj: &ObjectRef, feat: &str) -> Vec<ObjectRef> {
@@ -108,19 +110,17 @@ fn cpp_output_has_java_compatible_href() {
     let reg = registry_from(K_LIBRARY_ECORE);
 
     let lib = dyn_of(&reg, "Library");
-    lib.borrow_mut()
-        .e_set("name", Val::String("My Lib".into()));
+    lib.borrow_mut().e_set("name", Val::String("My Lib".into()));
 
     let book = dyn_of(&reg, "Book");
-    book.borrow_mut()
-        .e_set("title", Val::String("B1".into()));
+    book.borrow_mut().e_set("title", Val::String("B1".into()));
 
     let writer = dyn_of(&reg, "Writer");
-    writer.borrow_mut()
-        .e_set("name", Val::String("W1".into()));
+    writer.borrow_mut().e_set("name", Val::String("W1".into()));
 
     // Non-containment cross-reference: book.author -> writer.
-    book.borrow_mut().e_set("author", Val::Object(writer.clone()));
+    book.borrow_mut()
+        .e_set("author", Val::Object(writer.clone()));
     // book under lib.books (containment); writer under lib.writers.
     lib.borrow_mut()
         .e_set("books", Val::List(vec![Val::Object(book)]));
@@ -139,7 +139,10 @@ fn cpp_output_has_java_compatible_href() {
         !out.contains("author=\"//\""),
         "no bare placeholder href allowed: {out}"
     );
-    assert!(out.contains("xmlns:xsi"), "xmlns:xsi must be declared: {out}");
+    assert!(
+        out.contains("xmlns:xsi"),
+        "xmlns:xsi must be declared: {out}"
+    );
 }
 
 /// Test 2: roundtrip (save → load → re-read) preserves the cross-reference.
@@ -151,14 +154,16 @@ fn roundtrip_preserves_cross_reference() {
     lib.borrow_mut().e_set("name", Val::String("Lib".into()));
 
     let book = dyn_of(&reg, "Book");
-    book.borrow_mut().e_set("title", Val::String("Title".into()));
+    book.borrow_mut()
+        .e_set("title", Val::String("Title".into()));
 
     let writer = dyn_of(&reg, "Writer");
     writer
         .borrow_mut()
         .e_set("name", Val::String("WriterName".into()));
 
-    book.borrow_mut().e_set("author", Val::Object(writer.clone()));
+    book.borrow_mut()
+        .e_set("author", Val::Object(writer.clone()));
     lib.borrow_mut()
         .e_set("books", Val::List(vec![Val::Object(book)]));
     lib.borrow_mut()
