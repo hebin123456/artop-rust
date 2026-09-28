@@ -29,6 +29,7 @@ done < <(find "$SPHINX/src" -name '*.cpp' | sort)
 SRCS=(
   "${SPHINX_SRCS[@]}"
   "$XMI"/src/*.cpp
+  "$XMI"/third-party/pugixml/pugixml.cpp
   "$EDIT"/src/*.cpp
   "$UTIL"/src/*.cpp
   "$ECORE"/src/*.cpp
@@ -39,11 +40,36 @@ SRCS=(
 )
 TESTS=("$SPHINX"/tests/*.cpp)
 
+# Include order matters: `emf-ecore-util` ships its own (incompatible)
+# `emf/ecore/util/ConversionDelegate.h`, so `$ECORE/include` must come before
+# `$UTIL/include` for `emf-ecore/src/util/ConversionDelegate.cpp` to resolve the
+# right declaration. Mirrors build_edit_oracle.sh. emf-xmi bundles pugixml under
+# `third-party/`, whose directory must be on the include path.
+INCLUDES=(
+  -I"$SPHINX/include" -I"$SPHINX/src" -I"$XMI/include"
+  -I"$XMI/third-party/pugixml" -I"$EDIT/include" -I"$ECORE/include"
+  -I"$COMMON/include" -I"$UTIL/include"
+)
+
+# The C++ module is a STATIC library in CMake, so object files with unresolved
+# symbols are simply not pulled into the test link unless referenced. Reproduce
+# that by archiving the module objects and linking the tests against the archive
+# (e.g. `ScopingResourceSetImpl.cpp` / `AbstractProxyResolverService.cpp` call
+# pure-virtual base members that no test triggers).
+OBJ="$OUT/obj"; rm -rf "$OBJ"; mkdir -p "$OBJ"
+objs=()
+i=0
+for f in "${SRCS[@]}"; do
+  o="$OBJ/mod_$i.o"; i=$((i + 1))
+  g++ -std=c++17 -O1 -pthread "${INCLUDES[@]}" -c "$f" -o "$o"
+  objs+=("$o")
+done
+rm -f "$OUT/libemf_sphinx_modules.a"
+ar rcs "$OUT/libemf_sphinx_modules.a" "${objs[@]}"
+
 bin="$OUT/emf_sphinx_tests"
-g++ -std=c++17 -O1 -pthread \
-    -I"$SPHINX/include" -I"$SPHINX/src" -I"$XMI/include" -I"$EDIT/include" \
-    -I"$UTIL/include" -I"$ECORE/include" -I"$COMMON/include" \
-    "${SRCS[@]}" "${TESTS[@]}" -o "$bin"
+g++ -std=c++17 -O1 -pthread "${INCLUDES[@]}" \
+    "${TESTS[@]}" "$OUT/libemf_sphinx_modules.a" -o "$bin"
 # Tolerate a non-zero test exit so the JSON is still produced: a failing C++
 # reference test is reported as PENDING (not REGRESSION) by compare.py.
 "$bin" > "$OUT/sphinx_oracle.log" 2>&1 || true
