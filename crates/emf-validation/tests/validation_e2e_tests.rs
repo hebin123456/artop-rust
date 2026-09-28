@@ -130,8 +130,8 @@ fn static_all_null_required_ref_produces_no_null_required_ref() {
 // Trade-off vs C++ `ValidationLiveAdapter.attach`: the Rust `DynamicEObject`
 // emits no change notifications (and mutating an object while re-reading it from
 // inside its own `RefCell::borrow_mut` would deadlock), so this adapter drives
-// live validation explicitly via `validate_now` after each mutation — the same
-// convention already used by `artop-validation`. The `attach`/`detach`/
+// live validation explicitly via `validate_now` after each mutation. The
+// `attach`/`detach`/
 // `add_listener` plumbing and the listener dispatch are exercised end-to-end.
 #[test]
 fn live_attach_set_empty_name_triggers_listener() {

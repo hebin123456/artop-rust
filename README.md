@@ -22,7 +22,7 @@ kinds instead of monomorphizing over every class.
 The workspace mirrors the C++ repo's module split exactly: the underlying EMF
 foundation lives in sibling `emf-*` crates (named `emf-<module>` like the C++
 sources in `cpp/emf-cpp/`), while the AUTOSAR-specific ("artop") layers are
-grouped together under `crates/emf-artop/` — matching `cpp/emf-cpp/emf-artop/{autosar448-model, artop-runtime, artop-codegen}`.
+grouped together under `crates/emf-artop/` — matching `cpp/emf-cpp/emf-artop/{autosar448-model, emf-artop-runtime, emf-artop-codegen, emf-artop-validation}`.
 
 Each directory mirrors one C++ module; module names map 1:1 to C++ translation units.
 
@@ -43,6 +43,7 @@ Each directory mirrors one C++ module; module names map 1:1 to C++ translation u
 | `emf-artop/autosar448-model` | `emf-artop/autosar448-model` (generated AUTOSAR 4.4.8 registry + reflection) | **working** |
 | `emf-artop/artop-runtime` | `emf-artop/emf-artop-runtime` (AUTOSAR ser/de, versions) | skeleton |
 | `emf-artop/artop-codegen` | `emf-artop/emf-artop-codegen` (.ecore → static model) | skeleton |
+| `emf-artop/artop-validation` | `emf-artop/emf-artop-validation` (AUTOSAR business constraints over `emf-validation`) | **working** |
 | `examples/arxml-roundtrip` | `examples/arxml_roundtrip` | skeleton |
 | `examples/arxml-validate` | `examples/arxml_validate` | skeleton |
 

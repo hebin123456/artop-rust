@@ -41,7 +41,7 @@ CRATES = {
          "equivalence_engine","match_engine","merge_engine","requirement_engine"]),
     "emf-validation": (
         "Model validation, batch + live (port of C++ `emf-validation`).",
-        ["annotation_constraint_loader","autosar_constraints","constraint_descriptor",
+        ["annotation_constraint_loader","constraint_descriptor",
          "constraint_parser","diagnostician","e_validator","live_validator",
          "validation_service"]),
     "emf-xcore": (
@@ -61,13 +61,22 @@ CRATES = {
     "artop-codegen": (
         "Generate static models from .ecore (port of C++ `emf-artop/emf-artop-codegen`).",
         ["generator","ecore_to_model"]),
+    "artop-validation": (
+        "AUTOSAR business constraints, layered over the generic emf-validation base "
+        "(port of C++ `emf-artop/emf-artop-validation`).",
+        ["autosar_constraints"]),
 }
+
+def cpp_module(crate):
+    """C++ module name this crate ports: `artop-*` -> `emf-artop-*` (C++ lives
+    under `emf-artop/`), everything else already carries the `emf-` prefix."""
+    return f"emf-{crate}" if crate.startswith("artop-") else crate
 
 def stub_lib(crate, desc, mods, depends):
     lines = []
     lines.append(f"//! {desc}")
     lines.append(f"//!")
-    lines.append(f"//! Port target: C++ `emf-{crate.replace('artop-','')}` module of `hebin123456/artop-cpp`.")
+    lines.append(f"//! Port target: C++ `{cpp_module(crate)}` module of `hebin123456/artop-cpp`.")
     lines.append(f"//!")
     lines.append(f"//! This file is *skeleton*: each module below is a compile placeholder that")
     lines.append(f"//! will be filled with the port of the corresponding C++ translation unit.")
@@ -105,7 +114,7 @@ def stub_cargo(name, deps):
     )
 
 # artop-specific crates live under crates/emf-artop/ (matches C++ emf-artop/).
-GROUP = {"artop-runtime", "artop-codegen"}
+GROUP = {"artop-runtime", "artop-codegen", "artop-validation"}
 
 def crate_dir(crate):
     sub = "emf-artop/" if crate in GROUP else ""

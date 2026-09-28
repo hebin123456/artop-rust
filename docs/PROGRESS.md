@@ -40,8 +40,9 @@ crates/
   emf-sphinx        <- emf-sphinx
   emf-artop/
     autosar448-model  <- emf-artop/autosar448-model（生成的 AUTOSAR 4.4.8 注册表）
-    artop-runtime     <- emf-artop/artop-runtime
-    artop-codegen     <- emf-artop/artop-codegen
+    artop-runtime     <- emf-artop/emf-artop-runtime（AUTOSAR 序列化/反序列化）
+    artop-codegen     <- emf-artop/emf-artop-codegen（.ecore → 静态模型）
+    artop-validation  <- emf-artop/emf-artop-validation（AUTOSAR 业务约束，叠在 emf-validation 之上）
 examples/
   arxml-roundtrip   <- examples/arxml_roundtrip
   arxml-validate    <- examples/arxml_validate
@@ -66,6 +67,7 @@ examples/
 | `emf-xcore` | ✅ 工作 | Xcore DSL 解析器：`dsl`（Package/EClass/EDataType/EEnum/Feature/Annotation AST，Multiplicity 与 kind 判定）+ `parser`（递归下降：注解 `@key[.value]`、`package/class/interface/abstract`、`extends`、`#` containment 引用、`?*/` 多重性、`@DataType`/`@Enum`），23+ 用例覆盖 |
 | `emf-acceleo` | ✅ 工作 | Acceleo MTL/`M2T` 引擎（对 C++ `AcceleoAst.h`/`AcceleoParser.cpp`/`AcceleoEngine.cpp` 的 1:1 移植）：`ast`（Block：Text/Expr/For/If/Let/File/Protected；Expr：Var/String/Int/Bool/Nav/Call/CollectionLit/If/Lambda）+ `parser`（递归下降：`[module]`/`template`/`query`/`import`/`extends`、`[for]/[if]/[let]/[file]/[protected]`、`post(...)` 容错）+ `engine`（`AcceleoEngine`/`AcceleoService`：上下文/服务注册/模板·查询查找、表达式求值、`=`/`or`/`and`/比较/算术、lambda + `->collect/select/reject/forAll/exists/size` 集合操作、`[file]` 落盘与 `[protected]` 区域合并）；C++ `AcceleoTests.cpp`(18) + `AlignmentTests.cpp`(8) 已逐条对照，26 条全 PASS（`cpp_parity_acceleo`） |
 | `emf-sphinx` | ✅ 工作 | headless 核心：`Node`（attributes/children fluent builder）+ `Root`/`Model`（全路径索引 O(1) `resolve`）+ 深度遍历（`Continue`/`Prune`/`Stop` 控制）；Sphinx 扩展：`metamodel`（`MetaModelDescriptor`/`AbstractMetaModelDescriptor` + `MetaModelVersionData` + thread-local `MetaModelDescriptorRegistry`）、`resource`（`SchemaLocationUriHandler`/`ExtendedBasicExtendedMetaData`/`ModelConverterRegistry`）、`scoping`（`FileResourceScope`/`FileResourceScopeProvider`/`ResourceScopeProviderRegistry`）、`ecore`（`OrderedFeatureMap`）、`util`（`EcoreResourceUtil`）；C++ 5 个测试文件 68 条已逐条对照并全 PASS（`cpp_parity_sphinx`） |
+| `emf-artop/artop-validation` | ✅ 工作 | AUTOSAR 业务约束层（对齐 `org.artop.aal.*.constraints`）：`autosar_constraints`（shortName 非空/同父唯一、uuid 非空/全局唯一、category 必填、no-unresolved-proxy；BATCH+LIVE）；叠在通用 `emf-validation` 底座之上，由调用方显式注册。C++ `AutosarConstraintsTests.cpp` 13 条已逐条对照 |
 | `emf-artop/artop-runtime` | ⬜ 骨架 | AUTOSAR 序列化 / 反序列化 / 版本元数据 |
 | `emf-artop/artop-codegen` | ⬜ 骨架 | `.ecore` → 静态模型 |
 

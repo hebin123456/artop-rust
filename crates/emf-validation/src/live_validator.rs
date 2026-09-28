@@ -21,8 +21,7 @@
 //! attachment as *state* (the attached root + registered listeners) and drive
 //! live validation explicitly through [`ValidationLiveAdapter::validate_now`],
 //! which runs the `LIVE` constraint set and dispatches the diagnostics to all
-//! listeners. Callers re-run `validate_now` after mutating the model, matching
-//! the existing `artop-validation` convention for the same reason.
+//! listeners. Callers re-run `validate_now` after mutating the model.
 
 use crate::constraint::ConstraintMode;
 use crate::e_validator::EValidator;
