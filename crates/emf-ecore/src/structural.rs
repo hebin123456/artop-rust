@@ -63,6 +63,9 @@ pub struct EStructuralFeature {
     /// engines (e.g. merge eOpposite maintenance) can read it without the
     /// `EReference` wrapper.
     opposite: Option<String>,
+    /// The lazily-created generic type (`EGenericType`), C++
+    /// `ETypedElementImpl::eGenericType_`. Kept in sync with `type_name`.
+    generic_type: Option<EGenericType>,
 }
 
 impl EStructuralFeature {
@@ -94,6 +97,7 @@ impl EStructuralFeature {
             id: false,
             resolve_proxies: true,
             opposite: None,
+            generic_type: None,
         }
     }
 
@@ -213,9 +217,10 @@ impl EStructuralFeature {
     pub fn set_upper_bound(&mut self, v: i32) {
         self.upper_bound = v;
     }
-    /// Whether this is a many-valued feature (`upperBound` != 1).
+    /// Whether this is a many-valued feature. C++ `ETypedElementImpl::isMany`:
+    /// `upperBound == -1 || upperBound > 1`.
     pub fn is_many(&self) -> bool {
-        self.upper_bound != 1
+        self.upper_bound == -1 || self.upper_bound > 1
     }
     /// Whether required (`lowerBound` > 0).
     pub fn is_required(&self) -> bool {
@@ -249,23 +254,147 @@ impl EStructuralFeature {
     pub fn type_name(&self) -> Option<&str> {
         self.type_name.as_deref()
     }
-    /// Set the meta type name.
+    /// Set the meta type name. C++ `ETypedElementImpl::setEType` also syncs any
+    /// already-created `EGenericType.eClassifier`.
     pub fn set_type_name(&mut self, t: impl Into<String>) {
-        self.type_name = Some(t.into());
+        let t = t.into();
+        if let Some(g) = self.generic_type.as_mut() {
+            g.set_e_classifier(t.clone());
+        }
+        self.type_name = Some(t);
     }
     /// Whether ordered.
     pub fn is_ordered(&self) -> bool {
         self.ordered
     }
+    /// Set ordered (C++ `ETypedElement.setOrdered`).
+    pub fn set_ordered(&mut self, v: bool) {
+        self.ordered = v;
+    }
     /// Whether unique.
     pub fn is_unique(&self) -> bool {
         self.unique
+    }
+    /// Set unique (C++ `ETypedElement.setUnique`).
+    pub fn set_unique(&mut self, v: bool) {
+        self.unique = v;
+    }
+    /// The generic type (`EGenericType`), lazily created and cached, with its
+    /// `eClassifier` initialized from the current `eType`. C++
+    /// `ETypedElementImpl::getEGenericType`.
+    pub fn e_generic_type(&mut self) -> &mut EGenericType {
+        if self.generic_type.is_none() {
+            let mut g = EGenericType::default();
+            g.set_e_classifier_opt(self.type_name.clone());
+            self.generic_type = Some(g);
+        }
+        self.generic_type.as_mut().unwrap()
+    }
+    /// The generic type if one has been created, without lazily creating it.
+    pub fn generic_type(&self) -> Option<&EGenericType> {
+        self.generic_type.as_ref()
+    }
+    /// Replace the generic type (C++ `ETypedElementImpl::setEGenericType`),
+    /// syncing `eType` back from the new generic type's classifier when set.
+    pub fn set_e_generic_type(&mut self, gt: EGenericType) {
+        if let Some(cls) = gt.e_classifier() {
+            self.type_name = Some(cls.to_string());
+        }
+        self.generic_type = Some(gt);
+    }
+    /// Whether the generic type is *parameterized* — i.e. it cannot be
+    /// expressed by a plain `eType` attribute. C++
+    /// `ETypedElementImpl::isEGenericTypeParameterized`:
+    /// `eTypeParameter != null || !eTypeArguments.isEmpty()`.
+    pub fn is_generic_type_parameterized(&self) -> bool {
+        self.generic_type
+            .as_ref()
+            .is_some_and(|g| g.is_parameterized())
     }
 }
 
 impl Default for EStructuralFeature {
     fn default() -> Self {
         Self::new("unnamed", FeatureKind::Attribute, 0, 1)
+    }
+}
+
+/// A generic type reference (EMF `EGenericType`, C++ `EGenericTypeImpl`): the
+/// parameterized form of an `eType`, used for generics, unions and wildcards.
+///
+/// Where C++ holds `EClassifier*`/`EGenericType*` pointers, Rust stores the
+/// classifier as a type name and nests the bounds/arguments by value.
+#[derive(Debug, Clone, Default)]
+pub struct EGenericType {
+    /// `eClassifier` — the raw classifier behind the generic type, if any.
+    classifier: Option<String>,
+    /// `eTypeArguments` — the ordered type arguments (union members live here).
+    type_arguments: Vec<EGenericType>,
+    /// `eUpperBound` — the upper bound of a wildcard, if any.
+    upper_bound: Option<Box<EGenericType>>,
+    /// `eLowerBound` — the lower bound of a wildcard, if any.
+    lower_bound: Option<Box<EGenericType>>,
+    /// `eTypeParameter` — the type parameter this references, if any.
+    type_parameter: Option<String>,
+}
+
+impl EGenericType {
+    /// New, empty generic type.
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// `eClassifier`.
+    pub fn e_classifier(&self) -> Option<&str> {
+        self.classifier.as_deref()
+    }
+    /// Set `eClassifier`.
+    pub fn set_e_classifier(&mut self, name: impl Into<String>) {
+        self.classifier = Some(name.into());
+    }
+    /// Set `eClassifier` from an optional name (used by lazy init).
+    pub fn set_e_classifier_opt(&mut self, name: Option<String>) {
+        self.classifier = name;
+    }
+    /// `eTypeArguments`.
+    pub fn e_type_arguments(&self) -> &[EGenericType] {
+        &self.type_arguments
+    }
+    /// Replace `eTypeArguments`.
+    pub fn set_e_type_arguments(&mut self, args: Vec<EGenericType>) {
+        self.type_arguments = args;
+    }
+    /// Append one `eTypeArgument`.
+    pub fn add_e_type_argument(&mut self, arg: EGenericType) {
+        self.type_arguments.push(arg);
+    }
+    /// `eUpperBound`.
+    pub fn e_upper_bound(&self) -> Option<&EGenericType> {
+        self.upper_bound.as_deref()
+    }
+    /// Set `eUpperBound`.
+    pub fn set_e_upper_bound(&mut self, ub: EGenericType) {
+        self.upper_bound = Some(Box::new(ub));
+    }
+    /// `eLowerBound`.
+    pub fn e_lower_bound(&self) -> Option<&EGenericType> {
+        self.lower_bound.as_deref()
+    }
+    /// Set `eLowerBound`.
+    pub fn set_e_lower_bound(&mut self, lb: EGenericType) {
+        self.lower_bound = Some(Box::new(lb));
+    }
+    /// `eTypeParameter`.
+    pub fn e_type_parameter(&self) -> Option<&str> {
+        self.type_parameter.as_deref()
+    }
+    /// Set `eTypeParameter`.
+    pub fn set_e_type_parameter(&mut self, p: impl Into<String>) {
+        self.type_parameter = Some(p.into());
+    }
+    /// Whether this generic type is parameterized (C++
+    /// `isEGenericTypeParameterized` payload): a type parameter or arguments.
+    pub fn is_parameterized(&self) -> bool {
+        self.type_parameter.is_some() || !self.type_arguments.is_empty()
     }
 }
 

@@ -55,7 +55,9 @@ pub use dynamic::{adopt_many, adopt_single, node_to_object, DynNode, DynamicEObj
 pub use ecore_package::{ECORE_NS_PREFIX, ECORE_NS_URI};
 pub use feature_id::FeatureID;
 pub use package::{make_package_ref, EFactory, EPackage, PackageRef, PackageRegistry};
-pub use structural::{EAttribute, EOperation, EParameter, EReference, EStructuralFeature};
+pub use structural::{
+    EAttribute, EGenericType, EOperation, EParameter, EReference, EStructuralFeature,
+};
 
 /// Alias for the shared value type (re-exported for crate ergonomics).
 pub use emf_common::value::{ObjectRef, Val};

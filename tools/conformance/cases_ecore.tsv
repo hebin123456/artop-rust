@@ -12,6 +12,10 @@
 #   - 未映射的 C++ 测试 => PENDING(尚未核对), 逐步补齐
 #   - 已映射但 Rust 测试失败 => REGRESSION(必须修复)
 # 以 # 开头的行为注释, 忽略。
+#
+# 未映射(PENDING): ETypedElement 的 eGet/eSet/eIsSet/eUnset 反射块与 ETypeProxy
+# (C++ 以 feature 指针驱动 ETypedElementImpl 的反射 eGet/eSet; Rust 特征按名访问,
+#  无对应的特征指针反射入口, 不可 1:1 移植)。
 
 group	cpp_test	rust_test	pkg
 EClassImpl	EClassImpl_CreateEClassAndAttribute	eclass_create_eclass_and_attribute	emf-ecore
@@ -49,6 +53,14 @@ DataTypeUtil	DataTypeUtil_EDoubleFromTo	datatype_edouble_from_to	emf-ecore
 DataTypeUtil	DataTypeUtil_DefaultValues	datatype_default_values	emf-ecore
 DataTypeUtil	DataTypeUtil_NameOfEDataType	datatype_name_of_edata_type	emf-ecore
 ETypedElement	ETypedElement_Defaults	ettypedelement_defaults	emf-ecore
+ETypedElement	ETypedElement_SetEType	set_type_name	emf-ecore
+ETypedElement	ETypedElement_IsMany	is_many_semantics	emf-ecore
+ETypedElement	ETypedElement_EGenericType_Lazy	generic_type_lazy	emf-ecore
+ETypedElement	ETypedElement_SetEType_SyncsGenericType	set_type_syncs_generic_type	emf-ecore
+ETypedElement	ETypedElement_GenericTypeFollowsEType	generic_type_follows_e_type	emf-ecore
+ETypedElement	ETypedElement_Union_GenericTypeArguments	union_generic_type_arguments	emf-ecore
+ETypedElement	ETypedElement_GenericTypeWildcard	generic_type_wildcard	emf-ecore
+ETypedElement	ETypedElement_Union_AsNestedGenericType	union_as_nested_generic_type	emf-ecore
 DynamicEObject	DynamicEObject_EClass_ReturnsConstructorClass	dynamic_eobject::eclass_returns_constructor_class	emf-ecore
 DynamicEObject	DynamicEObject_ESetEGet_StringAttribute	dynamic_eobject::eset_eget_string_attribute	emf-ecore
 DynamicEObject	DynamicEObject_ESetEGet_IntAttribute	dynamic_eobject::eset_eget_int_attribute	emf-ecore

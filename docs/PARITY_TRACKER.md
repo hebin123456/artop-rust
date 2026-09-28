@@ -31,8 +31,8 @@
 | EClassImplTests.cpp | ✅ cpp_parity_ecore_eclass（12；create/featureID/abstract·interface/get-by-ID/isSuperTypeOf/eAllSuperTypes·Attributes·References·StructuralFeatures·featureCount/ID-marked 全对齐；
    按签名对 C++ 差异：is_super_type_of 严格不自反（C++ 自反 true）、eAllOperations 继承聚合缺、getEIDAttribute 全层查找缺（Rust id_feature 仅本类）） |
 | EPackageImplTests.cpp | ✅ cpp_parity_ecore_epackage（3；create/get-classifier/registry put·get·remove/accessors 全对齐） |
-| ETypedElementImplTests.cpp | 🔶 cpp_parity_ecore_etyped_element（4；默认值 lower0·upper1·ordered·unique / isMany / setType→type_name / kind）；
-   ⏳ eGet·eSet·eIsSet·eUnset 反射、bounds·ordered·unique setter、EGenericType（union/wildcard/懒加载同步）Rust 无对应 |
+| ETypedElementImplTests.cpp | ✅ cpp_parity_ecore_etyped_element（12；默认值 lower0·upper1·ordered·unique / setType→type_name / isMany（`upper==-1‖upper>1`，含 upper=0 非多值）/ bounds·ordered·unique setter / kind / **EGenericType：懒加载创建·复用同一实例·setEType 同步 eClassifier·eType 跟进·union（eTypeArguments）·wildcard（eUpperBound·eLowerBound）·isEGenericTypeParameterized（eTypeParameter‖eTypeArguments）** 全对齐。
+   ⏳ 余 C++ 的 `eGet·eSet·eIsSet·eUnset` 反射块（以 feature 指针驱动）与 ETypeProxy 无 Rust 对照：Rust 特征按名访问，无特征指针反射入口 |
 | EObjectEInvokeTests.cpp | 🔶 cpp_parity_ecore_einvoke（4；EOperation 元数据 operation_id/get-by-name/count 全对齐）；
    ⏳ eInvoke + EInvocationDelegate 派发机制 Rust 尚无对应（需对象级 invocation-delegate 注册表）|
 | EcorePackageTests.cpp | ✅ cpp_parity_ecore_package（6；ePackage 周期初始化/19 元类·18 内建数据类型注册/全局 registry 按 nsURI·prefix 索引/nsURI·prefix·name 常量/FeatureID 常量块（EClass·EPackage）全对齐。
