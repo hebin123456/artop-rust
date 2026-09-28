@@ -117,11 +117,9 @@ fn segment_sequence_to_string_simple() {
     assert_eq!(seq.length(), 5);
 }
 
-/// DIVERGENCE (tracked): C++ `SegmentSequence::create("", "value")` keeps the
-/// value as a *single* segment; Rust splits on empty delimiter per character.
-/// Aligned to Java `SegmentSequence` char-mode which differs from C++ here.
+/// C++ `SegmentSequence::create("", "value")` keeps the value as a *single*
+/// segment (no delimiter -> no split).
 #[test]
-#[ignore = "Rust splits on empty delimiter per char; C++ keeps single segment"]
 fn segment_sequence_no_delimiter() {
     let seq = SegmentSequence::create("", "hello");
     assert_eq!(seq.segment_count(), 1);
@@ -288,10 +286,9 @@ fn segment_sequence_single_segment() {
     assert_eq!(seq.to_string(), "only");
 }
 
-/// DIVERGENCE (tracked): same empty-delimiter char-split behaviour as above;
-/// C++ treats `create("", "a/b/c")` as a single segment.
+/// C++ treats `create("", "a/b/c")` as a single segment: an empty delimiter
+/// never splits.
 #[test]
-#[ignore = "Rust splits on empty delimiter per char; C++ keeps single segment"]
 fn segment_sequence_empty_delimiter_single() {
     let seq = SegmentSequence::create("", "a/b/c");
     assert_eq!(seq.segment_count(), 1);

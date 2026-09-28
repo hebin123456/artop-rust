@@ -7,14 +7,14 @@
 按 `docs/EMF_PARITY_GATE.md`：**底座全部 ✅ 之前，严禁 artop。**
 
 ## emf-common（基础，最优先）
-> 已移植核心数据结构：`cpp_parity_common_core.rs`（25 通过 + 1 忽略）。EList / BasicEMap 全对齐；UniqueEList 语义用 BasicEList+add_unique 对齐，唯 `set` 时重复值拒绝（C++ 抛异常）记为**待补**：Rust 需专用 `UniqueEList` 类型。
+> 已移植核心数据结构：`cpp_parity_common_core.rs`（26 通过，无忽略）。EList / BasicEMap 全对齐；`UniqueEList` 已建专用类型并复刻 C++ 的重复拒绝（`try_set` / `try_add_at_index` 返回 `Err(Duplicate)`）；`NotifyingList` 通知 hook 已扩展为带值 + ADD_MANY/REMOVE_MANY/REMOVE/MOVE 变体；`SegmentSequence` 空分隔符语义已对齐（空分隔符不拆、单段）。
 | C++ 测试 | Rust 状态 |
 |---|---|
 | EListTests.cpp | ✅ cpp_parity_common_core |
-| UniqueEListTests.cpp | 🔶 基本对齐；`set` 重复拒绝待补 |
+| UniqueEListTests.cpp | ✅ `elist::UniqueEList`（`try_set`/`try_add_at_index` 重复拒绝、from-iter 去重、with_capacity、FastCompare、move）；对照 `cpp_parity_common_core` + `elist` 单测 |
 | BasicEMapTests.cpp | ✅ cpp_parity_common_core |
-| NotifyingListTests.cpp | 🔶 Rust `ListChange` hook 仅 Add/Remove/Set/Move 且不带值、无 ADD_MANY/REMOVE_MANY/MOVE 语义；需先扩展 hook（带值 + 批量变体）再完整移植，现仅数据操作可对齐 |
-| SegmentSequenceTests.cpp | 🔶 `cpp_parity_common_path`；空分隔符差异待补（Rust 按字符拆 vs C++ 单段） |
+| NotifyingListTests.cpp | ✅ `elist::NotifyingList`（Add/Remove/Set/Move/AddMany/RemoveMany 带值通知 + required/passive 分支）；对照 `elist` 单测 |
+| SegmentSequenceTests.cpp | ✅ `cpp_parity_common_path` + `segment_sequence` 单测；空分隔符=单段、空值=空序列、append 重切分语义全对齐 |
 | ENotifierTests.cpp | ✅ cpp_parity_common_enotifier（30；adapter 生命周期/eNotify/NotificationChain 抵消+合并+dispatch/wasSet）；⏳ 3 条 `setEContainer` 反向通知属 emf-ecore EObject 容器接线，待补 |
 | URITests.cpp | ✅ cpp_parity_common_path |
 | ResourceTests.cpp | 🔶 cpp_parity_common_resource（19）；setResourceSet 关联待补 |

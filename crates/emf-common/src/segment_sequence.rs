@@ -31,10 +31,22 @@ pub struct SegmentSequence {
 }
 
 impl SegmentSequence {
-    /// Split `value` on `delimiter`.
+    /// Split `value` on `delimiter` (C++ `create(delimiter, value)`).
+    ///
+    /// - An empty `value` yields an empty sequence.
+    /// - An empty `delimiter` keeps the whole `value` as a *single* segment.
+    /// - Otherwise the value is split on the delimiter, keeping empty segments.
     pub fn create(delimiter: &str, value: &str) -> SegmentSequence {
-        let segments = split_segments(delimiter, value);
-        intern(delimiter, segments)
+        if value.is_empty() {
+            return SegmentSequence::empty(delimiter);
+        }
+        if delimiter.is_empty() {
+            return intern(delimiter, vec![value.to_string()]);
+        }
+        intern(
+            delimiter,
+            value.split(delimiter).map(String::from).collect(),
+        )
     }
 
     /// An empty sequence for the delimiter.
@@ -42,19 +54,10 @@ impl SegmentSequence {
         intern(delimiter, Vec::new())
     }
 
-    /// Build from an explicit list of segments (further split on delimiter).
+    /// Build from an explicit list of segments (further split on delimiter,
+    /// C++ `create(delimiter, segments)`).
     pub fn create_from_segments(delimiter: &str, segments: Vec<String>) -> SegmentSequence {
-        let mut out = Vec::new();
-        for s in segments {
-            if delimiter.is_empty() {
-                if !s.is_empty() {
-                    out.push(s);
-                }
-            } else {
-                out.extend(split_segments(delimiter, &s));
-            }
-        }
-        intern(delimiter, out)
+        intern(delimiter, split_segments(delimiter, &segments))
     }
 
     /// The delimiter.
@@ -92,37 +95,50 @@ impl SegmentSequence {
         self.segments.join(&self.delimiter).len()
     }
 
-    /// Append a single segment, returning a new sequence.
+    /// Append a single segment, returning a new sequence (C++ `append(string)`).
     pub fn append_segment(&self, segment: &str) -> SegmentSequence {
-        let mut s = self.segments.clone();
-        if self.delimiter.is_empty() && segment.is_empty() {
-            return self.clone();
+        if self.segments.is_empty() {
+            return SegmentSequence::create(&self.delimiter, segment);
         }
-        s.extend(split_segments(&self.delimiter, segment));
+        if segment.contains(&self.delimiter) {
+            let sub = SegmentSequence::create(&self.delimiter, segment);
+            return self.append(&sub);
+        }
+        let mut s = self.segments.clone();
+        s.push(segment.to_string());
         intern(&self.delimiter, s)
     }
 
-    /// Append a whole other sequence (its delimiter elements are merged onto ours).
+    /// Append a whole other sequence (C++ `append(SegmentSequence)`). When the
+    /// delimiters differ, `other`'s segments are re-split onto this delimiter.
     pub fn append(&self, other: &SegmentSequence) -> SegmentSequence {
+        if self.segments.is_empty() {
+            if self.delimiter == other.delimiter {
+                return other.clone();
+            }
+            return intern(
+                &self.delimiter,
+                split_segments(&self.delimiter, &other.segments),
+            );
+        }
         let mut s = self.segments.clone();
-        s.extend(other.segments.iter().cloned());
+        if self.delimiter != other.delimiter {
+            s.extend(split_segments(&self.delimiter, &other.segments));
+        } else {
+            s.extend(other.segments.iter().cloned());
+        }
         intern(&self.delimiter, s)
     }
 
-    /// Append multiple segments, each split on the delimiter, returning a new sequence.
+    /// Append multiple segments, each split on the delimiter, returning a new
+    /// sequence (C++ `append(vector<string>)`).
     pub fn append_segments(&self, segments: &[&str]) -> SegmentSequence {
-        let mut s = self.segments.clone();
-        if self.delimiter.is_empty() {
-            for seg in segments {
-                if !seg.is_empty() {
-                    s.push(seg.to_string());
-                }
-            }
-        } else {
-            for seg in segments {
-                s.extend(split_segments(&self.delimiter, seg));
-            }
+        let owned: Vec<String> = segments.iter().map(|s| s.to_string()).collect();
+        if self.segments.is_empty() {
+            return SegmentSequence::create_from_segments(&self.delimiter, owned);
         }
+        let mut s = self.segments.clone();
+        s.extend(split_segments(&self.delimiter, &owned));
         intern(&self.delimiter, s)
     }
 
@@ -149,12 +165,28 @@ impl std::fmt::Display for SegmentSequence {
     }
 }
 
-fn split_segments(delimiter: &str, value: &str) -> Vec<String> {
+/// C++ `splitSegments(delimiter, segments, length)`: split a *list* of
+/// segments. With an empty delimiter, empty segments are dropped and the rest
+/// are kept verbatim; otherwise each segment containing the delimiter is split
+/// on it, while segments without it are kept as-is.
+fn split_segments(delimiter: &str, segments: &[String]) -> Vec<String> {
+    let mut out = Vec::with_capacity(segments.len());
     if delimiter.is_empty() {
-        // Character sequence when no delimiter.
-        return value.chars().map(|c| c.to_string()).collect();
+        for s in segments {
+            if !s.is_empty() {
+                out.push(s.clone());
+            }
+        }
+        return out;
     }
-    value.split(delimiter).map(String::from).collect()
+    for s in segments {
+        if s.contains(delimiter) {
+            out.extend(s.split(delimiter).map(String::from));
+        } else {
+            out.push(s.clone());
+        }
+    }
+    out
 }
 
 fn intern(delimiter: &str, segments: Vec<String>) -> SegmentSequence {
@@ -296,10 +328,25 @@ mod tests {
     }
 
     #[test]
-    fn no_delimiter_is_character_sequence() {
+    fn no_delimiter_is_single_segment() {
         let s = SegmentSequence::create("", "abc");
-        assert_eq!(s.segment_count(), 3);
-        assert_eq!(s.segments(), ["a", "b", "c"]);
+        assert_eq!(s.segment_count(), 1);
+        assert_eq!(s.segments(), ["abc"]);
+    }
+
+    #[test]
+    fn empty_value_is_empty_sequence() {
+        let s = SegmentSequence::create("/", "");
+        assert_eq!(s.segment_count(), 0);
+        assert_eq!(s.to_string(), "");
+    }
+
+    #[test]
+    fn empty_delimiter_append_keeps_whole_segment() {
+        let s = SegmentSequence::create("", "x").append_segment("ab");
+        assert_eq!(s.segment_count(), 2);
+        assert_eq!(s.segments(), ["x", "ab"]);
+        assert_eq!(s.to_string(), "xab");
     }
 
     #[test]

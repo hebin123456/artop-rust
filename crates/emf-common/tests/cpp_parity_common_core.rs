@@ -5,7 +5,7 @@
 //! `EList<int>`; Rust models the same semantics with [`BasicEList<T>`], its
 //! `add_unique` / `index_of` / `remove_value` covering C++ `UniqueEList`, and
 //! [`BasicEMap`] for the map.
-use emf_common::elist::{BasicEList, EList, ListChange};
+use emf_common::elist::{BasicEList, EList, ListChange, UniqueDuplicateError, UniqueEList};
 use emf_common::emap::BasicEMap;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -200,18 +200,22 @@ fn unique_elist_add_all_drops_duplicates() {
     }
 }
 
-/// KNOWN DIVERGENCE (tracked, not a pass): C++ `UniqueEList.set` throws
-/// `invalid_argument` when the replacement value is already present. Rust has
-/// no dedicated `UniqueEList` type yet (only `BasicEList`), so this invariant
-/// is not enforced. Ignored until a `UniqueEList` semantics lands.
+/// C++ `UniqueEList.set` throws `invalid_argument` when the replacement value
+/// is already present at another index, and `add(index, value)` likewise throws
+/// on a duplicate. Rust models both with a dedicated `UniqueEList` whose
+/// `try_set` / `try_add_at_index` report `Err(Duplicate)`.
 #[test]
-#[ignore = "Rust lacks dedicated UniqueEList; duplicate-set rejection pending"]
 fn unique_elist_set_duplicate_is_rejected() {
-    let mut list = BasicEList::new();
+    let mut list: UniqueEList<i32> = UniqueEList::new();
     list.add(1);
     list.add(2);
-    let dup = *list.get(0).unwrap();
-    list.set(1, dup);
+    assert_eq!(list.try_set(1, 1), Err(UniqueDuplicateError::Duplicate));
+    assert_eq!(list.get(1), Some(&2));
+    assert_eq!(
+        list.try_add_at_index(1, 2),
+        Err(UniqueDuplicateError::Duplicate)
+    );
+    assert_eq!(list.len(), 2);
 }
 
 #[test]
