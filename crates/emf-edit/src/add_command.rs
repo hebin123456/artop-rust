@@ -32,7 +32,9 @@ struct State {
     executed: bool,
 }
 
-/// The mutable, undo/redo-capable `AddCommand`.
+/// The mutable, undo/redo-capable `AddCommand`. A default-constructed command
+/// has no owner/feature and therefore cannot execute (C++ `AddCommand cmd;`).
+#[derive(Default)]
 pub struct AddCommand {
     #[allow(dead_code)]
     shared: AbstractBase,
@@ -93,16 +95,18 @@ impl AddCommand {
     }
 
     /// The post-state list: append `value` to the snapshot list (or start a
-    /// fresh list when the feature was unset).
+    /// fresh list when the feature was unset). A `Val::List` value adds all its
+    /// elements, mirroring the EMF `AddCommand` collection form.
     fn build_added(&self) -> Option<Val> {
         let st = self.state.borrow();
-        let value = &st.value;
         let mut list: Vec<Val> = match &st.snapshot_before {
             Some(Val::List(l)) => l.clone(),
             _ => Vec::new(),
         };
-        if let Some(v) = value {
-            list.push(v.clone());
+        match &st.value {
+            Some(Val::List(items)) => list.extend(items.iter().cloned()),
+            Some(v) => list.push(v.clone()),
+            None => {}
         }
         Some(Val::List(list))
     }

@@ -1,0 +1,42 @@
+# C++(参考, oracle) 测试 ↔ Rust(移植) 测试的等价映射表 —— emf-edit 模块
+#
+# 列: group<TAB>cpp_test<TAB>rust_test<TAB>pkg
+#   group    : emf-edit 内的来源文件(CommandTests / EditingDomainTests / PlaceholderTests)
+#   cpp_test : C++ 单元测试名(来自 emf-cpp/emf-edit/tests, 以 EMF_TEST 注册)
+#   rust_test: 对应的 Rust 测试路径(cargo test -p emf-edit <path> -- --exact)
+#   pkg      : 所属 crate(emf-edit)
+#
+# 规则:
+#   - 已映射且 Rust 同名校验通过 => PASS(行为等价)
+#   - 已映射但 Rust 测试缺失 => PENDING(等价待实现, 可接受)
+#   - 未映射的 C++ 测试 => PENDING(尚未核对), 逐步补齐
+#   - 已映射但 Rust 测试失败 => REGRESSION(必须修复)
+# 以 # 开头的行为注释, 忽略。
+
+group	cpp_test	rust_test	pkg
+CommandTests	Command_DefaultConstruct_CannotExecute	command_default_construct_cannot_execute	emf-edit
+CommandTests	Command_WithOwner_CanExecute	command_with_owner_can_execute	emf-edit
+CommandTests	Command_SetCommand_UnsetValueExists	command_set_command_unset_value_exists	emf-edit
+CommandTests	ChangeDescription_Empty	change_description_empty	emf-edit
+CommandTests	ChangeDescription_Add	change_description_add	emf-edit
+CommandTests	AdapterFactoryEditingDomain_Construct	adapter_factory_editing_domain_construct	emf-edit
+CommandTests	ComposedAdapterFactory_ChildFactories	composed_adapter_factory_child_factories	emf-edit
+PlaceholderTests	Placeholder	placeholder	emf-edit
+PlaceholderTests	Placeholder_FrameworkLoads	placeholder_framework_loads	emf-edit
+PlaceholderTests	Placeholder_NamespacesAreAccessible	placeholder_namespaces_are_accessible	emf-edit
+EditingDomainTests	SetCommand_SingleValue_ExecuteUndoRedo	set_command_single_value_execute_undo_redo	emf-edit
+EditingDomainTests	SetCommand_Overwrite_UndoRestoresOldValue	set_command_overwrite_undo_restores_old_value	emf-edit
+EditingDomainTests	SetCommand_UnsetValue_ExecuteUndoRedo	set_command_unset_value_execute_undo_redo	emf-edit
+EditingDomainTests	AddCommand_MultiValue_ExecuteUndoRedo	add_command_multi_value_execute_undo_redo	emf-edit
+EditingDomainTests	AddCommand_Collection_ExecuteUndoRedo	add_command_collection_execute_undo_redo	emf-edit
+EditingDomainTests	RemoveCommand_ExecuteUndoRedo	remove_command_execute_undo_redo	emf-edit
+EditingDomainTests	MoveCommand_ExecuteUndoRedo	move_command_execute_undo_redo	emf-edit
+EditingDomainTests	ReplaceCommand_ExecuteUndoRedo	replace_command_execute_undo_redo	emf-edit
+EditingDomainTests	BasicCommandStack_MultipleCommands_UndoRedo	basic_command_stack_multiple_commands_undo_redo	emf-edit
+EditingDomainTests	TransactionalEditingDomain_WriteNotificationDeferral	transactional_editing_domain_write_notification_deferral	emf-edit
+EditingDomainTests	TransactionalEditingDomain_RunExclusive_ReadAllowed	transactional_editing_domain_run_exclusive_read_allowed	emf-edit
+EditingDomainTests	TransactionalEditingDomain_NestedTransaction_Reentrant	transactional_editing_domain_nested_transaction_reentrant	emf-edit
+EditingDomainTests	TransactionalEditingDomain_CrossObjectDedup_MultipleSetMerged	transactional_editing_domain_cross_object_dedup_multiple_set_merged	emf-edit
+EditingDomainTests	TransactionalEditingDomain_Dedup_DifferentFeaturesNotMerged	transactional_editing_domain_dedup_different_features_not_merged	emf-edit
+EditingDomainTests	TransactionalEditingDomain_Dedup_MultiObjectsIndependentMerge	transactional_editing_domain_dedup_multi_objects_independent_merge	emf-edit
+EditingDomainTests	TransactionalEditingDomain_Dedup_NonSetEventsPreserved	transactional_editing_domain_dedup_non_set_events_preserved	emf-edit

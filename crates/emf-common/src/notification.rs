@@ -9,6 +9,7 @@
 //! [`NotificationChain`]. Behavior is kept equivalent to the C++ unit tests
 //! (see `tools/conformance/cases.tsv`, group `enotifier`).
 
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::value::Val;
@@ -73,6 +74,9 @@ pub struct Notification {
     pub position: i32,
     /// Whether the isSet state changed.
     was_set: bool,
+    /// Opaque identity of the notifier that fired this notification (C++
+    /// `Notification::notifier()`); `0` until an emitter attaches one.
+    notifier: usize,
 }
 
 impl Notification {
@@ -92,7 +96,25 @@ impl Notification {
             new_value,
             position,
             was_set,
+            notifier: 0,
         }
+    }
+
+    /// The emitting notifier's opaque identity (C++ `Notification::notifier()`),
+    /// or `0` when not attached by an emitter.
+    pub fn notifier(&self) -> usize {
+        self.notifier
+    }
+
+    /// Attach the emitting notifier's identity (used by [`emit`]).
+    pub fn set_notifier(&mut self, notifier: usize) {
+        self.notifier = notifier;
+    }
+
+    /// Builder form of [`Self::set_notifier`].
+    pub fn with_notifier(mut self, notifier: usize) -> Self {
+        self.notifier = notifier;
+        self
     }
 
     /// Event type.
@@ -138,6 +160,38 @@ pub trait Adapter: std::any::Any {
 
     /// Downcast handle to the concrete adapter (aligned to `EObject::as_any`).
     fn as_any(&self) -> &dyn std::any::Any;
+}
+
+/// A factory of adapters (EMF `AdapterFactory`, C++
+/// `emf-common/AdapterFactory`). Given a notifier (and an optional existing
+/// adapter to reuse), it can create an adapter of the requested type.
+///
+/// The C++ port keys the requested type on `std::any`; here the key is a plain
+/// string name (e.g. a Java-style type id), which keeps the trait object-safe
+/// without dragging `Any` into every implementation.
+pub trait AdapterFactory {
+    /// Whether this factory can produce adapters of the given type key
+    /// (EMF `isFactoryForType`).
+    fn is_factory_for_type(&self, type_key: &str) -> bool {
+        let _ = type_key;
+        false
+    }
+
+    /// Adapt `target`, reusing `existing` when possible (EMF `adapt`).
+    fn adapt(
+        &self,
+        target: &NotifierHandle,
+        existing: Option<&dyn Adapter>,
+    ) -> Option<Box<dyn Adapter>> {
+        let _ = (target, existing);
+        None
+    }
+
+    /// Create a fresh adapter for `target` (EMF `createAdapter`).
+    fn create_adapter(&self, target: &NotifierHandle) -> Option<Box<dyn Adapter>> {
+        let _ = target;
+        None
+    }
 }
 
 /// A notifier: holds a set of adapters and dispatches notifications to them.
@@ -264,6 +318,128 @@ impl Notifier {
     }
 }
 
+impl std::fmt::Debug for Notifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Notifier")
+            .field("adapters", &self.adapters.len())
+            .field("deliver", &self.deliver)
+            .finish()
+    }
+}
+
+/// A shared handle to a [`Notifier`], used to defer notifications and deliver
+/// them later (EMF Transaction notification deferral).
+pub type NotifierHandle = Rc<RefCell<Notifier>>;
+
+/// Stable opaque identity of a [`NotifierHandle`] (the address of its `Rc`
+/// allocation), matching the value carried by `Notification::notifier()`.
+pub fn notifier_id(handle: &NotifierHandle) -> usize {
+    Rc::as_ptr(handle) as usize
+}
+
+thread_local! {
+    /// Whether delivery is currently deferred to transaction commit
+    /// (EMF `TransactionalEditingDomain` notification deferral).
+    static DELIVERY_DEFERRED: Cell<bool> = const { Cell::new(false) };
+    /// Notifications accumulated while delivery is deferred, each paired with
+    /// the notifier that must eventually receive it.
+    static PENDING: RefCell<Vec<(NotifierHandle, Notification)>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+/// Whether notification delivery is currently deferred (C++
+/// `TransactionalEditingDomain::isDeliverNotifications` inverted).
+pub fn is_delivery_deferred() -> bool {
+    DELIVERY_DEFERRED.with(Cell::get)
+}
+
+/// Enable / disable deferral (C++ `setDeliverNotifications`). While enabled,
+/// [`emit`] accumulates notifications instead of delivering them.
+pub fn set_delivery_deferred(deferred: bool) {
+    DELIVERY_DEFERRED.with(|c| c.set(deferred));
+}
+
+/// Deliver `n` to `notifier`, or accumulate it while delivery is deferred
+/// (C++ `Notifier::eNotify` + transaction interceptor hook). A notifier with no
+/// adapters (or `eDeliver == false`) is skipped, matching EMF
+/// `eNotificationRequired`.
+pub fn emit(notifier: &NotifierHandle, n: &Notification) {
+    if !notifier.borrow().e_notification_required() {
+        return;
+    }
+    // Attach the emitter's identity (C++ `Notification::notifier()`), so
+    // adapters and the transaction coalescer can tell which notifier fired.
+    let mut n = n.clone();
+    n.set_notifier(notifier_id(notifier));
+    if is_delivery_deferred() {
+        PENDING.with(|p| p.borrow_mut().push((Rc::clone(notifier), n)));
+        return;
+    }
+    notifier.borrow_mut().e_notify(&n);
+}
+
+/// Coalesce and deliver every deferred notification (transaction commit).
+/// Ordering is preserved for the surviving entries; see [`coalesce`].
+pub fn flush_deferred_notifications() {
+    let pending: Vec<(NotifierHandle, Notification)> =
+        PENDING.with(|p| std::mem::take(&mut *p.borrow_mut()));
+    let coalesced = coalesce(pending);
+    let was_deferred = is_delivery_deferred();
+    // Restore direct delivery so an adapter re-entering `emit` during dispatch
+    // is not accumulated again.
+    set_delivery_deferred(false);
+    for (handle, n) in coalesced {
+        handle.borrow_mut().e_notify(&n);
+    }
+    set_delivery_deferred(was_deferred);
+}
+
+/// Global coalescing over the whole deferred queue (EMF Transaction
+/// `NotificationManager`; broader than [`NotificationChain`], which only merges
+/// adjacent notifications):
+/// - `SET` + `SET` on the same notifier/feature merges: earliest old value is
+///   kept, latest new value wins;
+/// - `ADD` + `REMOVE` of the same object/feature/position cancel to a no-op;
+/// - every other event is preserved as-is.
+fn coalesce(pending: Vec<(NotifierHandle, Notification)>) -> Vec<(NotifierHandle, Notification)> {
+    let mut out: Vec<(NotifierHandle, Notification)> = Vec::with_capacity(pending.len());
+    for (handle, n) in pending {
+        match n.event {
+            EventType::Set => {
+                let merged = out.iter_mut().find(|(_, e)| {
+                    e.event == EventType::Set && e.notifier == n.notifier && e.feature == n.feature
+                });
+                match merged {
+                    Some((_, existing)) => {
+                        existing.new_value = n.new_value;
+                        existing.position = n.position;
+                        existing.was_set = n.was_set;
+                    }
+                    None => out.push((handle, n)),
+                }
+            }
+            EventType::Remove => {
+                let cancelled = out.iter().position(|(_, e)| {
+                    e.event == EventType::Add
+                        && e.notifier == n.notifier
+                        && e.feature == n.feature
+                        && e.position == n.position
+                        && obj_key(&e.new_value).is_some()
+                        && obj_key(&e.new_value) == obj_key(&n.old_value)
+                });
+                match cancelled {
+                    Some(i) => {
+                        out.swap_remove(i);
+                    }
+                    None => out.push((handle, n)),
+                }
+            }
+            _ => out.push((handle, n)),
+        }
+    }
+    out
+}
+
 /// A batch of notifications dispatched together (EMF `NotificationChain`).
 #[derive(Debug, Clone, Default)]
 pub struct NotificationChain {
@@ -366,9 +542,6 @@ mod tests {
     impl Rec {
         fn new(id: u32, out: Rc<RefCell<Vec<(u32, EventType)>>>) -> Box<dyn Adapter> {
             Box::new(Self { id, out })
-        }
-        fn count(&self, out: &Rc<RefCell<Vec<(u32, EventType)>>>) -> usize {
-            out.borrow().iter().filter(|(i, _)| *i == self.id).count()
         }
     }
     impl Adapter for Rec {
@@ -896,5 +1069,119 @@ mod tests {
         child.borrow_mut().set_e_container(parent.clone());
         child.borrow_mut().set_e_container(parent.clone()); // no change
         assert_eq!(events.borrow().len(), 1);
+    }
+
+    // ---- transaction notification deferral (emit + flush) ----
+
+    fn recording_notifier(events: &Rc<RefCell<Vec<Notification>>>) -> NotifierHandle {
+        let handle: NotifierHandle = Rc::new(RefCell::new(Notifier::new()));
+        handle.borrow_mut().add_adapter(Box::new(TargetedRec {
+            seal: Rc::new(RefCell::new(None)),
+            events: Rc::clone(events),
+        }));
+        handle
+    }
+
+    fn set_notif(feature: &str, old: &str, new: &str) -> Notification {
+        Notification::new(
+            EventType::Set,
+            Some(feature.to_string()),
+            Val::String(old.into()),
+            Val::String(new.into()),
+            -1,
+            true,
+        )
+    }
+
+    #[test]
+    fn emit_direct_attaches_notifier_identity() {
+        let events: Rc<RefCell<Vec<Notification>>> = Rc::new(RefCell::new(vec![]));
+        let handle = recording_notifier(&events);
+        emit(&handle, &set_notif("name", "a", "b"));
+        let rec = events.borrow();
+        assert_eq!(rec.len(), 1);
+        assert_eq!(rec[0].notifier(), notifier_id(&handle));
+        assert_eq!(rec[0].feature(), Some("name"));
+    }
+
+    #[test]
+    fn emit_skips_notifier_without_adapters() {
+        let handle: NotifierHandle = Rc::new(RefCell::new(Notifier::new()));
+        // No adapters: eNotificationRequired() is false, nothing delivered.
+        emit(&handle, &set_notif("name", "a", "b"));
+        assert!(handle.borrow().adapters().is_empty());
+    }
+
+    #[test]
+    fn deferred_emit_accumulates_then_flush_delivers() {
+        let events: Rc<RefCell<Vec<Notification>>> = Rc::new(RefCell::new(vec![]));
+        let handle = recording_notifier(&events);
+        set_delivery_deferred(true);
+        emit(&handle, &set_notif("name", "a", "b"));
+        // Not delivered yet.
+        assert!(events.borrow().is_empty());
+        flush_deferred_notifications();
+        set_delivery_deferred(false);
+        let rec = events.borrow();
+        assert_eq!(rec.len(), 1);
+        assert_eq!(rec[0].new_value, Val::String("b".into()));
+    }
+
+    #[test]
+    fn flush_coalesces_multiple_set_earliest_old_latest_new() {
+        let events: Rc<RefCell<Vec<Notification>>> = Rc::new(RefCell::new(vec![]));
+        let handle = recording_notifier(&events);
+        set_delivery_deferred(true);
+        emit(&handle, &set_notif("name", "initial", "a"));
+        emit(&handle, &set_notif("name", "a", "b"));
+        emit(&handle, &set_notif("name", "b", "c"));
+        flush_deferred_notifications();
+        set_delivery_deferred(false);
+        let rec = events.borrow();
+        assert_eq!(rec.len(), 1);
+        assert_eq!(rec[0].old_value, Val::String("initial".into()));
+        assert_eq!(rec[0].new_value, Val::String("c".into()));
+    }
+
+    #[test]
+    fn flush_dedup_multi_objects_merge_independently() {
+        let a_events: Rc<RefCell<Vec<Notification>>> = Rc::new(RefCell::new(vec![]));
+        let b_events: Rc<RefCell<Vec<Notification>>> = Rc::new(RefCell::new(vec![]));
+        let a = recording_notifier(&a_events);
+        let b = recording_notifier(&b_events);
+        set_delivery_deferred(true);
+        emit(&a, &set_notif("name", "0", "a1"));
+        emit(&b, &set_notif("name", "0", "b1"));
+        emit(&a, &set_notif("name", "a1", "a2"));
+        emit(&b, &set_notif("name", "b1", "b2"));
+        flush_deferred_notifications();
+        set_delivery_deferred(false);
+        assert_eq!(a_events.borrow().len(), 1);
+        assert_eq!(b_events.borrow().len(), 1);
+        assert_eq!(a_events.borrow()[0].new_value, Val::String("a2".into()));
+        assert_eq!(b_events.borrow()[0].new_value, Val::String("b2".into()));
+    }
+
+    #[test]
+    fn flush_keeps_non_set_events() {
+        let events: Rc<RefCell<Vec<Notification>>> = Rc::new(RefCell::new(vec![]));
+        let handle = recording_notifier(&events);
+        set_delivery_deferred(true);
+        emit(
+            &handle,
+            &Notification::new(
+                EventType::Unset,
+                Some("name".into()),
+                Val::Null,
+                Val::Null,
+                -1,
+                true,
+            ),
+        );
+        emit(&handle, &set_notif("name", "0", "x"));
+        flush_deferred_notifications();
+        set_delivery_deferred(false);
+        // UNSET + SET: distinct event types are not merged.
+        assert_eq!(events.borrow().len(), 2);
     }
 }

@@ -136,7 +136,6 @@ impl EditingDomain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use emf_common::eobject::EObject;
     use emf_ecore::{make_package_ref, DynamicEObject, EClass, EClassKind, PackageRegistry};
     use std::cell::RefCell;
     use std::rc::Rc;

@@ -66,7 +66,15 @@ jobs:
           repository: hebin123456/artop-cpp
           path: reference/artop-cpp
           fetch-depth: 1
-      - name: Build and run C++ oracle
+      - name: Build and run C++ oracle (emf-common)
         run: bash tools/conformance/build_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-common
-      - name: Compare Rust vs oracle
-        run: python3 tools/conformance/compare.py
+      - name: Build and run C++ oracle (emf-ecore)
+        run: bash tools/conformance/build_ecore_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-common
+      - name: Build and run C++ oracle (emf-edit)
+        run: bash tools/conformance/build_edit_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-edit reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-common reference/artop-cpp/cpp/emf-cpp/emf-ecore-util
+      - name: Compare Rust vs oracle (emf-common)
+        run: python3 tools/conformance/compare.py --oracle tools/conformance/build/oracle.json --cases tools/conformance/cases.tsv --pkg emf-common
+      - name: Compare Rust vs oracle (emf-ecore)
+        run: python3 tools/conformance/compare.py --oracle tools/conformance/build/ecore_oracle.json --cases tools/conformance/cases_ecore.tsv --pkg emf-ecore
+      - name: Compare Rust vs oracle (emf-edit)
+        run: python3 tools/conformance/compare.py --oracle tools/conformance/build/edit_oracle.json --cases tools/conformance/cases_edit.tsv --pkg emf-edit

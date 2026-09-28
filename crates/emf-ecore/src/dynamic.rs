@@ -7,6 +7,7 @@
 
 use crate::{EClass, Val};
 use emf_common::eobject::EObject;
+use emf_common::notification::{emit, Adapter, EventType, Notification, Notifier, NotifierHandle};
 use emf_common::uri::Uri;
 use emf_common::value::ObjectRef;
 use std::cell::RefCell;
@@ -40,6 +41,9 @@ pub struct DynamicEObject {
     /// A proxy URI, when this object stands in for an unresolved reference
     /// (`e_is_proxy` == true). `None` for a concrete object.
     proxy_uri: Option<Uri>,
+    /// The notification sink for this object (EMF `Notifier`). Adapters
+    /// attached here receive SET/UNSET notifications when features change.
+    notifier: NotifierHandle,
 }
 
 impl DynamicEObject {
@@ -53,6 +57,7 @@ impl DynamicEObject {
             container: None,
             registry: None,
             proxy_uri: None,
+            notifier: new_notifier_handle(),
         }
     }
 
@@ -66,6 +71,7 @@ impl DynamicEObject {
             container: None,
             registry: Some(registry),
             proxy_uri: None,
+            notifier: new_notifier_handle(),
         }
     }
 
@@ -77,6 +83,26 @@ impl DynamicEObject {
     /// The class descriptor.
     pub fn class(&self) -> &EClass {
         &self.e_class
+    }
+
+    /// The notification sink (EMF `Notifier`) for this object.
+    pub fn notifier(&self) -> &NotifierHandle {
+        &self.notifier
+    }
+
+    /// Attach an adapter to receive change notifications (EMF `eAdapters().add`).
+    pub fn add_adapter(&self, adapter: Box<dyn Adapter>) {
+        self.notifier.borrow_mut().add_adapter(adapter);
+    }
+
+    /// Detach adapter(s) matching a predicate (EMF `eAdapters().remove`).
+    pub fn remove_adapter(&self, predicate: impl FnMut(&dyn Adapter) -> bool) {
+        self.notifier.borrow_mut().remove_adapter(predicate);
+    }
+
+    /// Number of attached adapters (EMF `eAdapters().size`).
+    pub fn adapter_count(&self) -> usize {
+        self.notifier.borrow().adapters().len()
     }
 
     /// Read a feature by name. Returns `None` only when the feature name is not
@@ -108,12 +134,38 @@ impl DynamicEObject {
         };
         // Reference features store object refs / object lists; attributes store
         // atomic values.
-        if feature.is_reference() {
-            self.dynamic_settings.insert(name.to_string(), normalize_reference_value(&value));
+        let stored = if feature.is_reference() {
+            normalize_reference_value(&value)
         } else {
-            self.dynamic_settings.insert(name.to_string(), value);
-        }
+            value
+        };
+        // Emit a SET notification for single-valued features only, mirroring the
+        // C++ `DynamicEObject::eSet` (multi-valued writes go through the list and
+        // return before notifying). Old value is the raw stored value (Null when
+        // previously unset), matching C++.
+        let notify = feature.upper_bound() != -1;
+        let old_value = if notify {
+            self.dynamic_settings
+                .get(name)
+                .cloned()
+                .unwrap_or(Val::Null)
+        } else {
+            Val::Null
+        };
+        self.dynamic_settings
+            .insert(name.to_string(), stored.clone());
         self.set_flags.insert(name.to_string());
+        if notify {
+            let n = Notification::new(
+                EventType::Set,
+                Some(name.to_string()),
+                old_value,
+                stored,
+                -1,
+                false,
+            );
+            emit(&self.notifier, &n);
+        }
         true
     }
 
@@ -124,7 +176,8 @@ impl DynamicEObject {
         // non-empty; a single-valued feature follows the flag alone.
         let flag = self.set_flags.contains(name);
         if feature.upper_bound() == -1 {
-            let non_empty = matches!(self.dynamic_settings.get(name), Some(Val::List(l)) if !l.is_empty());
+            let non_empty =
+                matches!(self.dynamic_settings.get(name), Some(Val::List(l)) if !l.is_empty());
             Some(flag && non_empty)
         } else {
             Some(flag)
@@ -142,8 +195,24 @@ impl DynamicEObject {
         if feature.is_containment() {
             clear_container_children(self, name);
         }
+        // Capture the raw old value before clearing for the UNSET notification
+        // (mirrors C++ `DynamicEObject::eUnset`).
+        let old_value = self
+            .dynamic_settings
+            .get(name)
+            .cloned()
+            .unwrap_or(Val::Null);
         self.dynamic_settings.remove(name);
         self.set_flags.remove(name);
+        let n = Notification::new(
+            EventType::Unset,
+            Some(name.to_string()),
+            old_value,
+            Val::Null,
+            -1,
+            false,
+        );
+        emit(&self.notifier, &n);
         true
     }
 
@@ -187,7 +256,11 @@ impl DynamicEObject {
         if !self.e_all().into_iter().any(|f| f.name() == name) {
             return Vec::new();
         }
-        let cur = self.dynamic_settings.get(name).cloned().unwrap_or(Val::Null);
+        let cur = self
+            .dynamic_settings
+            .get(name)
+            .cloned()
+            .unwrap_or(Val::Null);
         let objs = cur
             .as_list()
             .map(|l| l.iter().filter_map(|v| v.as_object().cloned()).collect())
@@ -248,9 +321,7 @@ impl EObject for DynamicEObject {
     }
 
     fn e_container(&self) -> Option<ObjectRef> {
-        self.container
-            .as_ref()
-            .and_then(|(weak, _)| weak.upgrade())
+        self.container.as_ref().and_then(|(weak, _)| weak.upgrade())
     }
 
     fn e_contents(&self) -> Vec<ObjectRef> {
@@ -319,6 +390,11 @@ impl EObject for DynamicEObject {
     }
 }
 
+/// A fresh notifier handle with delivery enabled (EMF `Notifier` default).
+fn new_notifier_handle() -> NotifierHandle {
+    Rc::new(RefCell::new(Notifier::new()))
+}
+
 /// Normalize a caller-supplied reference value so it is stored as a proper
 /// reference: single objects stay `Val::Object`, lists become `Val::List`.
 fn normalize_reference_value(value: &Val) -> Val {
@@ -367,8 +443,12 @@ pub fn node_to_object(node: &DynNode) -> ObjectRef {
 /// records the value on the parent and sets the child's weak container back-link.
 pub fn adopt_single(parent: &DynNode, name: &str, child: &DynNode) {
     let weak = Rc::downgrade(&(parent.clone() as ObjectRef));
-    parent.borrow_mut().e_set_by_name(name, Val::Object(node_to_object(child)));
-    child.borrow_mut().set_container(Some((weak, name.to_string())));
+    parent
+        .borrow_mut()
+        .e_set_by_name(name, Val::Object(node_to_object(child)));
+    child
+        .borrow_mut()
+        .set_container(Some((weak, name.to_string())));
 }
 
 /// Adopt `child` into `parent` through a multi containment feature `name`,
@@ -381,5 +461,7 @@ pub fn adopt_many(parent: &DynNode, name: &str, child: &DynNode) {
         list.push(node_to_object(child));
         p.e_set_by_name(name, Val::List(list.into_iter().map(Val::Object).collect()));
     }
-    child.borrow_mut().set_container(Some((weak, name.to_string())));
+    child
+        .borrow_mut()
+        .set_container(Some((weak, name.to_string())));
 }

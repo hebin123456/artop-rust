@@ -96,9 +96,10 @@
 ## emf-edit
 | C++ 测试 | Rust 状态 |
 |---|---|
-| EditingDomainTests.cpp | ⬜ |
-| CommandTests.cpp | ⬜ |
-| PlaceholderTests.cpp | ⬜ |
+| EditingDomainTests.cpp | ✅ cpp_parity_edit（16 测试；SetCommand 单值 execute/undo/redo + 覆盖恢复旧值 + UNSET 哨兵、Add 单值/集合、Remove、Move、Replace 各自 execute/undo/redo、BasicCommandStack 多命令 undo/redo 序列、TransactionalEditingDomain runWrite 通知延迟 / runExclusive 读事务 / 嵌套事务重入 / 跨对象同 feature 多次 SET 合并（最早 old·最新 new）/ 不同 feature 不合并 / 多对象独立合并 / 非 SET 事件（UNSET）原样保留 全对齐。
+   Rust 差异: 无 `nullptr`（C++ nullptr-owner 用例映射为无 owner 的默认构造命令，同样不可执行）；UNSET 哨兵为 `Option::None`（C++ 空 `std::any`）；Adapter 为 `Box<dyn Adapter>` 无共享实例，多对象共用一个 C++ adapter 的用例改为每对象一个 adapter 写入同一缓冲区） |
+| CommandTests.cpp | ✅ cpp_parity_edit（7 测试；AddCommand 默认构造不可执行、无 owner 不可执行、SetCommand UNSET 哨兵、ChangeDescription 空/添加+清空、AdapterFactoryEditingDomain 默认三协作者为 None、ComposedAdapterFactory 空子工厂列表 + isFactoryForType 全对齐） |
+| PlaceholderTests.cpp | ✅ cpp_parity_edit（3 测试；框架冒烟 `Placeholder`、EMFEditPlugin 单例可取、所有 edit 子命名空间符号可解析 全对齐） |
 
 ## emf-validation
 | C++ 测试 | Rust 状态 |
