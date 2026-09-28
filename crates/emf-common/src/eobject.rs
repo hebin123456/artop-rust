@@ -8,6 +8,7 @@
 //! - `e_resource`: the owning resource.
 
 use crate::feature_map::FeatureMap;
+use crate::notification::Notification;
 use crate::uri::Uri;
 use crate::value::{ObjectRef, Val};
 use std::rc::Rc;
@@ -29,6 +30,19 @@ impl std::fmt::Display for InvokeError {
 }
 
 impl std::error::Error for InvokeError {}
+
+/// A reverse-reference list (C++ `emf-common/EInverseList`, aligned to Java
+/// `EObjectWithInverseEList`). Registered on the *owner* object by feature id;
+/// when the far end adds/removes this object through the inverse reference,
+/// `basic_add` / `basic_remove` write straight into the backing storage
+/// (no notification, no uniqueness check — avoids inverse recursion).
+pub trait InverseList {
+    /// Record `other_end` as an element of the reverse list.
+    fn basic_add(&mut self, other_end: &ObjectRef);
+
+    /// Drop `other_end` from the reverse list.
+    fn basic_remove(&mut self, other_end: &ObjectRef);
+}
 
 /// The base trait for all model objects.
 pub trait EObject: std::fmt::Debug {
@@ -64,6 +78,18 @@ pub trait EObject: std::fmt::Debug {
     /// reference as [`Self::e_containing_feature`].
     fn e_containment_feature(&self) -> Option<String> {
         self.e_containing_feature()
+    }
+
+    /// Set (or clear with `None`) this object's container (C++
+    /// `EObject::setEContainer`). Implementations that hold container state fire
+    /// reverse REMOVE(old)/ADD(new) notifications; the base contract is a no-op.
+    fn set_e_container(&mut self, _container: Option<ObjectRef>) {}
+
+    /// Whether a change to this object must be delivered to adapters (C++
+    /// `EObject::eNotificationRequired`, aligned to EMF `eNotificationRequired`).
+    /// Default `false` for objects without a notifier.
+    fn e_notification_required(&self) -> bool {
+        false
     }
 
     /// Child objects held by containment features.
@@ -141,6 +167,33 @@ pub trait EObject: std::fmt::Debug {
     fn e_derived_operation_id(&self, operation_id: i32) -> i32 {
         let _ = operation_id;
         -1
+    }
+
+    /// Maintain the reverse side of a bidirectional reference when `other_end`
+    /// adds this object through `feature_id` (C++ `EObject::eInverseAdd`,
+    /// aligned to `InternalEObject.eInverseAdd`). The base contract leaves the
+    /// accumulated `notifications` untouched; objects that keep an inverse-list
+    /// registry append the reverse ADD. Returns the (possibly extended) chain.
+    fn e_inverse_add(
+        &self,
+        other_end: &ObjectRef,
+        feature_id: i32,
+        notifications: Vec<Notification>,
+    ) -> Vec<Notification> {
+        let _ = (other_end, feature_id);
+        notifications
+    }
+
+    /// Counterpart of [`Self::e_inverse_add`] for removal (C++
+    /// `EObject::eInverseRemove`).
+    fn e_inverse_remove(
+        &self,
+        other_end: &ObjectRef,
+        feature_id: i32,
+        notifications: Vec<Notification>,
+    ) -> Vec<Notification> {
+        let _ = (other_end, feature_id);
+        notifications
     }
 
     /// The mixed feature map backing volatile/lazy features, if any.

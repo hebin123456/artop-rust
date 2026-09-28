@@ -15,7 +15,7 @@
 | BasicEMapTests.cpp | ✅ cpp_parity_common_core |
 | NotifyingListTests.cpp | ✅ `elist::NotifyingList`（Add/Remove/Set/Move/AddMany/RemoveMany 带值通知 + required/passive 分支）；对照 `elist` 单测 |
 | SegmentSequenceTests.cpp | ✅ `cpp_parity_common_path` + `segment_sequence` 单测；空分隔符=单段、空值=空序列、append 重切分语义全对齐 |
-| ENotifierTests.cpp | ✅ cpp_parity_common_enotifier（30；adapter 生命周期/eNotify/NotificationChain 抵消+合并+dispatch/wasSet）；⏳ 3 条 `setEContainer` 反向通知属 emf-ecore EObject 容器接线，待补 |
+| ENotifierTests.cpp | ✅ cpp_parity_common_enotifier（30；adapter 生命周期/eNotify/NotificationChain 抵消+合并+dispatch/wasSet）；`setEContainer` 反向 ADD/REMOVE 通知已在 emf-common 单测（`eobject_set_e_container_fires_reverse_add`/`switch`/`same`）+ emf-ecore 容器接线（`b_set_e_container_*`）双覆盖 |
 | URITests.cpp | ✅ cpp_parity_common_path |
 | ResourceTests.cpp | 🔶 cpp_parity_common_resource（19）；setResourceSet 关联待补 |
 | CommandTests.cpp | ✅ cpp_parity_common_command（39，覆盖全命令类） |
@@ -24,8 +24,8 @@
 ## emf-ecore
 | C++ 测试 | Rust 状态 |
 |---|---|
-| BasicEObjectTests.cpp | 🔶 cpp_parity_ecore_basic_eobject（9；eDynamic* 值存储 get/set/is_set/unset+double-feature 全对齐）；
-   ⏳ eContainer / eRegisterInverseList·eInverseAdd·Remove / eSet·eUnset 触发 SET/UNSET 通知 / eNotificationRequired —— 需 Rust 层补 EObject 容器字段、inverse-list 注册表、DynamicEObject 作为 Notifier 后才可对照 |
+| BasicEObjectTests.cpp | ✅ cpp_parity_ecore_basic_eobject（28；eClass / eDynamic* 值存储 get·set·isSet·unset（+双特征）/ **eContainer 默认无·setEContainer 后回链** / **eRegisterInverseList·eInverseAdd·eInverseRemove·eUnregister（含未注册 no-op·错配 list no-op·null list no-op·通知链透传）** / **eNotificationRequired 无 adapter=false·有 adapter=true** / **eSet 触发 SET·eUnset 触发 UNSET 且值可读回** 全对齐。
+   ⛔ 仅 `BasicEObject_EClass_DefaultNull` 不可移植（Rust `DynamicEObject` 构造即需类，无「类为空」态） |
 | DynamicEObjectImplTests.cpp | ✅ cpp_parity_ecore_dyn_eobject（24；eClass / 属性 get·set·isSet·unset / 单值 containment：adopt 设 child eContainer·feature / 多值 containment：eGet 空表·增后 isSet·unset 清空 / eContents 单·多·混合收集 / 覆盖属性·child 全对齐。
    Rust 以 `DynamicEObject` 值存储 + `Weak<parent>` 容器回链 + `adopt_single`/`adopt_many` 助手模拟 C++ 指针式 `eSet(containment, child)`；差异：feature 按名访问、eContents 按 featureID 序） |
 | EClassImplTests.cpp | ✅ cpp_parity_ecore_eclass（12；create/featureID/abstract·interface/get-by-ID/isSuperTypeOf/eAllSuperTypes·Attributes·References·StructuralFeatures·featureCount/ID-marked 全对齐；
