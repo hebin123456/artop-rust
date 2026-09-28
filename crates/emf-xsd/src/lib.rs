@@ -7,10 +7,13 @@
 //! (`.arxml`) validation and `.ecore`/`.xsd` tooling sit on top of it.
 
 pub mod pattern;
+pub mod resource;
 pub mod validator;
 pub mod xsd_metamodel;
 pub mod xsd_parser;
 
+/// Resolve and incorporate XSD schema directives (`import`/`include`/`redefine`).
+pub use resource::{SchemaLoader, XSDResource, XSDSchemaRegistry};
 /// Validate an XML instance document against an [`XSDSchema`].
 pub use validator::{XSDDiagnostic, XSDValidator, XSDValidatorOptions};
 /// The `XSDSchema` root metamodel type.

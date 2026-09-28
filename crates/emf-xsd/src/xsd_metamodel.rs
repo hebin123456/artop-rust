@@ -7,7 +7,9 @@
 //! as ordinary Rust types with a fluent builder API. The parser in
 //! [`crate::xsd_parser`] populates it from a schema document.
 
+use std::cell::RefCell;
 use std::fmt;
+use std::rc::Rc;
 
 /// How an attribute declaration is used (XML Schema `use`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -394,6 +396,128 @@ pub struct XSDRedefine {
     pub schema_location: String,
 }
 
+/// A shared, mutable handle to an [`XSDSchema`] — models the object identity of
+/// a Java `XSDSchema`, which schema incorporation needs so a resolved schema can
+/// be referenced from more than one place.
+pub type XSDSchemaRef = Rc<RefCell<XSDSchema>>;
+
+/// Which directive a [`XSDSchemaCompositor`] represents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum XsdDirectiveKind {
+    /// `xs:import` — pulls in a schema from another namespace.
+    #[default]
+    Import,
+    /// `xs:include` — pulls in a schema from the same namespace.
+    Include,
+    /// `xs:redefine` — redefines components from an included schema.
+    Redefine,
+}
+
+impl fmt::Display for XsdDirectiveKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            XsdDirectiveKind::Import => "import",
+            XsdDirectiveKind::Include => "include",
+            XsdDirectiveKind::Redefine => "redefine",
+        })
+    }
+}
+
+/// A plain record of a directive that references a schema — the observable part
+/// of Java `XSDSchema#getReferencingDirectives` (avoids a reference cycle back
+/// to the owning [`XSDSchemaCompositor`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XSDDirectiveRef {
+    /// Directive kind.
+    pub kind: XsdDirectiveKind,
+    /// Imported namespace (import only).
+    pub namespace: Option<String>,
+    /// `schemaLocation`, when given.
+    pub schema_location: Option<String>,
+}
+
+/// Abstract base of `xs:import` / `xs:include` / `xs:redefine`, aligned to Java
+/// `org.eclipse.xsd.XSDSchemaCompositor` and C++ `emf::xsd::XSDSchemaCompositor`.
+///
+/// A compositor belongs to the schema that *contains* the directive (`schema`)
+/// and, once resolved, points at the schema it pulled in (`incorporated_schema`).
+#[derive(Debug, Clone, Default)]
+pub struct XSDSchemaCompositor {
+    /// Directive kind.
+    pub kind: XsdDirectiveKind,
+    /// Imported namespace (import only).
+    pub namespace: Option<String>,
+    /// `schemaLocation`, when given.
+    pub schema_location: Option<String>,
+    /// The schema that owns (contains) this directive.
+    pub schema: Option<XSDSchemaRef>,
+    /// The schema resolved from `schema_location`, before incorporation.
+    pub resolved_schema: Option<XSDSchemaRef>,
+    /// The schema actually incorporated (set by [`XSDSchema::incorporate`]).
+    pub incorporated_schema: Option<XSDSchemaRef>,
+}
+
+impl XSDSchemaCompositor {
+    /// A compositor for an `xs:import`.
+    pub fn from_import(import: &XSDImport) -> Self {
+        Self {
+            kind: XsdDirectiveKind::Import,
+            namespace: import.namespace.clone(),
+            schema_location: import.schema_location.clone(),
+            ..Self::default()
+        }
+    }
+
+    /// A compositor for an `xs:include`.
+    pub fn from_include(include: &XSDInclude) -> Self {
+        Self {
+            kind: XsdDirectiveKind::Include,
+            schema_location: non_empty(&include.schema_location),
+            ..Self::default()
+        }
+    }
+
+    /// A compositor for an `xs:redefine`.
+    pub fn from_redefine(redefine: &XSDRedefine) -> Self {
+        Self {
+            kind: XsdDirectiveKind::Redefine,
+            schema_location: non_empty(&redefine.schema_location),
+            ..Self::default()
+        }
+    }
+
+    /// The lightweight record added to the incorporated schema's
+    /// `referencing_directives`.
+    pub fn as_directive_ref(&self) -> XSDDirectiveRef {
+        XSDDirectiveRef {
+            kind: self.kind,
+            namespace: self.namespace.clone(),
+            schema_location: self.schema_location.clone(),
+        }
+    }
+
+    /// Java `XSDSchema#getOriginalVersion` helper: the schema that was resolved
+    /// *before* incorporation, when it differs from the incorporated one.
+    /// `None` means this schema is its own original version.
+    pub fn original_version(&self) -> Option<&XSDSchemaRef> {
+        match (&self.resolved_schema, &self.incorporated_schema) {
+            (Some(resolved), Some(incorporated)) if !Rc::ptr_eq(resolved, incorporated) => {
+                Some(resolved)
+            }
+            _ => None,
+        }
+    }
+}
+
+/// `Some(s)` when `s` is non-empty, else `None`.
+fn non_empty(s: &str) -> Option<String> {
+    if s.is_empty() {
+        None
+    } else {
+        Some(s.to_string())
+    }
+}
+
 /// The top-level `xs:schema` model.
 #[derive(Debug, Clone, Default)]
 pub struct XSDSchema {
@@ -419,6 +543,15 @@ pub struct XSDSchema {
     pub redefines: Vec<XSDRedefine>,
     /// Schema-level annotations.
     pub annotations: Vec<XSDAnnotation>,
+    /// Directives (`import`/`include`/`redefine`) that reference this schema
+    /// (Java `XSDSchema#getReferencingDirectives`).
+    pub referencing_directives: Vec<XSDDirectiveRef>,
+    /// Cloned schema versions incorporated into this one
+    /// (Java `XSDSchema#getIncorporatedVersions`).
+    pub incorporated_versions: Vec<XSDSchemaRef>,
+    /// Deferred `schemaLocation`s awaiting resolution
+    /// (Java `XSDSchema#getPendingSchemaLocation`).
+    pub pending_schema_locations: Vec<String>,
 }
 
 impl XSDSchema {
@@ -443,6 +576,33 @@ impl XSDSchema {
     pub fn add_element(&mut self, e: XSDElementDeclaration) -> &mut Self {
         self.elements.push(e);
         self
+    }
+
+    /// Aligned to Java `XSDSchemaImpl.incorporate(XSDSchemaCompositor)`.
+    ///
+    /// `incorporated` is the schema pulled in by `compositor`; this records the
+    /// reverse edge (a [`XSDDirectiveRef`] in `referencing_directives`) and
+    /// applies the target-namespace fallback: if the incorporated schema has no
+    /// `targetNamespace` but its owning schema does, the latter wins.
+    ///
+    /// Mirrors C++ `XSDSchema::incorporate(XSDSchemaCompositor*)`, which is
+    /// declared there but left unimplemented.
+    pub fn incorporate(incorporated: &XSDSchemaRef, compositor: &mut XSDSchemaCompositor) {
+        compositor.incorporated_schema = Some(Rc::clone(incorporated));
+
+        let owning_namespace = compositor
+            .schema
+            .as_ref()
+            .and_then(|schema| schema.borrow().target_namespace.clone());
+
+        let mut inc = incorporated.borrow_mut();
+        inc.referencing_directives
+            .push(compositor.as_directive_ref());
+        if inc.target_namespace.is_none() {
+            if let Some(ns) = owning_namespace {
+                inc.target_namespace = Some(ns);
+            }
+        }
     }
 }
 
