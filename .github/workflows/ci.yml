@@ -76,6 +76,8 @@ jobs:
         run: bash tools/conformance/build_acceleo_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-acceleo reference/artop-cpp/cpp/emf-cpp/emf-xcore reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-common
       - name: Build and run C++ oracle (emf-sphinx)
         run: bash tools/conformance/build_sphinx_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-sphinx reference/artop-cpp/cpp/emf-cpp/emf-xmi reference/artop-cpp/cpp/emf-cpp/emf-edit reference/artop-cpp/cpp/emf-cpp/emf-ecore-util reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-common
+      - name: Build and run C++ oracle (emf-xmi)
+        run: bash tools/conformance/build_xmi_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-xmi reference/artop-cpp/cpp/emf-cpp/emf-ecore-codegen reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-ecore-util reference/artop-cpp/cpp/emf-cpp/emf-common
       - name: Compare Rust vs oracle (emf-common)
         run: python3 tools/conformance/compare.py --oracle tools/conformance/build/oracle.json --cases tools/conformance/cases.tsv --pkg emf-common
       - name: Compare Rust vs oracle (emf-ecore)
@@ -86,3 +88,5 @@ jobs:
         run: python3 tools/conformance/compare.py --oracle tools/conformance/build/acceleo_oracle.json --cases tools/conformance/cases_acceleo.tsv --pkg emf-acceleo
       - name: Compare Rust vs oracle (emf-sphinx)
         run: python3 tools/conformance/compare.py --oracle tools/conformance/build/sphinx_oracle.json --cases tools/conformance/cases_sphinx.tsv --pkg emf-sphinx
+      - name: Compare Rust vs oracle (emf-xmi)
+        run: python3 tools/conformance/compare.py --oracle tools/conformance/build/xmi_oracle.json --cases tools/conformance/cases_xmi.tsv --pkg emf-xmi
