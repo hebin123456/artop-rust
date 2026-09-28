@@ -34,6 +34,9 @@ pub struct XMIResource {
     eobject_to_id: std::collections::HashMap<usize, String>,
     /// Whether [`ensure_id`](Self::ensure_id) auto-assigns a UUID.
     use_uuids: bool,
+    /// The raw `xsi:schemaLocation` attribute captured while loading (aligned
+    /// to C++ `XMIResource::getXSISchemaLocation`/`setXSISchemaLocation`).
+    xsi_schema_location: String,
     /// Active serializer (defaults to [`XMLSaveImpl`]; injectable).
     xml_save: Rc<dyn XMLSave>,
     /// Active deserializer (defaults to [`XMLoaderImpl`]; injectable).
@@ -63,6 +66,7 @@ impl XMIResource {
             id_to_eobject: std::collections::HashMap::new(),
             eobject_to_id: std::collections::HashMap::new(),
             use_uuids: false,
+            xsi_schema_location: String::new(),
             xml_save: Rc::new(XMLSaveImpl),
             xml_load: Rc::new(XMLoaderImpl),
         }
@@ -77,6 +81,7 @@ impl XMIResource {
             id_to_eobject: std::collections::HashMap::new(),
             eobject_to_id: std::collections::HashMap::new(),
             use_uuids: false,
+            xsi_schema_location: String::new(),
             xml_save: Rc::new(XMLSaveImpl),
             xml_load: Rc::new(XMLoaderImpl),
         }
@@ -162,6 +167,18 @@ impl XMIResource {
     /// Set whether [`ensure_id`](Self::ensure_id) auto-assigns UUIDs.
     pub fn set_use_uuids(&mut self, enabled: bool) {
         self.use_uuids = enabled;
+    }
+
+    /// The raw `xsi:schemaLocation` attribute (aligned to C++
+    /// `XMIResource::getXSISchemaLocation`).
+    pub fn get_xsi_schema_location(&self) -> &str {
+        &self.xsi_schema_location
+    }
+
+    /// Set the raw `xsi:schemaLocation` attribute (aligned to C++
+    /// `XMIResource::setXSISchemaLocation`).
+    pub fn set_xsi_schema_location(&mut self, value: impl Into<String>) {
+        self.xsi_schema_location = value.into();
     }
 
     /// Generate a version-4 UUID string: 36 chars, `8-4-4-4-12`, with the

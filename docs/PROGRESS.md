@@ -64,8 +64,8 @@ examples/
 | `emf-compare` | ✅ 工作 | 两方/三方比较全管线：`MatchEngine`（ID / 就近匹配）+ `DiffEngine`（属性 / 引用 / MOVE 差分）+ `EquivalenceEngine` + `ConflictDetector`（真/伪冲突）+ `RequirementEngine`（依赖排序）+ `MergeEngine`（按依赖拓扑应用并标记 merged）+ `DiffFilter`；模型类型 `Diff` / `Match` / `Conflict` / `Equivalence` / `Dependency` / `Comparison` |
 | `emf-validation` | ✅ 工作 | `Constraint` / `EValidator` / `Diagnostician` / `ConstraintDescriptor`（批量+实时校验） |
 | `emf-xcore` | ✅ 工作 | Xcore DSL 解析器：`dsl`（Package/EClass/EDataType/EEnum/Feature/Annotation AST，Multiplicity 与 kind 判定）+ `parser`（递归下降：注解 `@key[.value]`、`package/class/interface/abstract`、`extends`、`#` containment 引用、`?*/` 多重性、`@DataType`/`@Enum`），23+ 用例覆盖 |
-| `emf-acceleo` | ✅ 工作 | Acceleo MTL/`M2T` 引擎：`mtl_parser`（`template`/`query`、public/private/protected、类型化参数）+ `template`（`TemplateFile`/`TemplateDecl`/`ValueContext` + 变量替换 + 注释剥离）+ `m2t_engine`（entry-point 渲染、`[if]/[else]/[/if]` 条件、`[for]/[/for]` 迭代、具名模板渲染） |
-| `emf-sphinx` | ✅ 工作 | headless 核心：`Node`（attributes/children fluent builder）+ `Root`/`Model`（全路径索引 O(1) `resolve`）+ 深度遍历（`Continue`/`Prune`/`Stop` 控制） |
+| `emf-acceleo` | ✅ 工作 | Acceleo MTL/`M2T` 引擎（对 C++ `AcceleoAst.h`/`AcceleoParser.cpp`/`AcceleoEngine.cpp` 的 1:1 移植）：`ast`（Block：Text/Expr/For/If/Let/File/Protected；Expr：Var/String/Int/Bool/Nav/Call/CollectionLit/If/Lambda）+ `parser`（递归下降：`[module]`/`template`/`query`/`import`/`extends`、`[for]/[if]/[let]/[file]/[protected]`、`post(...)` 容错）+ `engine`（`AcceleoEngine`/`AcceleoService`：上下文/服务注册/模板·查询查找、表达式求值、`=`/`or`/`and`/比较/算术、lambda + `->collect/select/reject/forAll/exists/size` 集合操作、`[file]` 落盘与 `[protected]` 区域合并）；C++ `AcceleoTests.cpp`(18) + `AlignmentTests.cpp`(8) 已逐条对照，26 条全 PASS（`cpp_parity_acceleo`） |
+| `emf-sphinx` | ✅ 工作 | headless 核心：`Node`（attributes/children fluent builder）+ `Root`/`Model`（全路径索引 O(1) `resolve`）+ 深度遍历（`Continue`/`Prune`/`Stop` 控制）；Sphinx 扩展：`metamodel`（`MetaModelDescriptor`/`AbstractMetaModelDescriptor` + `MetaModelVersionData` + thread-local `MetaModelDescriptorRegistry`）、`resource`（`SchemaLocationUriHandler`/`ExtendedBasicExtendedMetaData`/`ModelConverterRegistry`）、`scoping`（`FileResourceScope`/`FileResourceScopeProvider`/`ResourceScopeProviderRegistry`）、`ecore`（`OrderedFeatureMap`）、`util`（`EcoreResourceUtil`）；C++ 5 个测试文件 68 条已逐条对照并全 PASS（`cpp_parity_sphinx`） |
 | `emf-artop/artop-runtime` | ⬜ 骨架 | AUTOSAR 序列化 / 反序列化 / 版本元数据 |
 | `emf-artop/artop-codegen` | ⬜ 骨架 | `.ecore` → 静态模型 |
 
@@ -96,6 +96,10 @@ oracle，跑参考结果；Rust 侧跑同名/对应测试，逐条比对。**一
   `compare.py`（跑 Rust 侧并输出 PASS/PENDING/REGRESSION）、`cases.tsv`（C++↔Rust 映射表）。
 - 当前基线：oracle 全量 193 条；已映射 **188** 条全部 `PASS`，剩余 5 条 `PENDING`(未映射)。尚未映射的 5 条均为 **Rust 类型系统无法如实表达**的语义：`ENotifier_AddAdapter_Duplicate_NotAdded`（Box 所有权无重复身份）、`ENotifier_AddAdapter_Null_Ignored` / `ENotifier_RemoveAdapter_Null_NoChange` / `Resource_AddToContents_NullPointer`（`Box<dyn Adapter>` / `ObjectRef` 无空指针）、`Placeholder`（C++ 空跑测试）。这些在 Rust 中无意义，保留为 PENDING 不失真。
 - 已接入 CI（`conformance` job）：CI 检出 artop-cpp、编译并跑 oracle、再与 Rust 比对。
+- 多 crate oracle：`build_ecore_oracle.sh`（emf-ecore，153 条）、`build_edit_oracle.sh`（emf-edit）、
+  `build_acceleo_oracle.sh`（emf-acceleo，26 条）、`build_sphinx_oracle.sh`（emf-sphinx，68 条）；映射表 `cases.tsv` /
+  `cases_ecore.tsv` / `cases_edit.tsv` / `cases_acceleo.tsv` / `cases_sphinx.tsv`。其中 `emf-edit` 26 条、
+  `emf-acceleo` 26 条、`emf-sphinx` 68 条均为 **0 PENDING 全 PASS**。
 
 复用路径：C++ oracle 单测 → `tools/conformance/build`，与 CI 的 `conformance` job 对齐。
 
@@ -103,7 +107,7 @@ oracle，跑参考结果；Rust 侧跑同名/对应测试，逐条比对。**一
 
 ```sh
 cargo fmt    --all -- --check
-cargo test   --workspace --all-targets     # 当前 18 个测试套件全绿
+cargo test   --workspace --all-targets     # 全 crate 单测 + 集成对照全绿
 cargo clippy --workspace --all-targets     # 无 error / warning
 cargo build  --workspace --release         # release 也通过
 bash tools/conformance/build_oracle.sh <artop-cpp>/cpp/emf-cpp/emf-common
@@ -112,12 +116,13 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 ## 7. 下一步（按优先级）
 
-已完成：emf-common/ecore 核心、EcoreUtil/Copier、XMI saver+loader、Resource/XMI 持久化集成、一致性测试 193 组中 188 条映射 PASS（含 command 模块 / NotifyingList / SegmentSequence / UniqueEList / ENotifier / EAdapter）；一致性框架已多 crate 化并建立 emf-ecore oracle（153 条），映射 62 条 PASS。
+已完成：emf-common/ecore 核心、EcoreUtil/Copier、XMI saver+loader、Resource/XMI 持久化集成、一致性测试 193 组中 188 条映射 PASS（含 command 模块 / NotifyingList / SegmentSequence / UniqueEList / ENotifier / EAdapter）；一致性框架已多 crate 化并建立 emf-ecore oracle（153 条，映射 62 条 PASS）、emf-edit oracle（26 条全 PASS）、emf-acceleo oracle（26 条全 PASS）、emf-sphinx oracle（68 条全 PASS）。
 
 1. 扩展 oracle 到 emf-xmi 的 C++ tests 逐模块收敛；继续补 emf-ecore 未映射的 91 条（EGenericType / EInvoke / 指针身份类）。
-2. `emf-xmi` 进一步落地：`XMILoadImpl` / `XMIHelper` 接口（`XMIResourceFactory` + `ResourceSet.getResource` 按需加载已在本轮完成）。
+2. `emf-xmi` 进一步落地：`XMILoadImpl` / `XMIHelper` 接口（`XMIResourceFactory` + `ResourceSet.getResource` 按需加载已完成）。
 3. `emf-ecore-util` 剩余：Adapter / ECrossReferenceAdapter / containment 遍历到 `all_contents` 的流式实现。
-4. `artop-runtime`：AUTOSAR 序列化/反序列化（届时才引入 artop 相关内容）。
+4. `emf-sphinx` 剩余：`ExtendedResource`/`ProxyHelper`/`ModelDescriptor`/`EcoreTraversalHelper` 等在 C++ 侧仍为骨架或空测试，随上层用例补齐再逐条对照。
+5. `artop-runtime`：AUTOSAR 序列化/反序列化（届时才引入 artop 相关内容）。
 
 ## 8. emf-xmi 实施记录
 
@@ -208,6 +213,25 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - 新增 `emf-ecore-codegen/tests/cpp_parity_static_modeling.rs`（7 条）：对照片 `GenModelLoaderTests.cpp`（wrapEcore 构建 Library/Book/Writer 元数据、attribute vs reference、containment、EString/EInt 类型映射、`recognizesReference`）+ `RuntimeBehaviorTests.cpp`（动态 eClass/eSet/eGet/eIsSet/eUnset）。
   - 新增 `emf-ecore-codegen/tests/cpp_parity_xmi_serialization.rs`（2 条）：对照片 `RoundtripTests.cpp` / `E2E_GenModelXmi*` —— 加载同份 `library.ecore` → 按元模型实例化 `Library{books→Book{author→Writer}}` → emf-xmi `save_to_string` → `load_from_string` → 校验对象图（类名、属性值、containment 子树）完整还原；含 `XMILoaderTests` 的元模型断言。
   - 全工作区 fmt / clippy / test 全绿；9 条对照测试全部通过，无回归。
+
+- **Milestone 16 — emf-acceleo 重写为对 C++ 的 1:1 移植 + 接入一致性框架（本轮新增）**：此前 `emf-acceleo` 只是一套自研的轻量模板引擎（`mtl_parser`/`template`/`m2t_engine`），与 C++ 语义不完全对齐。本轮直接以 artop-cpp 的 `AcceleoAst.h` / `AcceleoParser.cpp` / `AcceleoEngine.cpp` 为准重写。
+  - `ast`：定义与 C++ 对应的 AST —— `Block`（`Text`/`Expr`/`For`/`If`/`Let`/`File`/`Protected`）与 `Expr`（`Var`/`StringLit`/`IntLit`/`BoolLit`/`Nav`/`Call`/`CollectionLit`/`If`/`Lambda`）。
+  - `parser`：递归下降，覆盖 `[module]`（含 `import`/`extends`）、`public/private/protected` 模板、`[template]`/`[query]`（类型化参数 + `post(...)` 容错）、`[for]/[if]（含 else/elseif）/[let]/[file]/[protected]`，以及 `=`/`or`/`and`/比较/算术表达式与 `->` 箭头调用、lambda（`x | expr`）。
+  - `engine`：`AcceleoEngine` + `AcceleoService` —— 求值上下文、服务注册、模板/查询查找（含 `extends` 继承与 `import`）、表达式求值、块求值、`->collect/select/reject/forAll/exists/size` 集合操作、`[file]` 落盘、`[protected]` 区域的 old/new 合并。
+  - 测试：`crates/emf-acceleo/tests/cpp_parity_acceleo.rs` 逐条移植 `AcceleoTests.cpp`(18) + `AlignmentTests.cpp`(8) 共 **26 条**，全绿。
+  - 顺带修复 `emf-xcore` parser 的类型判定：把 `int`/`boolean`/`string` 等小写 Java/Xcore 原生类型名计入内建数据类型，对齐 C++ `XcoreGenerator::resolveClassifier` 的 `int→EInt` 映射（否则 xcore 特征会被误判为引用）。
+  - 一致性框架接入：新增 `tools/conformance/build_acceleo_oracle.sh`（编译并运行 C++ `emf-acceleo` 单测二进制 → `build/acceleo_oracle.json`，26 条全 pass）与 `tools/conformance/cases_acceleo.tsv`（26 条 C++↔Rust 映射）；`compare.py` 对 `emf-acceleo` 输出 **26 条全 PASS，0 PENDING，0 REGRESSION**；CI `conformance` job 增加 acceleo 的 oracle 构建与比对步骤。
+  - 质量门禁：全工作区 fmt / clippy / test 全绿，`emf-acceleo` clippy 0 告警，无回归。
+
+- **Milestone 17 — emf-sphinx 骨架补齐 + 接入一致性框架（本轮新增）**：以 artop-cpp `cpp/emf-cpp/emf-sphinx` 的 headless 部分为准，补齐 meta-model 描述符、schema-location、resource scoping、有序 feature-map 与 Ecore resource 工具。
+  - `metamodel`：`MetaModelVersionData`（ns postfix / EPackage nsURI postfix pattern / name / base descriptor / ordinal + `equals`）+ `MetaModelDescriptor` trait & `AbstractMetaModelDescriptor`（identifier / namespace / 版本拼接 / `matchesNamespace` / EPackage nsURI 正则全匹配 / `equals`·`hashCode` 按 identifier / compatible 列表）+ thread-local `MetaModelDescriptorRegistry`（注册·查找·unregister（`Rc::ptr_eq` 身份）·target/old）。
+  - `resource`：`SchemaLocationUriHandler`（成对 `ns uri` 解析 + 从 `XMIResource` 读 `xsi:schemaLocation`）、`ExtendedBasicExtendedMetaData`（`ns|loc` 缓存键）、`ModelConverterRegistry`（增·删·去重·按源/目标元模型查找）。
+  - `scoping`：`ResourceScope` trait + `FileResourceScope`、`ResourceScopeProvider` trait + `FileResourceScopeProvider`、thread-local `ResourceScopeProviderRegistry`（注册·派发·`isNotInAnyScope`）。
+  - `ecore`：`OrderedFeatureMap`（按 featureID、再按 index 有序插入；按 feature 过滤）。`util`：`EcoreResourceUtil`（URI 归一化 / `exists` / 骨架空分支 / `loadResource`·`getModelRoot`·`isResourceLoaded` 等）。
+  - 配套改动：`emf-xmi::XMIResource` 增加 `get/set_xsi_schema_location`（对齐 C++ `getXSISchemaLocation`）；`emf-sphinx` 新增对 `emf-ecore`/`emf-xmi` 的依赖。
+  - 测试：`crates/emf-sphinx/tests/cpp_parity_sphinx.rs` 逐条移植 `EcoreResourceUtilTests.cpp`(20) + `MetaModelDescriptorTests.cpp`(18) + `OrderedFeatureMapTests.cpp`(7) + `ResourceTests.cpp`(13) + `ScopingTests.cpp`(10) 共 **68 条**；`ExtendedResourceTests.cpp`/`ModelDescriptorTests.cpp`/`ProxyHelperTests.cpp` 在 C++ 侧为空（仅一行 `#include <cstdio>`）不移植。
+  - 一致性框架接入：新增 `tools/conformance/build_sphinx_oracle.sh`（递归收集 emf-sphinx 源码并复刻 CMake 的平台文件过滤，链接 emf-common/ecore/ecore-util/edit/xmi → `build/sphinx_oracle.json`）与 `tools/conformance/cases_sphinx.tsv`（68 条 C++↔Rust 映射）；CI `conformance` job 增加 sphinx 的 oracle 构建与比对步骤。
+  - 质量门禁：全工作区 fmt / clippy / test 全绿，无回归。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 

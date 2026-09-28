@@ -72,6 +72,10 @@ impl ParsedFile {
 }
 
 /// Built-in primitive type names that classify a feature as an attribute.
+///
+/// Both the `E*` spellings and the lowercase Java/Xcore primitives (`int`,
+/// `boolean`, ...) are recognised, matching C++ `XcoreGenerator::resolveClassifier`
+/// which maps `int`→`EInt`, `boolean`→`EBoolean`, etc.
 const BUILTIN_DATA_TYPES: &[&str] = &[
     "String",
     "Boolean",
@@ -99,6 +103,17 @@ const BUILTIN_DATA_TYPES: &[&str] = &[
     "EBigDecimal",
     "EBigInteger",
     "Object",
+    // Lowercase Xcore/Java primitives (C++ `XcoreGenerator` type mapping).
+    "string",
+    "boolean",
+    "int",
+    "integer",
+    "long",
+    "short",
+    "byte",
+    "float",
+    "double",
+    "char",
 ];
 
 /// Classify a feature's kind. A `#` prefix forces containment reference;

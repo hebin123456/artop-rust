@@ -13,7 +13,11 @@
 | 文件 | 作用 |
 |---|---|
 | `build_oracle.sh` | 编译并运行 C++ 参考二进制（emf-common 单测），产出 `build/oracle.json` + `build/oracle.log` |
-| `cases.tsv` | C++ 测试 ↔ Rust 测试 等价映射表（`group<TAB>cpp_test<TAB>rust_test`） |
+| `build_ecore_oracle.sh` | 同上，C++ emf-ecore 单测 → `build/ecore_oracle.json` |
+| `build_edit_oracle.sh` | 同上，C++ emf-edit 单测 → `build/edit_oracle.json` |
+| `build_acceleo_oracle.sh` | 同上，C++ emf-acceleo 单测 → `build/acceleo_oracle.json` |
+| `build_sphinx_oracle.sh` | 同上，C++ emf-sphinx 单测 → `build/sphinx_oracle.json` |
+| `cases.tsv` / `cases_ecore.tsv` / `cases_edit.tsv` / `cases_acceleo.tsv` / `cases_sphinx.tsv` | 各模块 C++ 测试 ↔ Rust 测试 等价映射表（`group<TAB>cpp_test<TAB>rust_test<TAB>pkg`） |
 | `compare.py` | 跑 oracle + 逐条跑 Rust 测试，输出 `PASS/PENDING/REGRESSION` 汇总 |
 
 ## 用法
@@ -43,8 +47,14 @@ python3 tools/conformance/compare.py
 3. 跑 `compare.py`，把该行为从 `PENDING` 翻到 `PASS`。
 4. 按模块扩 oracle：后续加入 ecore / xmi 的 C++ tests 目录（它们各自有独立 `tests/`）。
 
-## 当前基线（首次接入）
+## 当前基线
 
-- oracle：`emf-common` C++ 单测，全量 193 条，0 失败。
-- 首批复用 `URI_*` 映射到 `emf-common` 的 Rust URI 测试，已验证可在本机跑通 `PASS`。
-- 其余（EList / SegmentSequence / EMap / ...）在 `cases.tsv` 中以注释占位，逐步启用。
+| 模块 | oracle（C++） | 映射/PASS | 命令 |
+|---|---|---|---|
+| `emf-common` | 193 | 188 PASS（5 条为 Rust 类型系统无法表达的空指针/重复身份语义，保留 PENDING） | `compare.py --oracle build/oracle.json --cases cases.tsv --pkg emf-common` |
+| `emf-ecore` | 153 | 62 PASS | `compare.py --oracle build/ecore_oracle.json --cases cases_ecore.tsv --pkg emf-ecore` |
+| `emf-edit` | 26 | 26 PASS（0 PENDING） | `compare.py --oracle build/edit_oracle.json --cases cases_edit.tsv --pkg emf-edit` |
+| `emf-acceleo` | 26 | 26 PASS（0 PENDING） | `compare.py --oracle build/acceleo_oracle.json --cases cases_acceleo.tsv --pkg emf-acceleo` |
+| `emf-sphinx` | 68 | 68 PASS（0 PENDING） | `compare.py --oracle build/sphinx_oracle.json --cases cases_sphinx.tsv --pkg emf-sphinx` |
+
+> 各模块 oracle 均已在 CI `conformance` job 中自动构建并比对（无 `REGRESSION` 即通过）。

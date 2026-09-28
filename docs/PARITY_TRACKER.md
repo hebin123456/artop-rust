@@ -151,20 +151,29 @@
 ## emf-acceleo
 | C++ 测试 | Rust 状态 |
 |---|---|
-| AcceleoTests.cpp | ⬜ |
-| AlignmentTests.cpp | ⬜ |
+| AcceleoTests.cpp | ✅ cpp_parity_acceleo（18 测试；parser 4 条 Module/ExprBlock/ForAndIf/Query + engine 8 条 StaticText/ExprWithLiteral/Let/IfElse/ServiceCall/EObjectNavigation/ForOverEList/FileBlock + Lambda 2 条 Collect/SelectForAllExists + Query_Eval + Protected_Merge + Module_Extends + Module_ImportAndExtendsQuery 全对齐。
+   Rust 重写为对 C++ `AcceleoAst.h`/`AcceleoParser.cpp`/`AcceleoEngine.cpp` 的 1:1 移植：`ast`（Block/Expr 节点，含 `=`/`or`/`and`/比较/算术、lambda、`->collect/select/reject/forAll/exists/size` 集合操作）+ `parser`（递归下降：`[module]`/`template`/`query`/`import`/`extends`、`[for]/[if]/[let]/[file]/[protected]`、`post(...)` 容错）+ `engine`（`AcceleoEngine`/`AcceleoService`：上下文/服务注册/模板·查询查找、表达式求值、块求值、`[file]` 落盘与 `[protected]` 区域合并）） |
+| AlignmentTests.cpp | ✅ cpp_parity_acceleo（8 测试；XcoreDerivesEPackage/XcoreDerivedEClassFeatures/DynamicEObject_eSet_eGet/AcceleoGeneratesFromXcorePackage/AcceleoGeneratesCppClassSkeleton/AcceleoWritesFile_FromXcorePackage/XcoreResource_LoadsAndDerivesEPackage/AcceleoComplexTemplate_IfForNested 全对齐。
+   C++ 走 `XcoreGenerator` + `XcoreResource`；Rust `emf-xcore` 当前只移植 parser，测试用 `emf_xcore::parse` 解析同一 `.xcore` 源并直接构建等价的 `EPackage`/`EClass`/`EAttribute` 反射图（见下方差异说明）。顺序无关：结果对象图与模板渲染文本均与 C++ 一致） |
+
+> **emf-acceleo 差异说明**：C++ `XcoreResource`/`XcoreStandaloneSetup`（resource 加载 `.xcore` 并派生元模型）在 Rust 侧尚未移植，仅保留 parser；各 alignment 测试以 `emf_xcore::parse` + 手工反射构图等价表达。此外 C++ xcore 接受花括号省略的 `package name` + 同级 `class` 块，Rust parser 采用标准 `package name { ... }` 形式，测试使用同一套 class/feature 声明。以上差异均不改变可观测的模板渲染结果与对象图。
 
 ## emf-sphinx
 | C++ 测试 | Rust 状态 |
 |---|---|
-| ResourceTests.cpp | ⬜ |
-| ExtendedResourceTests.cpp | ⬜ |
-| ModelDescriptorTests.cpp | ⬜ |
-| MetaModelDescriptorTests.cpp | ⬜ |
-| ScopingTests.cpp | ⬜ |
-| ProxyHelperTests.cpp | ⬜ |
-| EcoreResourceUtilTests.cpp | ⬜ |
-| OrderedFeatureMapTests.cpp | ⬜ |
+| EcoreResourceUtilTests.cpp | ✅ cpp_parity_sphinx（20；C++ `emf-sphinx` 的 headless 骨架逐条对齐：相对→绝对 `file:` URI、`platform:/resource` 归一化、`exists`、`getURI`/`normalizeURIFragment`/`readModelNamespace`/`readTargetNamespace`/`readRootElementComments`/`readSchemaLocationEntries` 的空与骨架分支、默认 load/save options、`getModelRoot`/`isResourceLoaded`/`getModelName` 空分支、`loadResource`/`loadEObject`/`getEObject`/`addNewModelResource`/`saveModelResource`/`unloadResource` 的空参数分支全对齐。
+   Rust 以 `Option` 表达 C++ 的 `nullptr`，`load_resource` 返回 `Option<&dyn ResourceHandle>`） |
+| MetaModelDescriptorTests.cpp | ✅ cpp_parity_sphinx（18；`MetaModelDescriptor` 三参/多 EPackage/带版本构造、`namespace` 拼接、`matchesNamespace`、`matchesEPackageNsURIPattern`（内置 `regex_lite` 全匹配，覆盖 `[0-9]+` 等）、`equals`（按 identifier）、`hashCode`（按 identifier）、`ordinal`、`compatible`、`setVersionData`；`MetaModelVersionData` 字段/`equals`；`MetaModelDescriptorRegistry` 注册·按名/按 URI 查找·`unregister`·去重·多个·target/old·按对象/按资源查找 全对齐。
+   registry 状态置于 thread-local，`unregister` 用 `Rc::ptr_eq` 对齐 C++ 指针身份） |
+| OrderedFeatureMapTests.cpp | ✅ cpp_parity_sphinx（7；空初始、按 featureID 升序插入、（同 featureID）按 index 排序、按 feature 过滤、`clear`、`defaultOrder`（缺 feature 记 -1）、`size` 增长 全对齐） |
+| ResourceTests.cpp | ✅ cpp_parity_sphinx（13；`SchemaLocationUriHandler` 解析成对 `ns uri`/空/单对/奇数 token/多空格、`getSchemaLocation`（空→""，从 `XMIResource` 取）、`ExtendedBasicExtendedMetaData.getCacheKey`（`ns|loc` / 空 ns→`loc`）、`ModelConverterRegistry` 增·查·去重·移除·按元模型对查找 全对齐） |
+| ScopingTests.cpp | ✅ cpp_parity_sphinx（10；`FileResourceScope` 的 `belongsTo`(URI·Resource)/`didBelongTo`/`root`/`persistedFiles`/`referenced`/`isShared`；`FileResourceScopeProvider` 由 URI/Resource 建 scope（EObject 走 `Option::None`）；`ResourceScopeProviderRegistry` 注册·派发·`isNotInAnyScope`·去重 全对齐。
+   provider registry 状态置于 thread-local，身份比较用 `Rc::ptr_eq`） |
+| ExtendedResourceTests.cpp | ⛔ 空测试（C++ 侧仅 `#include <cstdio>`，无断言，无对照） |
+| ModelDescriptorTests.cpp | ⛔ 空测试（同上） |
+| ProxyHelperTests.cpp | ⛔ 空测试（同上） |
+
+> **emf-sphinx 差异说明**：C++ `emf-sphinx` 是显式 headless 骨架，多个方法在无 Eclipse 平台时返回空结果；Rust 逐条复刻这些分支（`getURI`/`getModelName`/`readRootElementComments`/`readSchemaLocationEntries` 等返回空），并在 `cpp_parity_sphinx` 中固定其行为。`getDescriptorForObject` / `createScopeFromObject` 依赖 EObject→EPackage→nsURI 回链，headless Rust 对象图无此回链，故仅定义 `None` 分支（与 C++ 空参数分支一致）。
 
 ## 迁移顺序（依赖驱动）
 emf-common → emf-ecore → emf-ecore-util → emf-xmi → emf-edit → emf-validation → emf-compare → emf-xsd → emf-ecore-codegen → emf-acceleo → emf-sphinx

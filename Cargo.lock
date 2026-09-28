@@ -48,6 +48,8 @@ name = "emf-acceleo"
 version = "0.1.0"
 dependencies = [
  "emf-common",
+ "emf-ecore",
+ "emf-xcore",
 ]
 
 [[package]]
@@ -100,6 +102,8 @@ name = "emf-sphinx"
 version = "0.1.0"
 dependencies = [
  "emf-common",
+ "emf-ecore",
+ "emf-xmi",
 ]
 
 [[package]]

@@ -1,0 +1,42 @@
+# C++(参考, oracle) 测试 ↔ Rust(移植) 测试的等价映射表 —— emf-acceleo 模块
+#
+# 列: group<TAB>cpp_test<TAB>rust_test<TAB>pkg
+#   group    : emf-acceleo 内的来源文件(AcceleoTests / AlignmentTests)
+#   cpp_test : C++ 单元测试名(来自 emf-cpp/emf-acceleo/tests, 以 EMF_TEST 注册)
+#   rust_test: 对应的 Rust 测试路径(cargo test -p emf-acceleo <path> -- --exact)
+#   pkg      : 所属 crate(emf-acceleo)
+#
+# 规则:
+#   - 已映射且 Rust 同名校验通过 => PASS(行为等价)
+#   - 已映射但 Rust 测试缺失 => PENDING(等价待实现, 可接受)
+#   - 未映射的 C++ 测试 => PENDING(尚未核对), 逐步补齐
+#   - 已映射但 Rust 测试失败 => REGRESSION(必须修复)
+# 以 # 开头的行为注释, 忽略。
+
+group	cpp_test	rust_test	pkg
+AcceleoTests	AcceleoParser_Module	acceleo_parser_module	emf-acceleo
+AcceleoTests	AcceleoParser_ExprBlock	acceleo_parser_expr_block	emf-acceleo
+AcceleoTests	AcceleoParser_ForAndIf	acceleo_parser_for_and_if	emf-acceleo
+AcceleoTests	AcceleoParser_Query	acceleo_parser_query	emf-acceleo
+AcceleoTests	AcceleoEngine_StaticText	acceleo_engine_static_text	emf-acceleo
+AcceleoTests	AcceleoEngine_ExprWithLiteral	acceleo_engine_expr_with_literal	emf-acceleo
+AcceleoTests	AcceleoEngine_Let	acceleo_engine_let	emf-acceleo
+AcceleoTests	AcceleoEngine_IfElse	acceleo_engine_if_else	emf-acceleo
+AcceleoTests	AcceleoEngine_ServiceCall	acceleo_engine_service_call	emf-acceleo
+AcceleoTests	AcceleoEngine_EObjectNavigation	acceleo_engine_eobject_navigation	emf-acceleo
+AcceleoTests	AcceleoEngine_ForOverEList	acceleo_engine_for_over_elist	emf-acceleo
+AcceleoTests	AcceleoEngine_FileBlock	acceleo_engine_file_block	emf-acceleo
+AcceleoTests	AcceleoLambda_Collect	acceleo_lambda_collect	emf-acceleo
+AcceleoTests	AcceleoLambda_SelectForAllExists	acceleo_lambda_select_for_all_exists	emf-acceleo
+AcceleoTests	AcceleoQuery_Eval	acceleo_query_eval	emf-acceleo
+AcceleoTests	AcceleoProtected_Merge	acceleo_protected_merge	emf-acceleo
+AcceleoTests	AcceleoModule_Extends	acceleo_module_extends	emf-acceleo
+AcceleoTests	AcceleoModule_ImportAndExtendsQuery	acceleo_module_import_and_extends_query	emf-acceleo
+AlignmentTests	Alignment_XcoreDerivesEPackage_LikeJava	alignment_xcore_derives_epackage	emf-acceleo
+AlignmentTests	Alignment_XcoreDerivedEClassFeatures_LikeJava	alignment_xcore_derived_eclass_features	emf-acceleo
+AlignmentTests	Alignment_DynamicEObject_eSet_eGet_LikeJava	alignment_dynamic_eobject_eset_eget	emf-acceleo
+AlignmentTests	Alignment_AcceleoGeneratesFromXcorePackage_LikeJava	alignment_acceleo_generates_from_xcore_package	emf-acceleo
+AlignmentTests	Alignment_AcceleoGeneratesCppClassSkeleton_LikeJava	alignment_acceleo_generates_class_skeleton	emf-acceleo
+AlignmentTests	Alignment_AcceleoWritesFile_FromXcorePackage_LikeJava	alignment_acceleo_writes_file_from_xcore_package	emf-acceleo
+AlignmentTests	Alignment_XcoreResource_LoadsAndDerivesEPackage_LikeJava	alignment_xcore_resource_loads_and_derives_epackage	emf-acceleo
+AlignmentTests	Alignment_AcceleoComplexTemplate_IfForNested_LikeJava	alignment_acceleo_complex_template_if_for_nested	emf-acceleo
