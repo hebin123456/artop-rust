@@ -17,6 +17,19 @@ pub fn downcast_ref<T: EObject + 'static>(obj: &dyn EObject) -> Option<&T> {
     obj.as_any().downcast_ref::<T>()
 }
 
+/// Error returned by [`EObject::e_invoke`] when no invocation delegate handles
+/// the operation. Mirrors the C++ `EObject::eInvoke` default, which throws.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvokeError;
+
+impl std::fmt::Display for InvokeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("EObject::eInvoke not implemented")
+    }
+}
+
+impl std::error::Error for InvokeError {}
+
 /// The base trait for all model objects.
 pub trait EObject: std::fmt::Debug {
     /// The classifier name of this object, e.g. `"SwcImplementation"`.
@@ -111,6 +124,23 @@ pub trait EObject: std::fmt::Debug {
     fn e_unset(&mut self, feature_id: &str) -> bool {
         let _ = feature_id;
         false
+    }
+
+    /// Reflectively invoke an operation (C++ `EObject::eInvoke`). `operation_id`
+    /// is the `EOperation.operationID`. Only objects that register invocation
+    /// delegates override this; the base contract reports "not implemented"
+    /// ([`InvokeError`]), matching the C++ default that throws. `Ok(None)` is a
+    /// void result, `Ok(Some(v))` a value.
+    fn e_invoke(&self, operation_id: i32, arguments: &[Val]) -> Result<Option<Val>, InvokeError> {
+        let _ = (operation_id, arguments);
+        Err(InvokeError)
+    }
+
+    /// The derived operation id for `operation_id` (C++ `eDerivedOperationID`),
+    /// default `-1` (no derivation).
+    fn e_derived_operation_id(&self, operation_id: i32) -> i32 {
+        let _ = operation_id;
+        -1
     }
 
     /// The mixed feature map backing volatile/lazy features, if any.

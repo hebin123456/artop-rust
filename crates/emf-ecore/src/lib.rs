@@ -37,6 +37,9 @@ pub mod classifier;
 /// `EStructuralFeature`, `EAttribute`, `EReference`, `EOperation`, `EParameter`.
 pub mod structural;
 
+/// Operation invocation delegates (C++ `EInvocationDelegate`).
+pub mod invocation;
+
 /// `EPackage`, `EPackageRegistry`, `EFactory`.
 pub mod package;
 
@@ -54,6 +57,7 @@ pub use classifier::{EClass, EClassKind, EClassifier, EDataType, EEnum, EEnumLit
 pub use dynamic::{adopt_many, adopt_single, node_to_object, DynNode, DynamicEObject};
 pub use ecore_package::{ECORE_NS_PREFIX, ECORE_NS_URI};
 pub use feature_id::FeatureID;
+pub use invocation::EInvocationDelegate;
 pub use package::{make_package_ref, EFactory, EPackage, PackageRef, PackageRegistry};
 pub use structural::{
     EAttribute, EGenericType, EOperation, EParameter, EReference, EStructuralFeature,

@@ -33,8 +33,8 @@
 | EPackageImplTests.cpp | ✅ cpp_parity_ecore_epackage（3；create/get-classifier/registry put·get·remove/accessors 全对齐） |
 | ETypedElementImplTests.cpp | ✅ cpp_parity_ecore_etyped_element（12；默认值 lower0·upper1·ordered·unique / setType→type_name / isMany（`upper==-1‖upper>1`，含 upper=0 非多值）/ bounds·ordered·unique setter / kind / **EGenericType：懒加载创建·复用同一实例·setEType 同步 eClassifier·eType 跟进·union（eTypeArguments）·wildcard（eUpperBound·eLowerBound）·isEGenericTypeParameterized（eTypeParameter‖eTypeArguments）** 全对齐。
    ⏳ 余 C++ 的 `eGet·eSet·eIsSet·eUnset` 反射块（以 feature 指针驱动）与 ETypeProxy 无 Rust 对照：Rust 特征按名访问，无特征指针反射入口 |
-| EObjectEInvokeTests.cpp | 🔶 cpp_parity_ecore_einvoke（4；EOperation 元数据 operation_id/get-by-name/count 全对齐）；
-   ⏳ eInvoke + EInvocationDelegate 派发机制 Rust 尚无对应（需对象级 invocation-delegate 注册表）|
+| EObjectEInvokeTests.cpp | ✅ cpp_parity_ecore_einvoke（18；EOperation 元数据 operation_id round-trip/get-by-name/count + **eInvoke/EInvocationDelegate**：默认无 delegate 返回 `Err`（对齐 C++ 抛异常）·null operation（-1）返回 `Err`·按 operationID 分派 Add/Greet/Void delegate·delegate 收到 target 与 args（含空 args）·void=空结果·多 operation 各自独立 delegate·未注册 operation 返回 `Err`·直接 `dynamic_invoke`（单参/无参默认 0）·`eDerivedOperationID` 默认 -1·替换 delegate 全对齐。
+   差异：C++ `EObject::eInvoke(EOperation*, ...)`；Rust 以 `e_invoke(operation_id, &[Val])`（emf-common `EObject` 加默认方法，无 delegate 返回 `Err(InvokeError)` 而非抛出）·delegate map 以 operationID 键控·`target: Option<&dyn EObject>` 表达可能为空的接收者） |
 | EcorePackageTests.cpp | ✅ cpp_parity_ecore_package（6；ePackage 周期初始化/19 元类·18 内建数据类型注册/全局 registry 按 nsURI·prefix 索引/nsURI·prefix·name 常量/FeatureID 常量块（EClass·EPackage）全对齐。
    差异：Rust 以 find_class·find_data_type 替代 getEClass_EClass 式类型化 getter） |
 | DataTypeUtilTests.cpp | ✅ cpp_parity_ecore_datatype_util（10；EString·EInt·EBoolean·EDouble from/to、默认值 EString""·EInt0·EBooleanfalse·EDouble0.0·ELong0、coerce（string→int / int→string / int→bool）、nsURI 常量 全对齐。

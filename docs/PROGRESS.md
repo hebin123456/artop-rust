@@ -118,9 +118,9 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 ## 7. 下一步（按优先级）
 
-已完成：emf-common/ecore 核心、EcoreUtil/Copier、XMI saver+loader、Resource/XMI 持久化集成、一致性测试 193 组中 188 条映射 PASS（含 command 模块 / NotifyingList / SegmentSequence / UniqueEList / ENotifier / EAdapter）；一致性框架已多 crate 化并建立 emf-ecore oracle（153 条，映射 70 条 PASS）、emf-edit oracle（26 条全 PASS）、emf-acceleo oracle（26 条全 PASS）、emf-sphinx oracle（68 条全 PASS）。
+已完成：emf-common/ecore 核心、EcoreUtil/Copier、XMI saver+loader、Resource/XMI 持久化集成、一致性测试 193 组中 188 条映射 PASS（含 command 模块 / NotifyingList / SegmentSequence / UniqueEList / ENotifier / EAdapter）；一致性框架已多 crate 化并建立 emf-ecore oracle（153 条，映射 87 条 PASS）、emf-edit oracle（26 条全 PASS）、emf-acceleo oracle（26 条全 PASS）、emf-sphinx oracle（68 条全 PASS）。
 
-1. 扩展 oracle 到 emf-xmi 的 C++ tests 逐模块收敛；继续补 emf-ecore 未映射项（EInvoke / 指针身份类；EGenericType 已随 ETypedElement 对齐）。
+1. 扩展 oracle 到 emf-xmi 的 C++ tests 逐模块收敛；继续补 emf-ecore 未映射项（BasicEObject 容器/inverse-list 通知、指针身份类；EGenericType / EInvoke 已对齐）。
 2. `emf-xmi` 进一步落地：`XMILoadImpl` / `XMIHelper` 接口（`XMIResourceFactory` + `ResourceSet.getResource` 按需加载已完成）。
 3. `emf-ecore-util` 剩余：Adapter / ECrossReferenceAdapter / containment 遍历到 `all_contents` 的流式实现。
 4. `emf-sphinx` 剩余：`ExtendedResource`/`ProxyHelper`/`ModelDescriptor`/`EcoreTraversalHelper` 等在 C++ 侧仍为骨架或空测试，随上层用例补齐再逐条对照。
