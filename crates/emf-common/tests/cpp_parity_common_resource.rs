@@ -3,7 +3,7 @@
 //! Ports `ResourceTests.cpp` from
 //! `artop-cpp/cpp/emf-cpp/emf-common/tests/`.
 use emf_common::eobject::EObject;
-use emf_common::resource::Resource;
+use emf_common::resource::{Resource, ResourceSet};
 use emf_common::uri::Uri;
 use emf_common::value::ObjectRef;
 use std::any::Any;
@@ -83,9 +83,18 @@ fn resource_set_root_returns_same() {
 
 #[test]
 fn resource_default_resource_set_none() {
-    // Rust constrains Resource spawned from a ResourceSet; base has no set.
     let r = Resource::new(Uri::parse("u"));
-    assert!(r.contents().is_empty());
+    assert!(r.resource_set().is_none());
+}
+
+#[test]
+fn resource_set_resource_set_returns_same() {
+    let mut r = Resource::new(Uri::parse("u"));
+    let rs = Rc::new(RefCell::new(ResourceSet::new()));
+    r.set_resource_set(Some(&rs));
+    assert!(r.resource_set().is_some());
+    r.set_resource_set(None);
+    assert!(r.resource_set().is_none());
 }
 
 #[test]

@@ -7,6 +7,8 @@
 
 use crate::uri::Uri;
 use crate::value::ObjectRef;
+use std::cell::RefCell;
+use std::rc::{Rc, Weak};
 
 /// A resource: a URI-addressable unit of model content.
 #[derive(Debug, Default, Clone)]
@@ -17,6 +19,10 @@ pub struct Resource {
     modified: bool,
     errors: Vec<String>,
     warnings: Vec<String>,
+    /// Back-link to the owning [`ResourceSet`] (EMF `Resource.resourceSet`).
+    /// A `Weak` reference so the set — which owns the resource — is not kept
+    /// alive by the resource itself.
+    resource_set: Weak<RefCell<ResourceSet>>,
 }
 
 impl Resource {
@@ -110,6 +116,24 @@ impl Resource {
     /// Set the warnings buffer.
     pub fn set_warnings(&mut self, warnings: Vec<String>) {
         self.warnings = warnings;
+    }
+
+    // ==== ResourceSet association (C++ `Resource::getResourceSet/setResourceSet`) ====
+
+    /// EMF `Resource.getResourceSet()`: the owning set, if any. Returns a
+    /// strong handle by upgrading the [`Weak`] back-link (C++ returns the raw
+    /// `ResourceSet*`, `nullptr` when unset).
+    pub fn resource_set(&self) -> Option<Rc<RefCell<ResourceSet>>> {
+        self.resource_set.upgrade()
+    }
+
+    /// EMF `Resource.setResourceSet(rs)`: link to the owning set. `None`
+    /// clears the link, mirroring C++ `setResourceSet(nullptr)`.
+    pub fn set_resource_set(&mut self, rs: Option<&Rc<RefCell<ResourceSet>>>) {
+        self.resource_set = match rs {
+            Some(r) => Rc::downgrade(r),
+            None => Weak::new(),
+        };
     }
 
     // ==== persistence surface (aligned to C++ `Resource::save/load`) ====
@@ -214,6 +238,13 @@ pub trait ResourceHandle: std::fmt::Debug {
     fn load(&mut self) -> Result<(), String>;
     /// Persist contents to the resource URI.
     fn save(&mut self) -> Result<(), String>;
+    /// EMF `Resource.getResourceSet()`: the owning set, if any (default: none).
+    fn resource_set(&self) -> Option<Rc<RefCell<ResourceSet>>> {
+        None
+    }
+    /// EMF `Resource.setResourceSet(rs)`: link to the owning set (`None`
+    /// clears). Default: no-op for resources without a back-link.
+    fn set_resource_set(&mut self, _rs: Option<&Rc<RefCell<ResourceSet>>>) {}
     /// Downcast to the concrete type.
     fn as_any(&self) -> &dyn std::any::Any;
     /// Mutable downcast to the concrete type.
@@ -287,6 +318,12 @@ impl ResourceHandle for Resource {
     }
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+    fn resource_set(&self) -> Option<Rc<RefCell<ResourceSet>>> {
+        Resource::resource_set(self)
+    }
+    fn set_resource_set(&mut self, rs: Option<&Rc<RefCell<ResourceSet>>>) {
+        Resource::set_resource_set(self, rs);
     }
 }
 

@@ -17,7 +17,7 @@
 | SegmentSequenceTests.cpp | ✅ `cpp_parity_common_path` + `segment_sequence` 单测；空分隔符=单段、空值=空序列、append 重切分语义全对齐 |
 | ENotifierTests.cpp | ✅ cpp_parity_common_enotifier（30；adapter 生命周期/eNotify/NotificationChain 抵消+合并+dispatch/wasSet）；`setEContainer` 反向 ADD/REMOVE 通知已在 emf-common 单测（`eobject_set_e_container_fires_reverse_add`/`switch`/`same`）+ emf-ecore 容器接线（`b_set_e_container_*`）双覆盖 |
 | URITests.cpp | ✅ cpp_parity_common_path |
-| ResourceTests.cpp | 🔶 cpp_parity_common_resource（19）；setResourceSet 关联待补 |
+| ResourceTests.cpp | ✅ cpp_parity_common_resource（20）；`setResourceSet` 关联已补齐：`Resource` 持 `Weak<RefCell<ResourceSet>>` 回链，`resource_set()`/`set_resource_set(Option<..>)`（`None` 清除对齐 C++ `setResourceSet(nullptr)`），`ResourceHandle` trait 提供同名默认方法（对应 C++ 基类虚函数） |
 | CommandTests.cpp | ✅ cpp_parity_common_command（39，覆盖全命令类） |
 | EPackageRegistryTests.cpp | ✅ cpp_parity_ecore_registry（7；已扩展 `PackageRegistry` 增加 key 索引 get/put/contains_key/remove/keys，register 按 name/nsURI/nsPrefix 索引） |
 
