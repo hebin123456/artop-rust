@@ -78,6 +78,12 @@ jobs:
         run: bash tools/conformance/build_sphinx_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-sphinx reference/artop-cpp/cpp/emf-cpp/emf-xmi reference/artop-cpp/cpp/emf-cpp/emf-edit reference/artop-cpp/cpp/emf-cpp/emf-ecore-util reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-common
       - name: Build and run C++ oracle (emf-xmi)
         run: bash tools/conformance/build_xmi_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-xmi reference/artop-cpp/cpp/emf-cpp/emf-ecore-codegen reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-ecore-util reference/artop-cpp/cpp/emf-cpp/emf-common
+      - name: Build Rust XMI interop harness
+        run: cargo build -p emf-ecore-codegen --example interop_xmi
+      - name: Build C++ XMI interop harness
+        run: bash tools/conformance/build_xmi_interop.sh reference/artop-cpp/cpp/emf-cpp/emf-xmi reference/artop-cpp/cpp/emf-cpp/emf-ecore-codegen reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-ecore-util reference/artop-cpp/cpp/emf-cpp/emf-common
+      - name: Bidirectional XMI interop (Rust <-> C++)
+        run: python3 tools/conformance/interop_xmi.py --cpp tools/conformance/build/interop_xmi --rust target/debug/examples/interop_xmi
       - name: Compare Rust vs oracle (emf-common)
         run: python3 tools/conformance/compare.py --oracle tools/conformance/build/oracle.json --cases tools/conformance/cases.tsv --pkg emf-common
       - name: Compare Rust vs oracle (emf-ecore)
