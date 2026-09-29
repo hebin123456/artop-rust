@@ -127,6 +127,29 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 4. `emf-sphinx` 剩余：`ExtendedResource`/`ProxyHelper`/`ModelDescriptor`/`EcoreTraversalHelper` 等在 C++ 侧仍为骨架或空测试，随上层用例补齐再逐条对照。
 5. `artop-runtime`：AUTOSAR 序列化/反序列化（届时才引入 artop 相关内容）。
 
+## 7.1 交接：下一棒 = `AutosarXMLSaver`（arxml 写核心）
+
+**现状**：arxml **读**已完整落地并推送（`459c1d5`）；写出仍走 `emf-xmi` 通用 XMI 路径，尚未 arxml 化。
+
+**参考实现**：`/tmp/artop-cpp-ref/cpp/emf-cpp/emf-artop/emf-artop-runtime/src/AutosarXMLSaver.cpp`（2023 行，对齐 Java `AutosarXMLSaveImpl`）。关键函数定位：
+
+- `save()`（L567）：根元素 `<AUTOSAR xmlns xmlns:xsi xsi:schemaLocation>`，遍历 contents，末尾 `\n`。
+- `PugiDomWriter`（L214）：**延迟开标签**流式 writer —— 递归生成，`beginElement` 只压栈，首个子节点/文本才写开标签；`endElement` 决定 `<TAG/>`、`\n+indent</TAG>`、inline `</TAG>`；`encodeText` / `encodeAttributeValue` 的转义集就是 round-trip 字节一致的关键。
+- `saveObjectContent()`（L615）：`simple`/`mixed`/默认三条 path；`elementsOnly` 变体。
+- `collectSortedFeaturesUncached()`（L890）、`saveAttribute()`（L1021）、`attrValueToString()`（L1083）。
+- `saveContainment()`（L1157）+ `resolveAprxmlRule()`（L1303）：APRXML 0012/0015/0016/default 决定 wrapper 包裹方式。
+- `saveReference()`（L1329）：`<FEATURE DEST="TypeXmlName">short-name-path</FEATURE>`，DEST 优先取 loader 存的原始 `refDestStore`。
+- `saveSingleMixedElement()`（L1487）、`tryComputeBaseRelative()`（L1602）+ `getReferenceBasePrefix/readReferenceBaseShortLabel/readReferenceBaseIsDefault`（L1659-1718）。
+- `getShortNamePath()`（L1787）、`getTypeXmlNameUncached()`（L1854）、`isFeatureOrdered()`（L1879）、`getSplitkeyValue/sortChildrenBySplitkey/sortChildrenByShortName`（L1895-2016）。
+
+**Rust 落地点**：新增 `crates/emf-artop/artop-runtime/src/arxml/saver.rs`，实现 `emf_xmi::XMLSave`（trait 仅 `fn save(&self, res: &XMIResource) -> String`），公开 `AutosarXMLSaver`；在 `autosar_resource.rs::create_xml_save` 返回它，并像 loader 那样在 `new_inner` 里 `inner.set_xml_save(AutosarXMLSaver)`。
+
+**可直接复用的已有件**：`arxml::dom::{Element,Node,parse}`、`arxml::store`（`mixed_content` / `comments` / `mixed_text` / `ref_dest` / `ref_is_default`，供 saver 读取 loader 写入的侧表）、`loader.rs` 的 `explicit_plural` / `find_feature` 约定、元模型注解读法 `EStructuralFeature::{xml_name,xml_name_plural,is_xml_attribute,is_role_element,is_role_wrapper,is_type_element,is_type_wrapper,tagged_feature_kind,sequence_offset}`、`EClass::content_kind()`、`XMIResource::{options(),get_xsi_schema_location(),resource()}`、`AutosarResource::{schema_location(),create_xml_save()}`。
+
+**验收**：(1) 写 URI 测试接 `AutosarXMLResource`；(2) `load → save` 对 `Empty401.arxml` 等 fixture 做 round-trip（先按 DOM 结构等价，再逐步收敛到字节级）；(3) 扩 `tools/conformance` 的 oracle/TSV 覆盖写路径；(4) `cargo fmt/clippy/test --workspace` 全绿。
+
+**注意**：不要在 `emf-*` 通用底座里引入 arxml/AUTOSAR 概念（见 §1 分层原则）；写路径全部留在 `emf-artop/artop-runtime`。
+
 ## 8. emf-xmi 实施记录
 
 - **Milestone 1 — saver**：`emf-xmi` 实例文档序列化器（`XmiSaver` → `save_to_string`）。
