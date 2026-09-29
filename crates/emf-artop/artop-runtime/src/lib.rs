@@ -9,6 +9,7 @@
 //! This crate is the artop-specific layer: it is the only place that knows about
 //! AUTOSAR. The `emf-*` crates below it stay generic.
 
+pub mod arxml;
 pub mod autosar_library_index;
 pub mod autosar_resource;
 pub mod autosar_resource_factory;
@@ -18,6 +19,7 @@ pub mod release_descriptor;
 pub mod unknown_element;
 pub mod version_data;
 
+pub use arxml::AutosarXMLLoader;
 pub use autosar_library_index::AutosarLibraryIndex;
 pub use autosar_resource::{AutosarResource, AutosarXMLResource};
 pub use autosar_resource_factory::{AutosarResourceCreator, AutosarResourceFactory};

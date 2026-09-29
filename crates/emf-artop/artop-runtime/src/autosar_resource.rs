@@ -20,8 +20,9 @@ use std::rc::Rc;
 
 use emf_common::uri::Uri;
 use emf_ecore::PackageRegistry;
-use emf_xmi::{XMIResource, XMLHelper, XMLLoader, XMLSave, XMLSaveImpl, XMLoaderImpl};
+use emf_xmi::{XMIResource, XMLHelper, XMLLoader, XMLSave, XMLSaveImpl};
 
+use crate::arxml::AutosarXMLLoader;
 use crate::autosar_library_index::AutosarLibraryIndex;
 use crate::release_descriptor::AutosarReleaseDescriptor;
 
@@ -51,7 +52,7 @@ impl AutosarResource {
     /// New resource at `uri` resolving its metamodel via `registry`.
     pub fn new(uri: Uri, registry: PackageRegistry) -> Self {
         Self {
-            inner: XMIResource::new(uri, registry),
+            inner: Self::new_inner(uri, registry),
             autosar_release: None,
             schema_location: String::new(),
         }
@@ -65,10 +66,20 @@ impl AutosarResource {
         release: Option<AutosarReleaseDescriptor>,
     ) -> Self {
         Self {
-            inner: XMIResource::new(uri, registry),
+            inner: Self::new_inner(uri, registry),
             autosar_release: release,
             schema_location: String::new(),
         }
+    }
+
+    /// Build the wrapped resource with the arxml deserializer installed as its
+    /// [`XMLLoader`] (the C++ `AutosarXMLResource::createXMLLoad` seam). Rust
+    /// has no virtual dispatch on the resource, so the loader is injected at
+    /// construction instead of being queried during `load`.
+    fn new_inner(uri: Uri, registry: PackageRegistry) -> XMIResource {
+        let mut inner = XMIResource::new(uri, registry);
+        inner.set_xml_load(AutosarXMLLoader::new());
+        inner
     }
 
     /// The associated release descriptor, if any (C++ `getAutosarRelease`).
@@ -110,9 +121,12 @@ impl AutosarResource {
 
     /// Create the deserializer for this resource (C++ `createXMLLoad`).
     ///
-    /// See [`Self::create_xml_save`] for the current generic-XMI fallback.
+    /// The dedicated arxml deserializer ([`AutosarXMLLoader`]) drives the load:
+    /// it maps arxml elements to features through the bridged metamodel and
+    /// resolves short-name-path references. The serializer is still the generic
+    /// XMI one (see [`Self::create_xml_save`]).
     pub fn create_xml_load(&self) -> Rc<dyn XMLLoader> {
-        Rc::new(XMLoaderImpl)
+        Rc::new(AutosarXMLLoader::new())
     }
 
     /// Register this resource's shortName paths into the global

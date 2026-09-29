@@ -273,6 +273,14 @@ impl PackageRegistry {
             .find_map(|p| p.borrow().find_class_by_xml_name(xml_name).cloned())
     }
 
+    /// Find an enum by name across every package. Returns an owned clone, like
+    /// [`Self::find_class`], so callers avoid the `Rc<RefCell>` borrow.
+    pub fn find_enum(&self, name: &str) -> Option<EEnum> {
+        self.packages
+            .iter()
+            .find_map(|p| p.borrow().find_enum(name).cloned())
+    }
+
     /// Find a package's classes vector by name (borrow-free owned snapshot).
     pub fn classes_of(&self, pkg_name: &str) -> Option<Vec<EClass>> {
         let pkg = self.package(pkg_name)?;
