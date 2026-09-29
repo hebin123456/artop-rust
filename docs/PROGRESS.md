@@ -252,6 +252,14 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - 测试：`artop-runtime` 新增资源层单测（工厂产出/自定义 creator/schemaLocation 注入/目录/资源集去重 + release 携带 + 按需缺失返回 None），全绿。
   - 质量门禁：`cargo fmt --all`、`cargo test --workspace --all-targets`（103 个测试二进制 0 失败）、`cargo clippy --workspace --all-targets`（0 告警）全绿，无回归。
 
+- **Milestone 20 — 静态模型的 ARXML 序列化元数据 + 按 arxml 元素名解析类（本轮新增）**：为 arxml 读写铺路，把静态注册表里的 arxml 序列化元数据搬到 EMF 桥接包上，使通用 `emf-xmi`/arxml 层能按元素名反射建对象。
+  - `emf-ecore::EStructuralFeature` 新增 `TaggedValues` 注解读取面：`xml_name` / `xml_name_plural` / `is_xml_attribute` / `is_role_element` / `is_role_wrapper` / `is_type_element` / `is_type_wrapper` / `tagged_feature_kind` / `sequence_offset`（对齐 C++ `EAnnotationReader::readFeatureMeta`）。
+  - `emf-ecore::EClass` 新增 `annotation` / `tagged_value` / `xml_name` / `content_kind`（对齐 C++ `findEClassByXmlName` 的查找键与 `eContentKind`）。
+  - `emf-ecore::EPackage` / `PackageRegistry` 新增 `find_class_by_xml_name`，使 `AR-PACKAGE` / `SWC-IMPLEMENTATION` 这类 arxml 元素标签无需硬编码映射即可解析到 `EClass`。
+  - `autosar448-model::metamodel` 新增 `tag_class` / `tag_feature`，把注册表的 `xml.name` / `xml.namePlural` / `featureKind` / `isXmlAttribute` / APRXML role·type·wrapper 标志 / `contentKind` / `internal-xml-sequenceOffset` 写进 `TaggedValues` 注解。
+  - `emf-xmi::loader::resolve_class` 回退到 `find_class_by_xml_name`，让 arxml 元素标签直接驱动 `DynamicEObject` 实例化。
+  - 测试：`autosar448-model` 16 条（新增注解面断言），全绿。
+
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 
 | 提交 | 内容 |

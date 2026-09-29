@@ -18,8 +18,8 @@ use std::collections::HashSet;
 
 use emf_ecore::structural::FeatureKind as EcoreFeatureKind;
 use emf_ecore::{
-    make_package_ref, EClass, EClassKind, EDataType, EEnum, EPackage, EStructuralFeature,
-    PackageRef, PackageRegistry,
+    make_package_ref, EAnnotation, EClass, EClassKind, EDataType, EEnum, EPackage,
+    EStructuralFeature, PackageRef, PackageRegistry,
 };
 
 use crate::registry::{
@@ -66,6 +66,68 @@ fn xml_feature_name(fm: &crate::registry::FeatureMeta) -> &'static str {
     }
 }
 
+/// Attach the `TaggedValues` annotation carrying the ARXML serialization
+/// metadata of a feature (the Rust counterpart of the C++
+/// `EAnnotationReader::readFeatureMeta`, which the arxml loader/saver read:
+/// `xml.name`, `xml.namePlural`, the APRXML role/type/wrapper flags,
+/// `isXmlAttribute` and the sequence offset).
+fn tag_feature(f: &mut EStructuralFeature, fm: &crate::registry::FeatureMeta) {
+    let mut ann = EAnnotation::new(EStructuralFeature::TAGGED_VALUES);
+    if !fm.xml_name.is_empty() {
+        ann.set_detail("xml.name", fm.xml_name);
+    }
+    if !fm.xml_name_plural.is_empty() && fm.xml_name_plural != fm.xml_name {
+        ann.set_detail("xml.namePlural", fm.xml_name_plural);
+    }
+    if !fm.feature_kind.is_empty() {
+        ann.set_detail("featureKind", fm.feature_kind);
+    }
+    if fm.xml_attribute {
+        ann.set_detail("isXmlAttribute", "true");
+    }
+    if fm.text_content {
+        ann.set_detail("textContent", "true");
+    }
+    if fm.role_element {
+        ann.set_detail("roleElement", "true");
+    }
+    if fm.role_wrapper {
+        ann.set_detail("roleWrapper", "true");
+    }
+    if fm.type_element {
+        ann.set_detail("typeElement", "true");
+    }
+    if fm.type_wrapper {
+        ann.set_detail("typeWrapper", "true");
+    }
+    if fm.seq_offset != -100 {
+        ann.set_detail("internal-xml-sequenceOffset", fm.seq_offset.to_string());
+    }
+    f.add_annotation(ann);
+}
+
+/// Attach the `TaggedValues` annotation carrying a class's arxml element name
+/// (`xml.name`) and its `contentKind` (`simple` / `mixed`), so element tags such
+/// as `AR-OBJECT` resolve to their `EClass` (mirrors the C++
+/// `findEClassByXmlName`) and the loader can pick the simple-content path.
+fn tag_class(cls: &mut EClass, cm: &crate::registry::ClassMeta) {
+    let xml_differs = !cm.xml_name.is_empty() && cm.xml_name != cm.name;
+    if !xml_differs && cm.content_kind.is_empty() {
+        return;
+    }
+    let mut ann = EAnnotation::new(EStructuralFeature::TAGGED_VALUES);
+    if xml_differs {
+        ann.set_detail("xml.name", cm.xml_name);
+        if !cm.xml_name_plural.is_empty() && cm.xml_name_plural != cm.xml_name {
+            ann.set_detail("xml.namePlural", cm.xml_name_plural);
+        }
+    }
+    if !cm.content_kind.is_empty() {
+        ann.set_detail("contentKind", cm.content_kind);
+    }
+    cls.add_annotation(ann);
+}
+
 /// Build the merged AUTOSAR metamodel as an [`EPackage`].
 ///
 /// Contains every `EClass` (gautosar + autosar448), enum and data type of the
@@ -107,6 +169,7 @@ pub fn build_autosar_package() -> EPackage {
                 .map(|&s| ECLASS[s as usize].name.to_string())
                 .collect(),
         );
+        tag_class(&mut cls, cm);
 
         // A class may inherit the same arxml element name twice (e.g. a role
         // element and a plain feature); keep only the first so the generic
@@ -130,6 +193,7 @@ pub fn build_autosar_package() -> EPackage {
             f.set_transient(fm.transient);
             f.set_volatile(fm.volatile_);
             f.set_derived(fm.derived);
+            tag_feature(&mut f, fm);
             cls.add_feature(f);
         }
         pkg.add_class(cls);
@@ -189,6 +253,32 @@ mod tests {
             .find(|f| f.name() == "SHORT-NAME")
             .expect("SHORT-NAME inherited by ARPackage");
         assert!(!sn.is_reference());
+    }
+
+    #[test]
+    fn arxml_metadata_annotations_are_attached() {
+        let mut reg = PackageRegistry::new();
+        register_autosar_metamodel(&mut reg);
+
+        // Every arxml-bearing feature carries the `xml.name` tagged value read
+        // back through the annotation surface.
+        let autosar = reg.find_class("AUTOSAR").unwrap();
+        let arpkg = autosar
+            .e_all_structural_features(&reg)
+            .into_iter()
+            .find(|f| f.name() == "AR-PACKAGE")
+            .expect("AR-PACKAGE feature");
+        assert_eq!(arpkg.tagged_value("xml.name"), Some("AR-PACKAGE"));
+
+        // Classes whose arxml element differs from the ecore name expose it
+        // through `xml_name()`, which powers `find_class_by_xml_name`.
+        let arpackage = reg.find_class("ARPackage").unwrap();
+        assert_eq!(arpackage.xml_name(), "AR-PACKAGE");
+        assert_eq!(
+            reg.find_class_by_xml_name("AR-PACKAGE")
+                .map(|c| c.name().to_string()),
+            Some("ARPackage".to_string())
+        );
     }
 
     #[test]

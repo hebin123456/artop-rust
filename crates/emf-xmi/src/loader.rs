@@ -253,6 +253,7 @@ fn resolve_class(
     };
     registry
         .find_class(&class_name)
+        .or_else(|| registry.find_class_by_xml_name(&class_name))
         .ok_or_else(|| format!("no class '{}' in registry", class_name))
 }
 

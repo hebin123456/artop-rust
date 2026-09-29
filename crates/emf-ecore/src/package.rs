@@ -128,6 +128,14 @@ impl EPackage {
         self.classifiers.iter().find(|c| c.name() == name)
     }
 
+    /// A classifier by its arxml element name: the ecore class name or the
+    /// class's `xml.name` tagged value (mirrors the C++ `findEClassByXmlName`).
+    pub fn find_class_by_xml_name(&self, xml_name: &str) -> Option<&EClass> {
+        self.classifiers
+            .iter()
+            .find(|c| c.name() == xml_name || c.xml_name() == xml_name)
+    }
+
     /// An enum by name.
     pub fn find_enum(&self, name: &str) -> Option<&EEnum> {
         self.enums.iter().find(|e| e.name() == name)
@@ -253,6 +261,16 @@ impl PackageRegistry {
         self.packages
             .iter()
             .find_map(|p| p.borrow().find_class(cls_name).cloned())
+    }
+
+    /// Find a class by its arxml element name across every package (the ecore
+    /// class name or the class's `xml.name` tagged value). Mirrors the C++
+    /// `findEClassByXmlName`, which lets arxml element tags such as
+    /// `AR-OBJECT` / `SWC-IMPLEMENTATION` resolve without a hard-coded map.
+    pub fn find_class_by_xml_name(&self, xml_name: &str) -> Option<EClass> {
+        self.packages
+            .iter()
+            .find_map(|p| p.borrow().find_class_by_xml_name(xml_name).cloned())
     }
 
     /// Find a package's classes vector by name (borrow-free owned snapshot).

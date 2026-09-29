@@ -331,6 +331,70 @@ impl EStructuralFeature {
     pub fn annotation(&self, source: &str) -> Option<&EAnnotation> {
         self.annotations.iter().find(|a| a.source() == source)
     }
+
+    /// The annotation source carrying ARXML serialization metadata (aligned to
+    /// the C++ `EAnnotationReader`, which reads `xml.name` / `xml.namePlural`
+    /// and the APRXML role/type/wrapper flags from this source).
+    pub const TAGGED_VALUES: &'static str = "TaggedValues";
+
+    /// A detail value from the `TaggedValues` annotation (`None` when the
+    /// annotation or the key is absent).
+    pub fn tagged_value(&self, key: &str) -> Option<&str> {
+        self.annotation(Self::TAGGED_VALUES)
+            .and_then(|a| a.detail(key))
+    }
+
+    /// The arxml element name (`xml.name` tagged value), defaulting to the
+    /// ecore feature name when the annotation is absent (mirrors
+    /// `EAnnotationReader::readFeatureMeta().xmlName`'s fallback).
+    pub fn xml_name(&self) -> &str {
+        self.tagged_value("xml.name").unwrap_or(&self.name)
+    }
+
+    /// The arxml plural/wrapper element name (`xml.namePlural`), defaulting to
+    /// [`xml_name`](Self::xml_name) when absent.
+    pub fn xml_name_plural(&self) -> &str {
+        self.tagged_value("xml.namePlural")
+            .unwrap_or_else(|| self.xml_name())
+    }
+
+    /// Whether this feature is serialized as an XML attribute
+    /// (`isXmlAttribute` tagged value).
+    pub fn is_xml_attribute(&self) -> bool {
+        self.tagged_value("isXmlAttribute") == Some("true")
+    }
+
+    /// APRXML composition rule flag `roleElement`.
+    pub fn is_role_element(&self) -> bool {
+        self.tagged_value("roleElement") == Some("true")
+    }
+
+    /// APRXML composition rule flag `roleWrapper`.
+    pub fn is_role_wrapper(&self) -> bool {
+        self.tagged_value("roleWrapper") == Some("true")
+    }
+
+    /// APRXML composition rule flag `typeElement`.
+    pub fn is_type_element(&self) -> bool {
+        self.tagged_value("typeElement") == Some("true")
+    }
+
+    /// APRXML composition rule flag `typeWrapper`.
+    pub fn is_type_wrapper(&self) -> bool {
+        self.tagged_value("typeWrapper") == Some("true")
+    }
+
+    /// The `featureKind` tagged value (e.g. `"simple"` for the text-content
+    /// feature), or `""` when absent.
+    pub fn tagged_feature_kind(&self) -> &str {
+        self.tagged_value("featureKind").unwrap_or("")
+    }
+
+    /// The APRXML `internal-xml-sequenceOffset` tagged value, if any.
+    pub fn sequence_offset(&self) -> Option<i32> {
+        self.tagged_value("internal-xml-sequenceOffset")
+            .and_then(|v| v.parse().ok())
+    }
 }
 
 impl Default for EStructuralFeature {

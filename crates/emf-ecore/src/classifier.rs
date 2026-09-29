@@ -406,6 +406,30 @@ impl EClass {
         self.annotations.push(ann);
     }
 
+    /// Look up an annotation by its source URI (EMF `getEAnnotation(String)`).
+    pub fn annotation(&self, source: &str) -> Option<&EAnnotation> {
+        self.annotations.iter().find(|a| a.source() == source)
+    }
+
+    /// A detail value from the `TaggedValues` annotation, if present.
+    pub fn tagged_value(&self, key: &str) -> Option<&str> {
+        self.annotation(EStructuralFeature::TAGGED_VALUES)
+            .and_then(|a| a.detail(key))
+    }
+
+    /// The arxml element name of this class (`xml.name` tagged value),
+    /// defaulting to the ecore class name (mirrors the C++
+    /// `findEClassByXmlName` lookup key).
+    pub fn xml_name(&self) -> &str {
+        self.tagged_value("xml.name").unwrap_or(&self.name)
+    }
+
+    /// The `contentKind` tagged value (`"simple"` / `"mixed"`), or `""` when
+    /// absent (C++ `EObject::eContentKind`).
+    pub fn content_kind(&self) -> &str {
+        self.tagged_value("contentKind").unwrap_or("")
+    }
+
     /// Register a default feature value keyed by feature id.
     pub fn set_default_value(&mut self, feature_id: i32, value: Val) {
         self.default_values.retain(|(f, _)| *f != feature_id);
