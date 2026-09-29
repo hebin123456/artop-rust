@@ -17,13 +17,16 @@
 //!
 //! [`set_resource_creator`]: AutosarResourceFactory::set_resource_creator
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use emf_common::resource::ResourceHandle;
 use emf_common::uri::Uri;
-use emf_ecore::PackageRegistry;
+use emf_ecore::{make_package_ref, PackageRef, PackageRegistry};
 use emf_xmi::XMIResource;
+
+use autosar448_model::metamodel::{build_autosar_package, AUTOSAR_BASE_NS_URI};
 
 use crate::autosar_resource::{AutosarResource, AutosarXMLResource};
 use crate::release_descriptor::AutosarReleaseDescriptor;
@@ -42,6 +45,36 @@ pub struct AutosarResourceFactory {
 }
 
 impl AutosarResourceFactory {
+    /// Register the built-in AUTOSAR metamodel into the process-wide package
+    /// registry and return its package handle (C++
+    /// `AutosarResourceFactory::registerDefaultAutosar40Metamodel`).
+    ///
+    /// The C++ origin loads the emitted `model/autosar40.ecore`; the Rust port
+    /// bridges the `autosar448-model` static registry into an `EPackage`
+    /// instead, which is the same metamodel (`autosar40`,
+    /// `http://autosar.org/schema/r4.0`). Idempotent: repeated calls return the
+    /// same package handle.
+    pub fn register_default_autosar40_metamodel() -> PackageRef {
+        thread_local! {
+            static CACHE: RefCell<Option<PackageRef>> = const { RefCell::new(None) };
+        }
+        CACHE.with(|cell| {
+            if let Some(existing) = cell.borrow().as_ref() {
+                return Rc::clone(existing);
+            }
+            let pkg = match emf_ecore::ecore_package::global_get(AUTOSAR_BASE_NS_URI) {
+                Some(existing) => existing,
+                None => {
+                    let built = make_package_ref(build_autosar_package());
+                    emf_ecore::ecore_package::global_register(Rc::clone(&built));
+                    built
+                }
+            };
+            *cell.borrow_mut() = Some(Rc::clone(&pkg));
+            pkg
+        })
+    }
+
     /// A factory with no release and an empty metamodel registry.
     pub fn new(release: Option<AutosarReleaseDescriptor>) -> Self {
         Self {

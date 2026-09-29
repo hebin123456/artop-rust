@@ -119,6 +119,25 @@ pub fn initialize() {
     let _ = ecore_package();
 }
 
+/// Register a package into the process-wide registry, indexing it under its
+/// name, `nsURI` and `nsPrefix` (EMF `EPackage.Registry.INSTANCE.put`). The
+/// built-in Ecore package is seeded first, so callers need not initialise.
+pub fn global_register(pkg: PackageRef) {
+    GLOBAL_REGISTRY.with(|cell| {
+        let mut guard = cell.borrow_mut();
+        if guard.is_none() {
+            *guard = Some(build_registry());
+        }
+        guard.as_mut().expect("registry initialized").register(pkg);
+    });
+}
+
+/// Look a package up in the process-wide registry by any registered key
+/// (`name`, `nsURI` or `nsPrefix`); `None` when absent.
+pub fn global_get(key: &str) -> Option<PackageRef> {
+    global().get(key).cloned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

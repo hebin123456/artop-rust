@@ -1,0 +1,36 @@
+# C++(参考, oracle) 测试 ↔ Rust(移植) 测试的等价映射表 —— emf-artop-runtime 模块
+#
+# 列: group<TAB>cpp_test<TAB>rust_test<TAB>pkg
+#   group    : emf-artop-runtime 内的来源文件(test_main.cpp)
+#   cpp_test : C++ 单元测试名(来自 emf-cpp/emf-artop/emf-artop-runtime/tests,
+#              以 EMF_TEST/EMF_RUN 注册)
+#   rust_test: 对应的 Rust 测试名
+#              (cargo test -p artop-runtime <name> -- --exact)
+#   pkg      : 所属 crate(artop-runtime)
+#
+# 规则:
+#   - 已映射且 Rust 同名校验通过 => PASS(行为等价)
+#   - 已映射但 Rust 测试缺失 => PENDING(等价待实现, 可接受)
+#   - 未映射的 C++ 测试 => PENDING(尚未核对), 逐步补齐
+#   - 已映射但 Rust 测试失败 => REGRESSION(必须修复)
+# 以 # 开头的行为注释, 忽略。
+
+group	cpp_test	rust_test	pkg
+test_main/test_version_data_basic	test_version_data_basic	test_version_data_basic	artop-runtime
+test_main/test_version_data_parse	test_version_data_parse	test_version_data_parse	artop-runtime
+test_main/test_version_canonical	test_version_canonical	test_version_canonical	artop-runtime
+test_main/test_schema_version_string	test_schema_version_string	test_schema_version_string	artop-runtime
+test_main/test_release_descriptor_basic	test_release_descriptor_basic	test_release_descriptor_basic	artop-runtime
+test_main/test_release_schema_location	test_release_schema_location	test_release_schema_location	artop-runtime
+test_main/test_release_matches	test_release_matches	test_release_matches	artop-runtime
+test_main/test_release_compare	test_release_compare	test_release_compare	artop-runtime
+test_main/test_resource_basic	test_resource_basic	test_resource_basic	artop-runtime
+test_main/test_xml_resource_factory_methods	test_xml_resource_factory_methods	test_xml_resource_factory_methods	artop-runtime
+test_main/test_resource_factory_creator	test_resource_factory_creator	test_resource_factory_creator	artop-runtime
+test_main/test_init_resource_sets_xsi	test_init_resource_sets_xsi	test_init_resource_sets_xsi	artop-runtime
+test_main/test_schema_catalog	test_schema_catalog	test_schema_catalog	artop-runtime
+test_main/test_identifiable_util_null	test_identifiable_util_null	test_identifiable_util_null	artop-runtime
+test_main/test_descriptor_instance	test_descriptor_instance	test_descriptor_instance	artop-runtime
+test_main/test_metamodel_registration	test_metamodel_registration	test_metamodel_registration	artop-runtime
+test_main/test_arxml_instantiation_root	test_arxml_instantiation_root	test_arxml_instantiation_root	artop-runtime
+test_main/test_arxml_containment_arpackage	test_arxml_containment_arpackage	test_arxml_containment_arpackage	artop-runtime

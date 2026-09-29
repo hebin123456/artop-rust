@@ -80,6 +80,8 @@ jobs:
         run: bash tools/conformance/build_sphinx_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-sphinx reference/artop-cpp/cpp/emf-cpp/emf-xmi reference/artop-cpp/cpp/emf-cpp/emf-edit reference/artop-cpp/cpp/emf-cpp/emf-ecore-util reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-common
       - name: Build and run C++ oracle (emf-xmi)
         run: bash tools/conformance/build_xmi_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-xmi reference/artop-cpp/cpp/emf-cpp/emf-ecore-codegen reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-ecore-util reference/artop-cpp/cpp/emf-cpp/emf-common
+      - name: Build and run C++ oracle (artop-runtime)
+        run: bash tools/conformance/build_artop_runtime_oracle.sh reference/artop-cpp/cpp/emf-cpp/emf-artop/emf-artop-runtime reference/artop-cpp/cpp/emf-cpp/emf-xmi reference/artop-cpp/cpp/emf-cpp/emf-ecore-codegen reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-ecore-util reference/artop-cpp/cpp/emf-cpp/emf-common
       - name: Build Rust XMI interop harness
         run: cargo build -p emf-ecore-codegen --example interop_xmi
       - name: Build C++ XMI interop harness
@@ -100,3 +102,5 @@ jobs:
         run: python3 tools/conformance/compare.py --oracle tools/conformance/build/sphinx_oracle.json --cases tools/conformance/cases_sphinx.tsv --pkg emf-sphinx
       - name: Compare Rust vs oracle (emf-xmi)
         run: python3 tools/conformance/compare.py --oracle tools/conformance/build/xmi_oracle.json --cases tools/conformance/cases_xmi.tsv --pkg emf-xmi
+      - name: Compare Rust vs oracle (artop-runtime)
+        run: python3 tools/conformance/compare.py --oracle tools/conformance/build/artop_runtime_oracle.json --cases tools/conformance/cases_artop_runtime.tsv --pkg artop-runtime

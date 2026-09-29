@@ -68,7 +68,7 @@ examples/
 | `emf-acceleo` | ✅ 工作 | Acceleo MTL/`M2T` 引擎（对 C++ `AcceleoAst.h`/`AcceleoParser.cpp`/`AcceleoEngine.cpp` 的 1:1 移植）：`ast`（Block：Text/Expr/For/If/Let/File/Protected；Expr：Var/String/Int/Bool/Nav/Call/CollectionLit/If/Lambda）+ `parser`（递归下降：`[module]`/`template`/`query`/`import`/`extends`、`[for]/[if]/[let]/[file]/[protected]`、`post(...)` 容错）+ `engine`（`AcceleoEngine`/`AcceleoService`：上下文/服务注册/模板·查询查找、表达式求值、`=`/`or`/`and`/比较/算术、lambda + `->collect/select/reject/forAll/exists/size` 集合操作、`[file]` 落盘与 `[protected]` 区域合并）；C++ `AcceleoTests.cpp`(18) + `AlignmentTests.cpp`(8) 已逐条对照，26 条全 PASS（`cpp_parity_acceleo`） |
 | `emf-sphinx` | ✅ 工作 | headless 核心：`Node`（attributes/children fluent builder）+ `Root`/`Model`（全路径索引 O(1) `resolve`）+ 深度遍历（`Continue`/`Prune`/`Stop` 控制）；Sphinx 扩展：`metamodel`（`MetaModelDescriptor`/`AbstractMetaModelDescriptor` + `MetaModelVersionData` + thread-local `MetaModelDescriptorRegistry`）、`resource`（`SchemaLocationUriHandler`/`ExtendedBasicExtendedMetaData`/`ModelConverterRegistry`）、`scoping`（`FileResourceScope`/`FileResourceScopeProvider`/`ResourceScopeProviderRegistry`）、`ecore`（`OrderedFeatureMap`）、`util`（`EcoreResourceUtil`）；C++ 5 个测试文件 68 条已逐条对照并全 PASS（`cpp_parity_sphinx`） |
 | `emf-artop/artop-validation` | ✅ 工作 | AUTOSAR 业务约束层（对齐 `org.artop.aal.*.constraints`）：`autosar_constraints`（shortName 非空/同父唯一、uuid 非空/全局唯一、category 必填、no-unresolved-proxy；BATCH+LIVE）；叠在通用 `emf-validation` 底座之上，由调用方显式注册。C++ `AutosarConstraintsTests.cpp` 13 条已逐条对照 |
-| `emf-artop/artop-runtime` | 🟡 进行中 | 基座已落地：`AutosarMetaModelVersionData` / `AutosarReleaseDescriptor` / `IdentifiableUtil` / `AutosarLibraryIndex` / `UnknownElement`；资源层已落地：`AutosarResource` / `AutosarXMLResource` / `AutosarResourceFactory` / `AutosarResourceSet`（基于 `emf-xmi`，含 release / schemaLocation / 库索引 / `getResource` 按需加载 / `getEObject` 跨资源解析）；**待做** `AutosarXMLLoader` / `AutosarXMLSaver`（arxml 读写核心） |
+| `emf-artop/artop-runtime` | 🟡 进行中 | 基座已落地：`AutosarMetaModelVersionData` / `AutosarReleaseDescriptor` / `IdentifiableUtil` / `AutosarLibraryIndex` / `UnknownElement`；资源层已落地：`AutosarResource` / `AutosarXMLResource` / `AutosarResourceFactory`（含 `register_default_autosar40_metamodel` 静态元模型注册）/ `AutosarResourceSet`（基于 `emf-xmi`，含 release / schemaLocation / 库索引 / `getResource` 按需加载 / `getEObject` 跨资源解析）；**C++ 对照已接入**：18 条用例逐条移植并全 PASS（conformance oracle）；**待做** `AutosarXMLLoader` / `AutosarXMLSaver`（arxml 读写核心，当前经通用 XMI 路径读写） |
 | `emf-artop/artop-codegen` | ⬜ 骨架 | `.ecore` → 静态模型 |
 
 ## 4. emf-common / emf-ecore 实现要点（已完成）
@@ -99,9 +99,10 @@ oracle，跑参考结果；Rust 侧跑同名/对应测试，逐条比对。**一
 - 当前基线：oracle 全量 193 条；已映射 **188** 条全部 `PASS`，剩余 5 条 `PENDING`(未映射)。尚未映射的 5 条均为 **Rust 类型系统无法如实表达**的语义：`ENotifier_AddAdapter_Duplicate_NotAdded`（Box 所有权无重复身份）、`ENotifier_AddAdapter_Null_Ignored` / `ENotifier_RemoveAdapter_Null_NoChange` / `Resource_AddToContents_NullPointer`（`Box<dyn Adapter>` / `ObjectRef` 无空指针）、`Placeholder`（C++ 空跑测试）。这些在 Rust 中无意义，保留为 PENDING 不失真。
 - 已接入 CI（`conformance` job）：CI 检出 artop-cpp、编译并跑 oracle、再与 Rust 比对。
 - 多 crate oracle：`build_ecore_oracle.sh`（emf-ecore，153 条）、`build_edit_oracle.sh`（emf-edit）、
-  `build_acceleo_oracle.sh`（emf-acceleo，26 条）、`build_sphinx_oracle.sh`（emf-sphinx，68 条）；映射表 `cases.tsv` /
-  `cases_ecore.tsv` / `cases_edit.tsv` / `cases_acceleo.tsv` / `cases_sphinx.tsv`。其中 `emf-edit` 26 条、
-  `emf-acceleo` 26 条、`emf-sphinx` 68 条均为 **0 PENDING 全 PASS**。
+  `build_acceleo_oracle.sh`（emf-acceleo，26 条）、`build_sphinx_oracle.sh`（emf-sphinx，68 条）、
+  `build_artop_runtime_oracle.sh`（artop-runtime，18 条）；映射表 `cases.tsv` /
+  `cases_ecore.tsv` / `cases_edit.tsv` / `cases_acceleo.tsv` / `cases_sphinx.tsv` / `cases_artop_runtime.tsv`。
+  其中 `emf-edit` 26 条、`emf-acceleo` 26 条、`emf-sphinx` 68 条、`artop-runtime` 18 条均为 **0 PENDING 全 PASS**。
 
 复用路径：C++ oracle 单测 → `tools/conformance/build`，与 CI 的 `conformance` job 对齐。
 
@@ -259,6 +260,14 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - `autosar448-model::metamodel` 新增 `tag_class` / `tag_feature`，把注册表的 `xml.name` / `xml.namePlural` / `featureKind` / `isXmlAttribute` / APRXML role·type·wrapper 标志 / `contentKind` / `internal-xml-sequenceOffset` 写进 `TaggedValues` 注解。
   - `emf-xmi::loader::resolve_class` 回退到 `find_class_by_xml_name`，让 arxml 元素标签直接驱动 `DynamicEObject` 实例化。
   - 测试：`autosar448-model` 16 条（新增注解面断言），全绿。
+
+- **Milestone 21 — artop-runtime C++ 对照接入 + 内置元模型注册（本轮新增）**：把 `emf-artop-runtime` 的 C++ 单测（`tests/test_main.cpp`，18 条）逐条移植到 Rust 并接入一致性框架。
+  - `emf-ecore::ecore_package` 新增通用全局注册 API：`global_register(pkg)`（EMF `EPackage.Registry.INSTANCE.put`）与 `global_get(key)`——底座层通用，无任何 AUTOSAR 内容。
+  - `AutosarResourceFactory::register_default_autosar40_metamodel()`：把 `autosar448-model` 静态注册表桥接出的 `EPackage`（`autosar40` / `http://autosar.org/schema/r4.0`）注册进进程级全局包注册表并返回该包句柄（对齐 C++ `AutosarResourceFactory::registerDefaultAutosar40Metamodel` 的幂等语义）。为此 `artop-runtime` 将 `autosar448-model` 提为常规依赖。
+  - 新增 `crates/emf-artop/artop-runtime/tests/cpp_parity_artop_runtime.rs`（18 条）：逐条对应 C++ 的 version/release/resource/factory/catalog/IdentifiableUtil 用例，以及两条 arxml 用例——`<AUTOSAR>` 根元素实例化、`<AR-PACKAGE>` 多值 containment 递归（用注册了 AUTOSAR 元模型的 `XMIResourceSet` 经通用 XMI loader 读入 `DynamicEObject`，与 C++ 同路径）。
+  - 一致性框架接入：新增 `tools/conformance/build_artop_runtime_oracle.sh`（编译并运行 C++ `emf-artop-runtime` 单测二进制 → `build/artop_runtime_oracle.json`，18 条，含 `EMF_ARTOP_AUTOSAR40_ECORE` 宏注入与适配 EMF_RUN 输出的日志解析）与 `tools/conformance/cases_artop_runtime.tsv`（18 条 C++↔Rust 映射）；`compare.py` 对 `artop-runtime` 输出 **18 条全 PASS，0 PENDING，0 REGRESSION**；CI `conformance` job 增加 artop-runtime 的 oracle 构建与比对步骤。
+  - 质量门禁：全工作区 fmt / test（全绿，0 失败）/ clippy / release 通过，无回归。
+  - **待续**：`AutosarXMLLoader` / `AutosarXMLSaver`（arxml 读写核心，APRXML 规则 / 引用代理 / shortName path）、arxml 双向互读互写 CI。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 
