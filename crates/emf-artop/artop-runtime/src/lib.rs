@@ -10,12 +10,18 @@
 //! AUTOSAR. The `emf-*` crates below it stay generic.
 
 pub mod autosar_library_index;
+pub mod autosar_resource;
+pub mod autosar_resource_factory;
+pub mod autosar_resource_set;
 pub mod identifiable_util;
 pub mod release_descriptor;
 pub mod unknown_element;
 pub mod version_data;
 
 pub use autosar_library_index::AutosarLibraryIndex;
+pub use autosar_resource::{AutosarResource, AutosarXMLResource};
+pub use autosar_resource_factory::{AutosarResourceCreator, AutosarResourceFactory};
+pub use autosar_resource_set::AutosarResourceSet;
 pub use identifiable_util::IdentifiableUtil;
 pub use release_descriptor::AutosarReleaseDescriptor;
 pub use unknown_element::UnknownElement;

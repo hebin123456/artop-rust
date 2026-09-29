@@ -68,7 +68,7 @@ examples/
 | `emf-acceleo` | ✅ 工作 | Acceleo MTL/`M2T` 引擎（对 C++ `AcceleoAst.h`/`AcceleoParser.cpp`/`AcceleoEngine.cpp` 的 1:1 移植）：`ast`（Block：Text/Expr/For/If/Let/File/Protected；Expr：Var/String/Int/Bool/Nav/Call/CollectionLit/If/Lambda）+ `parser`（递归下降：`[module]`/`template`/`query`/`import`/`extends`、`[for]/[if]/[let]/[file]/[protected]`、`post(...)` 容错）+ `engine`（`AcceleoEngine`/`AcceleoService`：上下文/服务注册/模板·查询查找、表达式求值、`=`/`or`/`and`/比较/算术、lambda + `->collect/select/reject/forAll/exists/size` 集合操作、`[file]` 落盘与 `[protected]` 区域合并）；C++ `AcceleoTests.cpp`(18) + `AlignmentTests.cpp`(8) 已逐条对照，26 条全 PASS（`cpp_parity_acceleo`） |
 | `emf-sphinx` | ✅ 工作 | headless 核心：`Node`（attributes/children fluent builder）+ `Root`/`Model`（全路径索引 O(1) `resolve`）+ 深度遍历（`Continue`/`Prune`/`Stop` 控制）；Sphinx 扩展：`metamodel`（`MetaModelDescriptor`/`AbstractMetaModelDescriptor` + `MetaModelVersionData` + thread-local `MetaModelDescriptorRegistry`）、`resource`（`SchemaLocationUriHandler`/`ExtendedBasicExtendedMetaData`/`ModelConverterRegistry`）、`scoping`（`FileResourceScope`/`FileResourceScopeProvider`/`ResourceScopeProviderRegistry`）、`ecore`（`OrderedFeatureMap`）、`util`（`EcoreResourceUtil`）；C++ 5 个测试文件 68 条已逐条对照并全 PASS（`cpp_parity_sphinx`） |
 | `emf-artop/artop-validation` | ✅ 工作 | AUTOSAR 业务约束层（对齐 `org.artop.aal.*.constraints`）：`autosar_constraints`（shortName 非空/同父唯一、uuid 非空/全局唯一、category 必填、no-unresolved-proxy；BATCH+LIVE）；叠在通用 `emf-validation` 底座之上，由调用方显式注册。C++ `AutosarConstraintsTests.cpp` 13 条已逐条对照 |
-| `emf-artop/artop-runtime` | 🟡 进行中 | 基座已落地：`AutosarMetaModelVersionData` / `AutosarReleaseDescriptor` / `IdentifiableUtil` / `AutosarLibraryIndex` / `UnknownElement`；**待做** `AutosarResource` / `AutosarXMLLoader` / `AutosarXMLSaver` |
+| `emf-artop/artop-runtime` | 🟡 进行中 | 基座已落地：`AutosarMetaModelVersionData` / `AutosarReleaseDescriptor` / `IdentifiableUtil` / `AutosarLibraryIndex` / `UnknownElement`；资源层已落地：`AutosarResource` / `AutosarXMLResource` / `AutosarResourceFactory` / `AutosarResourceSet`（基于 `emf-xmi`，含 release / schemaLocation / 库索引 / `getResource` 按需加载 / `getEObject` 跨资源解析）；**待做** `AutosarXMLLoader` / `AutosarXMLSaver`（arxml 读写核心） |
 | `emf-artop/artop-codegen` | ⬜ 骨架 | `.ecore` → 静态模型 |
 
 ## 4. emf-common / emf-ecore 实现要点（已完成）
@@ -242,7 +242,15 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - `artop-runtime` 基座（对齐 Java `org.artop.aal.common.*`）：`AutosarMetaModelVersionData`（`major.minor.revision` + 新旧 schema 版本串 `4-4-8` / `00042`）、`AutosarReleaseDescriptor`（版本 / base namespace / schemaLocation / 兼容版本）、`IdentifiableUtil`（shortName/longName/description/identifier/uuid 反射读写）、`AutosarLibraryIndex`（跨文档 shortName path 索引 + 按需解析，thread-local 全局单例）、`UnknownElement`（未映射 XML 元素记录）。
   - 测试：`autosar448-model` 15 条（注册表一致性 / 规模 / 继承图无环 / XML 名查找 / 桥接包实例化反射）、`artop-runtime` 16 条，全绿。
   - 质量门禁：`cargo fmt --all`、`cargo test --workspace --all-targets`（0 失败）、`cargo clippy -p artop-runtime -p autosar448-model --all-targets`（0 告警）全绿，无回归。
-  - **待续**：`AutosarResource` / `AutosarResourceFactory` / `AutosarResourceSet`（基于 `emf-xmi`）、`AutosarXMLLoader` / `AutosarXMLSaver`（arxml 读写核心）、对照 C++ artop-runtime 用例接入 conformance oracle、arxml 双向互读互写 CI。
+  - **待续**：`AutosarXMLLoader` / `AutosarXMLSaver`（arxml 读写核心）、对照 C++ artop-runtime 用例接入 conformance oracle、arxml 双向互读互写 CI。
+
+- **Milestone 19 — artop-runtime 资源层（AutosarResource / Factory / ResourceSet）（本轮新增）**：把 AUTOSAR 资源三件套从 C++ `AutosarResource` / `AutosarXMLResource` / `AutosarResourceFactory` / `AutosarResourceSet` 移植到 Rust，构建在通用 `emf-xmi` 之上。
+  - `autosar_resource`：`AutosarResource` 包裹一个 `XMIResource`（Deref/DerefMut）+ 携带 `AutosarReleaseDescriptor` 与 arxml `xsi:schemaLocation`；`AutosarXMLResource` 再包一层作为 arxml 专属 flavour，提供 `create_xml_helper` / `create_xml_save` / `create_xml_load` 注入缝（当前回退到通用 XMI 序列化/反序列化，arxml 专用实现为后续里程碑）；`index_library` 把资源内容的 shortName path 注册进全局 `AutosarLibraryIndex`。两者均实现 `emf_common::ResourceHandle`（含手写 `Debug`）以便挂进 `ResourceSet`。
+  - `autosar_resource_factory`：`AutosarResourceFactory` —— `create_resource`（默认产出 `AutosarXMLResource`，或经 `set_resource_creator` 注入自定义构造器）、`init_resource` / `init_default_options`（UTF-8 编码 + XMI 2.0 + release 的 `xsi:schemaLocation`）、`create_schema_location_catalog`（base namespace + XML/XMLSchema-instance 两个命名空间）。
+  - `autosar_resource_set`：`AutosarResourceSet` —— `create_resource`（按 URI 去重）、EMF 语义的 `get_resource(uri, loadOnDemand)`（按需创建并加载、加载后索引进库）、`load_library`、`get_eobject(uri#fragment)` 跨资源解析。
+  - `emf-xmi::loader` 顺带扩展：元素形式的标量属性（ExtendedMetaData `kind=element`）与非包含引用（`<feat href="..."/>`）加载——多值元素属性用 `scalar_lists` 聚合后一次性成列表，对齐 C++ `XMLHandler::applyInstanceChild` 的 "EAttribute: child text as value"。
+  - 测试：`artop-runtime` 新增资源层单测（工厂产出/自定义 creator/schemaLocation 注入/目录/资源集去重 + release 携带 + 按需缺失返回 None），全绿。
+  - 质量门禁：`cargo fmt --all`、`cargo test --workspace --all-targets`（103 个测试二进制 0 失败）、`cargo clippy --workspace --all-targets`（0 告警）全绿，无回归。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 

@@ -149,6 +149,10 @@ fn build_node(
     // Group containment children by feature so multi-valued references are set
     // as a list once all siblings are known.
     let mut container_lists: std::collections::HashMap<String, Vec<ObjectRef>> = Default::default();
+    // Group element-serialized scalar attributes (ExtendedMetaData `kind=element`)
+    // by feature so a multi-valued one is set as a list once all siblings are
+    // known.
+    let mut scalar_lists: std::collections::HashMap<String, Vec<String>> = Default::default();
 
     for (aname, avalue) in &node.attrs {
         if is_structural_attr(aname) {
@@ -170,23 +174,59 @@ fn build_node(
 
     for child in &node.children {
         let Some(feat) = find_feature(&obj, &child.local) else {
-            continue; // unknown containment tag: skip
+            continue; // unknown child tag: skip
         };
-        if !feat.is_containment() {
+        if feat.is_containment() {
+            let child_obj = build_node(child, registry, id_map, deferred, Some(&feat))?;
+            if feat.is_many() {
+                container_lists
+                    .entry(feat.name().to_string())
+                    .or_default()
+                    .push(child_obj);
+            } else {
+                obj.borrow_mut().e_set(feat.name(), Val::Object(child_obj));
+            }
             continue;
         }
-        let child_obj = build_node(child, registry, id_map, deferred, Some(&feat))?;
+        if feat.is_reference() {
+            // Non-containment reference serialized as an element: the `href`
+            // attribute names the target (Java-style `<feat href="..."/>`);
+            // deferred until ids/positions are known.
+            if let Some(href) = child.attr("href") {
+                deferred.push((Rc::clone(&obj), feat.name().to_string(), href.to_string()));
+            }
+            continue;
+        }
+        // EAttribute serialized as an element (ExtendedMetaData `kind=element`):
+        // the element's text is the value (aligned to C++
+        // `XMLHandler::applyInstanceChild` "EAttribute: child text as value").
+        let text = child.text.trim();
+        if text.is_empty() {
+            continue;
+        }
         if feat.is_many() {
-            container_lists
+            scalar_lists
                 .entry(feat.name().to_string())
                 .or_default()
-                .push(child_obj);
+                .push(text.to_string());
         } else {
-            obj.borrow_mut().e_set(feat.name(), Val::Object(child_obj));
+            let typ = feat.type_name().unwrap_or("EString");
+            let val = datatype::from_string(typ, text);
+            obj.borrow_mut().e_set(feat.name(), val);
         }
     }
     for (fname, list) in container_lists {
         let vals: Vec<Val> = list.into_iter().map(Val::Object).collect();
+        obj.borrow_mut().e_set(&fname, Val::List(vals));
+    }
+    for (fname, list) in scalar_lists {
+        let typ = find_feature(&obj, &fname)
+            .and_then(|f| f.type_name().map(|t| t.to_string()))
+            .unwrap_or_else(|| "EString".to_string());
+        let vals: Vec<Val> = list
+            .iter()
+            .map(|s| datatype::from_string(&typ, s))
+            .collect();
         obj.borrow_mut().e_set(&fname, Val::List(vals));
     }
 
