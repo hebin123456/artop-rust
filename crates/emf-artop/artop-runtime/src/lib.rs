@@ -1,58 +1,32 @@
-//! AUTOSAR serialization/deserialization, resource/factory/version metadata (port of C++ `emf-artop/emf-artop-runtime`).
+//! AUTOSAR (ARTOP) runtime layer (port of C++ `emf-artop/emf-artop-runtime`).
 //!
-//! Port target: C++ `emf-runtime` module of `hebin123456/artop-cpp`.
+//! Aligned to Java `org.artop.aal.common.*`. Hosts the AUTOSAR release metadata
+//! ([`release_descriptor`], [`version_data`]), the reflective helpers
+//! ([`identifiable_util`], [`autosar_library_index`], [`unknown_element`]) and —
+//! as the port progresses — the arxml serializer/deserializer and resource
+//! machinery.
 //!
-//! This file is *skeleton*: each module below is a compile placeholder that
-//! will be filled with the port of the corresponding C++ translation unit.
-//! Filled by GitHub Actions; see `.github/workflows/ci.yml`.
+//! This crate is the artop-specific layer: it is the only place that knows about
+//! AUTOSAR. The `emf-*` crates below it stay generic.
 
-pub mod serialization {
-    //! Port target: C++ source unit for `serialization`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "artop-runtime::serialization"
-    }
-}
+pub mod autosar_library_index;
+pub mod identifiable_util;
+pub mod release_descriptor;
+pub mod unknown_element;
+pub mod version_data;
 
-pub mod deserialization {
-    //! Port target: C++ source unit for `deserialization`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "artop-runtime::deserialization"
-    }
-}
-
-pub mod resource_factory {
-    //! Port target: C++ source unit for `resource_factory`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "artop-runtime::resource_factory"
-    }
-}
-
-pub mod version_metadata {
-    //! Port target: C++ source unit for `version_metadata`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "artop-runtime::version_metadata"
-    }
-}
-
-pub mod autosar_metamodel {
-    //! Port target: C++ source unit for `autosar_metamodel`.
-    /// Placeholder marker so the module compiles until the real port lands.
-    pub fn api_surface() -> &'static str {
-        "artop-runtime::autosar_metamodel"
-    }
-}
+pub use autosar_library_index::AutosarLibraryIndex;
+pub use identifiable_util::IdentifiableUtil;
+pub use release_descriptor::AutosarReleaseDescriptor;
+pub use unknown_element::UnknownElement;
+pub use version_data::{AutosarMetaModelVersionData, VersionData};
 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn skeleton_compiles() {
-        assert_eq!(
-            super::serialization::api_surface(),
-            "artop-runtime::serialization"
-        );
+    fn version_display() {
+        let v = super::AutosarMetaModelVersionData::new(4, 4, 8);
+        assert_eq!(v.to_string(), "4.4.8");
+        assert_eq!(v.canonical_version_number(), (4 << 24) | (4 << 16) | 8);
     }
 }
