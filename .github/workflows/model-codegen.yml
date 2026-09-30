@@ -1,0 +1,56 @@
+name: Model codegen
+
+# Generates the full AUTOSAR static model with the Rust generator and compiles
+# it **on GitHub** rather than locally: the merged gautosar + autosar448 model is
+# 2100+ classes / 6100+ features (~13k lines of generated tables), so building it
+# in a dev sandbox is heavy by design.
+
+on:
+  push:
+    branches: ["master", "main"]
+  pull_request:
+    branches: ["master", "main"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  autosar448-static-model:
+    name: Generate + build the full AUTOSAR static model
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Checkout artop-cpp reference (metamodel .ecore)
+        uses: actions/checkout@v4
+        with:
+          repository: hebin123456/artop-cpp
+          path: reference/artop-cpp
+          fetch-depth: 1
+
+      # The code generator itself is small; this build is cheap.
+      - name: Build the code generator
+        run: cargo build -p artop-codegen
+
+      - name: Regenerate the static registry with the Rust generator
+        run: |
+          ./target/debug/artop-codegen registry \
+            reference/artop-cpp/models/gautosar/gautosar.ecore \
+            reference/artop-cpp/models/autosar448/autosar448.ecore \
+            crates/emf-artop/autosar448-model/src/registry.rs
+          cargo fmt -p autosar448-model
+
+      - name: Fail if the committed registry is stale
+        run: git diff --exit-code -- crates/emf-artop/autosar448-model/src/registry.rs
+
+      # Heavy: compiling the generated 2100+-class static model.
+      - name: Build the generated static model
+        run: cargo build -p autosar448-model --release
+
+      - name: Test the generated static model
+        run: cargo test -p autosar448-model

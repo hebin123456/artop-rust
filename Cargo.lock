@@ -9,6 +9,7 @@ dependencies = [
  "emf-common",
  "emf-ecore",
  "emf-ecore-codegen",
+ "emf-xmi",
 ]
 
 [[package]]

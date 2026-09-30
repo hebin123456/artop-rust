@@ -9,6 +9,11 @@
 //!    of the C++ `<Pkg>ResourceImpl.h` / `<Pkg>ResourceFactoryImpl.h`), and
 //! 3. records the root-extension injection plan as `ARTOP_ROOT_EXTENSIONS.md`.
 //!
+//! Beyond the per-class crate, [`registry_gen`] emits the *full* AUTOSAR static
+//! registry (all `eSubpackages`, 2000+ classes, ARXML serialization metadata) as
+//! plain data — the artifact the arxml layer reads/writes against, replacing the
+//! out-of-band `tools/gen-autosar448-model.py` with the Rust code generator.
+//!
 //! ```no_run
 //! use artop_codegen::{ArtopGenConfig, ArtopGenerator};
 //! let mut config = ArtopGenConfig::default();
@@ -19,5 +24,7 @@
 //! ```
 
 pub mod generator;
+pub mod registry_gen;
 
 pub use generator::{ArtopGenConfig, ArtopGenerator};
+pub use registry_gen::{generate_registry, generate_registry_from_files, RegistryStats};

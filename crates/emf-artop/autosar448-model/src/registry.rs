@@ -1,5 +1,5 @@
 // AUTO-GENERATED from gautosar.ecore + autosar448.ecore — do not edit
-// (regenerate with tools/gen-autosar448-model.py)
+// (regenerate with `artop-codegen registry <gautosar.ecore> <autosar448.ecore> <out.rs>`)
 
 pub const N_PACKAGES: usize = 420;
 pub const N_CLASSES: usize = 2105;

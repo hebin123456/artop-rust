@@ -24,7 +24,7 @@
 //! `output/samples/` (largest ~820 KB) round-trip **byte-for-byte identical**
 //! through load → save (see `tools/conformance/interop_arxml.py`). Getting there
 //! required the metamodel to keep the *declaration order* of `eSuperTypes`
-//! (see `tools/gen-autosar448-model.py`), so inherited features — and hence XML
+//! (see `artop_codegen::registry_gen`), so inherited features — and hence XML
 //! attribute order — match the C++/Java serializers exactly.
 
 use std::collections::{HashMap, HashSet};

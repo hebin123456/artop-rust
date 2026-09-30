@@ -20,8 +20,9 @@
 //! (`eAllFeatures` / `isSuperTypeOf` / `eGet`) plus the `xml.name` ↔ feature
 //! lookups the arxml layer needs.
 //!
-//! Regenerate with
-//! `tools/gen-autosar448-model.py <gautosar.ecore> <autosar448.ecore> <out.rs>`.
+//! Regenerate with the Rust code generator (port of C++ `ArtopCppGenerator`):
+//! `artop-codegen registry <gautosar.ecore> <autosar448.ecore> <out.rs>`
+//! (module `registry_gen` in the `artop-codegen` crate).
 
 pub mod registry;
 
