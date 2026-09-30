@@ -143,7 +143,9 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 - `short_name_path()` / `type_xml_name()` / `sorted_features()`（按 `sequence_offset` 稳定排序）。
 - **`atp.Splitkey` / `ordered` 驱动的子元素排序**：`tools/gen-autosar448-model.py` 现从 `TaggedValues` 取 `atp.Splitkey`、从 `ExtendedMetaData` 取 `ordered`（默认 true），写入 `FeatureMeta.{splitkey,ordered}`；`metamodel.rs::tag_feature` 据此落 `atp.Splitkey` 与 `atp.unordered` 注解；saver 的 `is_feature_ordered` / `splitkey_paths` / `splitkey_value` / `sort_children_by_splitkey` 对 `isMany && !ordered` 的 containment/reference 子元素按 splitkey 路径做**稳定排序**（对齐 C++ `sortChildrenBySplitkey` / Java `AtpSplitkeyAwareComparator`）。splitkey 路径用 ecore 特征名，经 `autosar448_model::reflect::{class_id,find_feature,feature}` 解析成 arxml 元素名后再 `eGet`。单测 `sorts_unordered_children_by_splitkey` 覆盖（`ARPackage.arPackages` 乱序 → 按 shortName 输出）。
 
-**已延后（文档化，未静默丢弃）**：未知内容片段（loader 已跳过不可映射元素）。
+- **未知内容片段回写（`unknown_element`）**：loader 把无法映射到 feature 的元素记入 `store` 的新侧表 `unknown_content`（对齐 C++ `AutosarResource::addUnknownContent` / `OPTION_RECORD_UNKNOWN_FEATURE`，记录点：`dispatch_child` 未命中 feature、wrapper/单值 containment 子类无法判定、reference 目标类无法解析）；saver 在**非 mixed** 对象的已知 feature 之后用 `write_element`（对齐 C++ `writePugiNode`）逐字回放。单测 `replays_unknown_element_verbatim` 覆盖。
+
+**已延后（文档化，未静默丢弃）**：`createFeatureFromSkippedElement` / `tryInlineMatch` 的模型驱动兜底（wrapper 0016 / role+type 0012 元素）。
 
 **已验证的 round-trip 现状**（`AutosarXMLSaver` 第三轮 —— 字节级一致）：
 
@@ -157,7 +159,7 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 1. `tools/conformance/interop_arxml.py` 已覆盖**写**路径（load→save、写路径幂等、与原文**逐字节相同**）并接入 CI conformance job；给出 `--cpp` 时追加 **Rust ↔ C++ 双向交接**（A/B/C/D 四步，见 Milestone 25），C++ 半侧 harness 为 `tools/conformance/interop_arxml_main.cpp`（构建脚本 `tools/conformance/build_arxml_interop.sh`）。
 2. ~~建立 Rust ↔ C++ 双向 arxml 交接 CI 用例~~ —— 已完成（Milestone 25）。
-3. ~~收敛 `atp.Splitkey` / `ordered` 驱动的子元素排序~~ —— 已完成。剩余：未知内容片段（`unknown_element`，loader 已跳过不可映射元素，尚未回写）。
+3. ~~收敛 `atp.Splitkey` / `ordered` 驱动的子元素排序、未知内容片段（`unknown_element`）~~ —— 均已完成。剩余：`createFeatureFromSkippedElement` / `tryInlineMatch` 的模型驱动兜底。
 
 **参考实现**：`AutosarXMLSaver.cpp`（2023 行，对齐 Java `AutosarXMLSaveImpl`），关键函数定位供收敛时比对：`save()`(L567)、`PugiDomWriter`(L214)、`saveObjectContent()`(L615)、`collectSortedFeaturesUncached()`(L890)、`saveAttribute()`(L1021)、`attrValueToString()`(L1083)、`saveContainment()`(L1157)+`resolveAprxmlRule()`(L1303)、`saveReference()`(L1329)、`saveSingleMixedElement()`(L1487)、`tryComputeBaseRelative()`(L1602)+`getReferenceBasePrefix/readReferenceBaseShortLabel/readReferenceBaseIsDefault`(L1659-1718)、`getShortNamePath()`(L1787)、`getTypeXmlNameUncached()`(L1854)、`isFeatureOrdered()`(L1879)、`getSplitkeyValue/sortChildrenBySplitkey/sortChildrenByShortName`(L1895-2016)。
 

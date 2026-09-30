@@ -21,10 +21,13 @@
 //! `autosar448_model::metamodel`), and the APRXML role/type/wrapper flags come
 //! from the same annotations — replacing the Java `AutosarXMLRuleRegistry`.
 //!
+//! Elements that map to no feature are recorded in the [`store`] unknown-content
+//! table (`OPTION_RECORD_UNKNOWN_FEATURE`, the C++
+//! `AutosarResource::addUnknownContent`) and replayed verbatim by the saver.
+//!
 //! Deliberately deferred from the C++ port (documented, not silently dropped):
 //! the model-driven `createFeatureFromSkippedElement` / `tryInlineMatch`
-//! fallbacks for wrapper (0016) / role+type (0012) elements, and unknown-content
-//! recording (`OPTION_RECORD_UNKNOWN_FEATURE`); unknown elements are skipped.
+//! fallbacks for wrapper (0016) / role+type (0012) elements.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -226,7 +229,10 @@ impl ArxmlLoader {
     ) -> Option<ObjectRef> {
         let feature = self.find_feature(class, &el.local);
         let Some(feature) = feature else {
-            return None; // unknown element: skipped (see module docs)
+            // Unknown element: record it so the saver replays it verbatim
+            // (C++ `addUnknownContent` under `OPTION_RECORD_UNKNOWN_FEATURE`).
+            store::push_unknown_content(obj, el.clone());
+            return None;
         };
         if feature.is_reference() {
             if feature.is_containment() {
@@ -311,10 +317,13 @@ impl ArxmlLoader {
             let mut last = None;
             let mut collected = Vec::new();
             for child in el.element_children() {
-                if let Some(class) = self.determine_child_class(child, f.type_name()) {
-                    if let Some(child_obj) = self.build_object(child, &class) {
-                        collected.push(child_obj);
+                match self.determine_child_class(child, f.type_name()) {
+                    Some(class) => {
+                        if let Some(child_obj) = self.build_object(child, &class) {
+                            collected.push(child_obj);
+                        }
                     }
+                    None => store::push_unknown_content(obj, child.clone()),
                 }
             }
             for child_obj in collected {
@@ -324,7 +333,10 @@ impl ArxmlLoader {
             return last;
         }
 
-        let class = self.determine_child_class(el, f.type_name())?;
+        let Some(class) = self.determine_child_class(el, f.type_name()) else {
+            store::push_unknown_content(obj, el.clone());
+            return None;
+        };
         let child_obj = self.build_object(el, &class)?;
         self.attach(obj, f, &child_obj);
         Some(child_obj)
@@ -364,10 +376,14 @@ impl ArxmlLoader {
     ) -> Option<ObjectRef> {
         let dest = el.attr(DEST_ATTR).map(|s| s.to_string());
         let path = el.trimmed_text();
-        let target_class = dest
+        let dest_class = dest
             .as_deref()
             .and_then(|d| self.reg.find_class_by_xml_name(d))
-            .or_else(|| f.type_name().and_then(|t| self.reg.find_class(t)))?;
+            .or_else(|| f.type_name().and_then(|t| self.reg.find_class(t)));
+        let Some(target_class) = dest_class else {
+            store::push_unknown_content(owner, el.clone());
+            return None;
+        };
         let proxy: ObjectRef = Rc::new(RefCell::new(DynamicEObject::new_in(
             target_class,
             self.reg.clone(),

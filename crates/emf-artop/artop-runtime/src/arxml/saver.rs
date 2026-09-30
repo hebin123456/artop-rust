@@ -35,6 +35,7 @@ use emf_ecore::datatype;
 use emf_ecore::{EClass, EStructuralFeature, PackageRegistry};
 use emf_xmi::{XMIResource, XMLSave};
 
+use crate::arxml::dom;
 use crate::arxml::store::{self, MixedEntry};
 
 /// AUTOSAR R4.0 default namespace.
@@ -510,6 +511,33 @@ impl<'a> AutosarSaver<'a> {
                 self.save_reference(obj, f);
             }
         }
+
+        // Unmapped XML elements are replayed verbatim after the known features
+        // (C++ `saveObjectContent`'s `unknownContents_` tail).
+        if !elements_only {
+            if let Some(fragments) = store::unknown_content(obj) {
+                for el in &fragments {
+                    self.write_element(el);
+                }
+            }
+        }
+    }
+
+    /// Write a DOM element verbatim (C++ `writePugiNode`): used to replay
+    /// unmapped elements recorded by the loader.
+    fn write_element(&mut self, el: &dom::Element) {
+        self.writer.begin_element(&el.name);
+        for (name, value) in &el.attrs {
+            self.writer.write_attribute(name, value);
+        }
+        for child in &el.children {
+            match child {
+                dom::Node::Element(e) => self.write_element(e),
+                dom::Node::Text(t) => self.writer.write_text(t),
+                dom::Node::Comment(c) => self.writer.write_comment(c),
+            }
+        }
+        self.writer.end_element();
     }
 
     /// Replay an object's ordered mixed-content sequence (C++
@@ -1303,6 +1331,28 @@ mod tests {
         let mid = out.find("<SHORT-NAME>Mid</SHORT-NAME>").expect("Mid");
         let zeta = out.find("<SHORT-NAME>Zeta</SHORT-NAME>").expect("Zeta");
         assert!(alpha < mid && mid < zeta, "not sorted by splitkey:\n{out}");
+    }
+
+    /// An element that maps to no feature is recorded by the loader and replayed
+    /// verbatim by the saver (C++ `unknownContents_` round-trip), instead of
+    /// being silently dropped.
+    #[test]
+    fn replays_unknown_element_verbatim() {
+        let arxml = "<AUTOSAR xmlns=\"http://autosar.org/schema/r4.0\">\
+                     <AR-PACKAGES>\
+                     <AR-PACKAGE><SHORT-NAME>P</SHORT-NAME>\
+                     <SOME-UNKNOWN ATTR=\"v\"><INNER>x &amp; y</INNER></SOME-UNKNOWN>\
+                     </AR-PACKAGE>\
+                     </AR-PACKAGES>\
+                     </AUTOSAR>";
+        let res = load(arxml);
+        let out = res.save_to_string();
+        assert!(out.contains("<SOME-UNKNOWN ATTR=\"v\">"), "{out}");
+        assert!(out.contains("<INNER>x &amp; y</INNER>"), "{out}");
+        assert!(out.contains("</SOME-UNKNOWN>"), "{out}");
+        // Replaying is stable: a second load → save yields the same bytes.
+        let out2 = load(&out).save_to_string();
+        assert_eq!(out, out2);
     }
 
     #[test]

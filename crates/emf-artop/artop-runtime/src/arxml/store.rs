@@ -16,6 +16,8 @@ use std::rc::Rc;
 
 use emf_common::value::ObjectRef;
 
+use crate::arxml::dom;
+
 /// An entry in an object's ordered mixed-content sequence (C++
 /// `MixedContentEntry`): the original document order of text, comments and
 /// child elements is preserved so the saver can emit it verbatim.
@@ -43,6 +45,11 @@ thread_local! {
     /// `refDestStore`'s "owner:ref:target" key (the original `DEST` may name an
     /// abstract base class and must be preserved rather than recomputed).
     static REF_DEST: RefCell<HashMap<(usize, String, usize), String>> = RefCell::new(HashMap::new());
+    /// `owner -> unmapped XML elements`, mirroring the C++ `unknownContents_`
+    /// map populated under `OPTION_RECORD_UNKNOWN_FEATURE`: elements that map to
+    /// no feature are replayed verbatim by the saver.
+    static UNKNOWN_CONTENT: RefCell<HashMap<usize, Vec<dom::Element>>> =
+        RefCell::new(HashMap::new());
 }
 
 /// Record the mixed-content text captured for `obj`.
@@ -88,6 +95,18 @@ pub fn set_ref_is_default(obj: &ObjectRef, is_default: bool) {
 /// The recorded `isDefault` flag for `obj`, if any.
 pub fn ref_is_default(obj: &ObjectRef) -> Option<bool> {
     REF_IS_DEFAULT.with(|m| m.borrow().get(&object_key(obj)).copied())
+}
+
+/// Record one unmapped XML element of `obj` for verbatim replay on save (the
+/// C++ `AutosarResource::addUnknownContent` under
+/// `OPTION_RECORD_UNKNOWN_FEATURE`).
+pub fn push_unknown_content(obj: &ObjectRef, el: dom::Element) {
+    UNKNOWN_CONTENT.with(|m| m.borrow_mut().entry(object_key(obj)).or_default().push(el));
+}
+
+/// The unmapped XML elements recorded for `obj`, if any.
+pub fn unknown_content(obj: &ObjectRef) -> Option<Vec<dom::Element>> {
+    UNKNOWN_CONTENT.with(|m| m.borrow().get(&object_key(obj)).cloned())
 }
 
 /// Record the original `DEST` of the reference from `owner.feature` to `target`.
