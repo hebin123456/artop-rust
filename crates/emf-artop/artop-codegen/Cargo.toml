@@ -1,6 +1,6 @@
 [package]
 name = "artop-codegen"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 license = "MIT"
 description = "ARTOP static-model generator (port of C++ emf-artop-codegen / ArtopCppGenerator)."

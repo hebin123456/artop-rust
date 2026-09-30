@@ -1,8 +1,14 @@
 [package]
 name = "arxml-roundtrip"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 publish = false
 
+[[bin]]
+name = "arxml-roundtrip"
+path = "src/main.rs"
+
 [dependencies]
+artop-runtime = { workspace = true }
 emf-common = { workspace = true }
+emf-ecore = { workspace = true }

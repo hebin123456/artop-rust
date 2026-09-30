@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "artop-codegen"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-common",
  "emf-ecore",
@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "artop-runtime"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "autosar448-model",
  "emf-common",
@@ -24,7 +24,7 @@ dependencies = [
 
 [[package]]
 name = "artop-validation"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-common",
  "emf-ecore",
@@ -33,28 +33,34 @@ dependencies = [
 
 [[package]]
 name = "arxml-roundtrip"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
+ "artop-runtime",
  "emf-common",
+ "emf-ecore",
 ]
 
 [[package]]
 name = "arxml-validate"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
+ "artop-runtime",
+ "artop-validation",
  "emf-common",
+ "emf-ecore",
+ "emf-validation",
 ]
 
 [[package]]
 name = "autosar448-model"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-ecore",
 ]
 
 [[package]]
 name = "emf-acceleo"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-common",
  "emf-ecore",
@@ -63,11 +69,11 @@ dependencies = [
 
 [[package]]
 name = "emf-common"
-version = "0.1.0"
+version = "1.0.0"
 
 [[package]]
 name = "emf-compare"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-common",
  "emf-ecore",
@@ -76,14 +82,14 @@ dependencies = [
 
 [[package]]
 name = "emf-ecore"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-common",
 ]
 
 [[package]]
 name = "emf-ecore-codegen"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-common",
  "emf-ecore",
@@ -92,7 +98,7 @@ dependencies = [
 
 [[package]]
 name = "emf-ecore-util"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-common",
  "emf-ecore",
@@ -100,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "emf-edit"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-common",
  "emf-ecore",
@@ -108,7 +114,7 @@ dependencies = [
 
 [[package]]
 name = "emf-sphinx"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-common",
  "emf-ecore",
@@ -117,7 +123,7 @@ dependencies = [
 
 [[package]]
 name = "emf-validation"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-common",
  "emf-ecore",
@@ -125,7 +131,7 @@ dependencies = [
 
 [[package]]
 name = "emf-xcore"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-common",
  "emf-ecore",
@@ -133,7 +139,7 @@ dependencies = [
 
 [[package]]
 name = "emf-xmi"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-common",
  "emf-ecore",
@@ -141,7 +147,7 @@ dependencies = [
 
 [[package]]
 name = "emf-xsd"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emf-common",
  "emf-xmi",

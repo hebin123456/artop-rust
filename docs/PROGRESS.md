@@ -68,7 +68,7 @@ examples/
 | `emf-acceleo` | ✅ 工作 | Acceleo MTL/`M2T` 引擎（对 C++ `AcceleoAst.h`/`AcceleoParser.cpp`/`AcceleoEngine.cpp` 的 1:1 移植）：`ast`（Block：Text/Expr/For/If/Let/File/Protected；Expr：Var/String/Int/Bool/Nav/Call/CollectionLit/If/Lambda）+ `parser`（递归下降：`[module]`/`template`/`query`/`import`/`extends`、`[for]/[if]/[let]/[file]/[protected]`、`post(...)` 容错）+ `engine`（`AcceleoEngine`/`AcceleoService`：上下文/服务注册/模板·查询查找、表达式求值、`=`/`or`/`and`/比较/算术、lambda + `->collect/select/reject/forAll/exists/size` 集合操作、`[file]` 落盘与 `[protected]` 区域合并）；C++ `AcceleoTests.cpp`(18) + `AlignmentTests.cpp`(8) 已逐条对照，26 条全 PASS（`cpp_parity_acceleo`） |
 | `emf-sphinx` | ✅ 工作 | headless 核心：`Node`（attributes/children fluent builder）+ `Root`/`Model`（全路径索引 O(1) `resolve`）+ 深度遍历（`Continue`/`Prune`/`Stop` 控制）；Sphinx 扩展：`metamodel`（`MetaModelDescriptor`/`AbstractMetaModelDescriptor` + `MetaModelVersionData` + thread-local `MetaModelDescriptorRegistry`）、`resource`（`SchemaLocationUriHandler`/`ExtendedBasicExtendedMetaData`/`ModelConverterRegistry`）、`scoping`（`FileResourceScope`/`FileResourceScopeProvider`/`ResourceScopeProviderRegistry`）、`ecore`（`OrderedFeatureMap`）、`util`（`EcoreResourceUtil`）；C++ 5 个测试文件 68 条已逐条对照并全 PASS（`cpp_parity_sphinx`） |
 | `emf-artop/artop-validation` | ✅ 工作 | AUTOSAR 业务约束层（对齐 `org.artop.aal.*.constraints`）：`autosar_constraints`（shortName 非空/同父唯一、uuid 非空/全局唯一、category 必填、no-unresolved-proxy；BATCH+LIVE）；叠在通用 `emf-validation` 底座之上，由调用方显式注册。C++ `AutosarConstraintsTests.cpp` 13 条已逐条对照 |
-| `emf-artop/artop-runtime` | 🟡 进行中 | 基座已落地：`AutosarMetaModelVersionData` / `AutosarReleaseDescriptor` / `IdentifiableUtil` / `AutosarLibraryIndex` / `UnknownElement`；资源层已落地：`AutosarResource` / `AutosarXMLResource` / `AutosarResourceFactory`（含 `register_default_autosar40_metamodel` 静态元模型注册）/ `AutosarResourceSet`（基于 `emf-xmi`，含 release / schemaLocation / 库索引 / `getResource` 按需加载 / `getEObject` 跨资源解析）；**C++ 对照已接入**：18 条用例逐条移植并全 PASS（conformance oracle）；arxml **读**已落地：`arxml/dom`（保留注释与混合内容的 DOM）+ `arxml/store`（混合内容/注释/引用信息侧表）+ `AutosarXMLLoader`（三阶段：建对象树 / shortName 路径索引 / 代理引用解析，含 wrapper 与 BASE 相对路径）；arxml **写**已落地：`arxml/saver`（`AutosarXMLSaver` = `PugiDomWriter` 延迟开标签流式 writer + APRXML 0012/0015/0016/default 规则 + 引用 `DEST`/shortName path/BASE 相对路径 + mixed 序列回放），读写二者均注入为 `AutosarResource` 的默认 `XMLSave`/`XMLLoader`；**字节级 round-trip 已达标**（真实样本逐字节相同），conformance 覆盖 Rust 写路径 + **Rust ↔ C++ 双向 arxml 交接**；`atp.Splitkey`/`ordered` 子元素排序、未知内容片段逐字回放、以及模型驱动兜底 `createFeatureFromSkippedElement`/`tryInlineMatch`（wrapper 0016 / role+type 0012 / 内联 0016）均已落地并单测覆盖 |
+| `emf-artop/artop-runtime` | ✅ 工作 | 基座已落地：`AutosarMetaModelVersionData` / `AutosarReleaseDescriptor` / `IdentifiableUtil` / `AutosarLibraryIndex` / `UnknownElement`；资源层已落地：`AutosarResource` / `AutosarXMLResource` / `AutosarResourceFactory`（含 `register_default_autosar40_metamodel` 静态元模型注册）/ `AutosarResourceSet`（基于 `emf-xmi`，含 release / schemaLocation / 库索引 / `getResource` 按需加载 / `getEObject` 跨资源解析）；**C++ 对照已接入**：18 条用例逐条移植并全 PASS（conformance oracle）；arxml **读**已落地：`arxml/dom`（保留注释与混合内容的 DOM）+ `arxml/store`（混合内容/注释/引用信息侧表）+ `AutosarXMLLoader`（三阶段：建对象树 / shortName 路径索引 / 代理引用解析，含 wrapper 与 BASE 相对路径）；arxml **写**已落地：`arxml/saver`（`AutosarXMLSaver` = `PugiDomWriter` 延迟开标签流式 writer + APRXML 0012/0015/0016/default 规则 + 引用 `DEST`/shortName path/BASE 相对路径 + mixed 序列回放），读写二者均注入为 `AutosarResource` 的默认 `XMLSave`/`XMLLoader`；**字节级 round-trip 已达标**（真实样本逐字节相同），conformance 覆盖 Rust 写路径 + **Rust ↔ C++ 双向 arxml 交接**；`atp.Splitkey`/`ordered` 子元素排序、未知内容片段逐字回放、以及模型驱动兜底 `createFeatureFromSkippedElement`/`tryInlineMatch`（wrapper 0016 / role+type 0012 / 内联 0016）均已落地并单测覆盖；**`examples/arxml-roundtrip` / `examples/arxml-validate` 两个 CLI 二进制即以本库为后端**，随 1.0.0 release 四平台发布（见 Milestone 28） |
 | `emf-artop/artop-codegen` | ✅ 工作 | ARTOP 静态模型生成器（对齐 C++ `emf-artop-codegen` / `ArtopCppGenerator`）：在通用 `emf-ecore-codegen`（`GenModel` + `generate_source`/`generate_crate`）之上追加 ARTOP 步骤——`ArtopGenConfig`（release id / version / base namespace / schemaLocation / `generate_resource` / `inject_root_extensions`，默认对齐 C++）+ `ArtopGenerator`（`generate_from_file` / `generate_from_package`）：① 基础模型 crate（`Cargo.toml` + `src/lib.rs`，含 `register_package`）；② `<Pkg>Resource` / `<Pkg>ResourceFactory` 模块（Rust 版 `<Pkg>ResourceImpl.h` / `<Pkg>ResourceFactoryImpl.h`，别名到 `artop-runtime` 的 `AutosarXMLResource` / `AutosarResourceFactory` 并注入 release/schemaLocation）；③ `ARTOP_ROOT_EXTENSIONS.md` 注入计划；CLI `artop-codegen <ecore> <out-dir> [--version\|--release-id\|--namespace\|--no-resource\|--no-extensions]`。C++ 三测试逐条对照，生成 crate 实测 `cargo check` 通过。另含 `registry_gen`：递归 `eSubpackages` 生成全量静态模型（gautosar + autosar448 合并，420 包 / 2105 类 / 6122 特征 + ARXML 序列化元数据），CLI `artop-codegen registry <gautosar.ecore> <autosar448.ecore> <out.rs>`，取代原 Python 生成器（Milestone 27） |
 
 ## 4. emf-common / emf-ecore 实现要点（已完成）
@@ -102,7 +102,8 @@ oracle，跑参考结果；Rust 侧跑同名/对应测试，逐条比对。**一
   `build_acceleo_oracle.sh`（emf-acceleo，26 条）、`build_sphinx_oracle.sh`（emf-sphinx，68 条）、
   `build_artop_runtime_oracle.sh`（artop-runtime，18 条）；映射表 `cases.tsv` /
   `cases_ecore.tsv` / `cases_edit.tsv` / `cases_acceleo.tsv` / `cases_sphinx.tsv` / `cases_artop_runtime.tsv`。
-  其中 `emf-edit` 26 条、`emf-acceleo` 26 条、`emf-sphinx` 68 条、`artop-runtime` 18 条均为 **0 PENDING 全 PASS**。
+  其中 **`emf-ecore` 153 条**、`emf-edit` 26 条、`emf-acceleo` 26 条、`emf-sphinx` 68 条、
+  `artop-runtime` 18 条均为 **0 PENDING 全 PASS**。
 
 复用路径：C++ oracle 单测 → `tools/conformance/build`，与 CI 的 `conformance` job 对齐。
 
@@ -119,14 +120,13 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 ## 7. 下一步（按优先级）
 
-已完成：emf-common/ecore 核心、EcoreUtil/Copier、XMI saver+loader、Resource/XMI 持久化集成、一致性测试 193 组中 188 条映射 PASS（含 command 模块 / NotifyingList / SegmentSequence / UniqueEList / ENotifier / EAdapter）；一致性框架已多 crate 化并建立 emf-ecore oracle（153 条，映射 87 条 PASS）、emf-edit oracle（26 条全 PASS）、emf-acceleo oracle（26 条全 PASS）、emf-sphinx oracle（68 条全 PASS）。
+已完成：emf-common/ecore 核心、EcoreUtil/Copier、XMI saver+loader、Resource/XMI 持久化集成；一致性框架已多 crate 化并建立全量 oracle——**`emf-ecore` 153 条已 153/153 全映射并全 PASS（0 PENDING / 0 REGRESSION）**，`emf-edit`(26) / `emf-acceleo`(26) / `emf-sphinx`(68) / `emf-xmi` / `artop-runtime`(18) 亦全 PASS（见 `docs/EMF_PARITY_GATE.md`）。**EMF 底座门线已解除，artop 允许开发与发布。**
 
-1. 扩展 oracle 到 emf-xmi 的 C++ tests 逐模块收敛；继续补 emf-ecore 未映射项（BasicEObject 容器/inverse-list 通知、指针身份类；EGenericType / EInvoke 已对齐）。
-2. `emf-xmi` 进一步落地：`XMILoadImpl` / `XMIHelper` 接口（`XMIResourceFactory` + `ResourceSet.getResource` 按需加载已完成）。
-3. `emf-ecore-util` 剩余：Adapter / ECrossReferenceAdapter / containment 遍历到 `all_contents` 的流式实现。
-4. `emf-sphinx` 剩余：`ExtendedResource`/`ProxyHelper`/`ModelDescriptor`/`EcoreTraversalHelper` 等在 C++ 侧仍为骨架或空测试，随上层用例补齐再逐条对照。
-5. `artop-runtime`：AUTOSAR 序列化/反序列化（届时才引入 artop 相关内容）。
-6. `artop-codegen`：C++ `emf-artop-codegen` 已 1:1 移植完成（Milestone 26）。**已完成**：`artop_codegen::registry_gen` 递归 `eSubpackages` 并把 ARXML 元数据（`xml.name` / APRXML 标志 / `atp.Splitkey` / `ordered` / `xml.nsPrefix`）生成进静态 crate，取代了 `artop_codegen::registry_gen`（Python），实现「`.ecore` → 可直接读写 arxml 的全量静态模型」。生成器 CLI：`artop-codegen registry <gautosar.ecore> <autosar448.ecore> <out/registry.rs>`（产物经 `cargo fmt` 后与提交的 `registry.rs` 逐字节一致，由 `artop-codegen/tests/registry_model.rs` 钉住）。2100+ 类的重编译走 GitHub Actions（`.github/workflows/model-codegen.yml`），不在本地编译。
+1. `emf-xmi` 进一步落地：`XMILoadImpl` / `XMIHelper` 接口（`XMIResourceFactory` + `ResourceSet.getResource` 按需加载已完成）。`emf-ecore` 的容器/inverse-list 通知、指针身份类等原「未映射项」已全部补齐（153/153）。
+2. `emf-ecore-util` 剩余：Adapter / ECrossReferenceAdapter / containment 遍历到 `all_contents` 的流式实现。
+3. `emf-sphinx` 剩余：`ExtendedResource`/`ProxyHelper`/`ModelDescriptor`/`EcoreTraversalHelper` 等在 C++ 侧仍为骨架或空测试，随上层用例补齐再逐条对照。
+4. `artop-runtime`：AUTOSAR 序列化/反序列化（届时才引入 artop 相关内容）。
+5. `artop-codegen`：C++ `emf-artop-codegen` 已 1:1 移植完成（Milestone 26）。**已完成**：`artop_codegen::registry_gen` 递归 `eSubpackages` 并把 ARXML 元数据（`xml.name` / APRXML 标志 / `atp.Splitkey` / `ordered` / `xml.nsPrefix`）生成进静态 crate，取代了 `artop_codegen::registry_gen`（Python），实现「`.ecore` → 可直接读写 arxml 的全量静态模型」。生成器 CLI：`artop-codegen registry <gautosar.ecore> <autosar448.ecore> <out/registry.rs>`（产物经 `cargo fmt` 后与提交的 `registry.rs` 逐字节一致，由 `artop-codegen/tests/registry_model.rs` 钉住）。2100+ 类的重编译走 GitHub Actions（`.github/workflows/model-codegen.yml`），不在本地编译。
 
 ## 7.1 `AutosarXMLSaver`（arxml 写核心）—— 已完成
 
@@ -359,6 +359,14 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - CLI：`artop-codegen registry <gautosar.ecore> <autosar448.ecore> <out/registry.rs>`；产物经 `cargo fmt` 后与提交的 `autosar448-model/src/registry.rs` **逐字节一致**。
   - 测试 `tests/registry_model.rs`（3 条）：`registry_generator_reproduces_committed_model`（规模断言 + 规范化对照已提交产物）/ `registry_generation_is_deterministic` / `committed_registry_is_not_empty`；缺失 `.ecore` 时 SKIP。
   - CI：新增 `.github/workflows/model-codegen.yml`——在 GitHub 上重新生成注册表、`git diff --exit-code` 校验产物未过期，并 `--release` 编译 + 测试 2100+ 类的静态模型；**重编译不在本地沙箱进行**。`ci.yml` 的 conformance job 继续跑真实样本的 Rust 逐字节 round-trip 与 Rust<->C++ 双向交接（静态模型即读写后端）。
+
+- **Milestone 28 — 可直接调用的 arxml 读写二进制 + 1.0.0 四平台 release（本轮新增）**：把「能读写 arxml」收口成**开箱即用、四平台预编译**的发布产物，对齐 artop-cpp 的 release 形态。
+  - `examples/arxml-roundtrip`（CLI，后端即 `artop-runtime`）：`roundtrip <in> <out>`（`AutosarResourceFactory::register_default_autosar40_metamodel` 注册静态模型 → `AutosarXMLResource::load_from_string` → `save_to_string` 落盘）、`check <in>`（读入并报告根元素/根对象数）、`--version`。
+  - `examples/arxml-validate`（CLI）：注册 `register_autosar_constraints` + `register_ecuc_constraints` 后跑 `ValidationService::validate_all`；退出码 `0`（仅 warning）/ `1`（存在 error）/ `2`（用法错误）/ 其他视为崩溃——CI 只把崩溃当失败。
+  - 实测：artop-cpp `output/samples/` 的 **4 份非空真实样本（含 821KB）`roundtrip` 后与原文 `cmp` 逐字节相同**；`arxml-validate` 对该样本报 1 条 warning、退出码 `0`。
+  - release：`.github/workflows/release.yml`（`v*` tag 触发 + `workflow_dispatch`），四平台矩阵 `linux-x86_64`(ubuntu-latest) / `linux-aarch64`(ubuntu-24.04-arm) / `macos-aarch64`(macos-latest) / `windows-x86_64`(windows-latest)，逐平台 `cargo build --release --workspace` → 用真实样本冒烟两个二进制 → `tools/release/package.py` 打包 → `publish` job 汇总发 GitHub Release。
+  - `tools/release/package.py`：每平台产出**三个**压缩包，与 C++ release 的三种库 1:1 对应——`artop-rust-base-<平台>-<ver>.zip`（**底座库**：全部 `emf-*` rlib + `arxml-roundtrip`/`arxml-validate`/`artop-codegen`/`emf-ecore-codegen` 二进制）、`artop-rust-artop-runtime-<平台>-<ver>.zip`（**artop-runtime 库**：`artop_runtime` + `artop_validation` rlib + 两个 arxml 二进制）、`artop-model-autosar448-<平台>-<ver>.zip`（**autosar448 静态模型库**：生成源 `registry/lib/reflect/metamodel` + 预编译 `libautosar448_model.rlib` + `artop-codegen`）。
+  - 版本：工作区全部 crate 统一 `1.0.0`；四平台产物即「**直接调用二进制读写 arxml**」的交付物（`arxml-roundtrip roundtrip in.arxml out.arxml`）。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 

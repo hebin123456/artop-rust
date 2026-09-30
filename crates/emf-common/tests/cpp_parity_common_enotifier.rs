@@ -13,6 +13,7 @@ use emf_common::value::{ObjectRef, Val};
 use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A recording adapter: counts deliveries and records the received copies.
 struct Recording {
@@ -324,6 +325,27 @@ fn remove_adapter_notifies_remaining_adapters() {
 }
 
 #[test]
+fn remove_adapter_during_notify_removed_adapter_receives_removing_adapter() {
+    // ChangeNotification/RemoveAdapter_DuringNotify_SafeIteration: the adapter
+    // being removed still receives exactly one REMOVING_ADAPTER, because C++
+    // `eBasicRemoveAdapter` calls `eNotify` *before* erasing it from the list.
+    let mut n = Notifier::new();
+    n.e_set_deliver(true);
+    let (a1, notifies, received) = Recording::new(1);
+    n.add_adapter(a1);
+    n.remove_adapter(|a| {
+        a.as_any()
+            .downcast_ref::<Recording>()
+            .is_some_and(|r| r.id == 1)
+    });
+    assert_eq!(notifies.get(), 1);
+    let r = received.borrow();
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0].event(), EventType::RemovingAdapter);
+    assert!(n.e_adapters().is_empty());
+}
+
+#[test]
 fn remove_adapter_deliver_false_no_removal_notification() {
     let mut n = Notifier::new();
     n.e_set_deliver(false);
@@ -549,4 +571,269 @@ fn notification_was_set_constructor_and_toggle() {
     assert!(ng.was_set());
     ng.set_was_set(false);
     assert!(!ng.was_set());
+}
+
+// ---------------------------------------------------------------------------
+// ChangeNotificationTests.cpp: Notification construction / accessors
+// ---------------------------------------------------------------------------
+
+#[test]
+fn notification_construct_set_accessors() {
+    // Ports Notification_Construct_SetAccessors: every accessor reflects the
+    // value passed to the constructor (position defaults to -1).
+    let n = Notification::new(
+        EventType::Set,
+        Some("name".into()),
+        Val::String("old".into()),
+        Val::String("new".into()),
+        -1,
+        false,
+    )
+    .with_notifier(7);
+    assert_eq!(n.event(), EventType::Set);
+    assert_eq!(n.notifier(), 7);
+    assert_eq!(n.feature(), Some("name"));
+    assert_eq!(n.old_value, Val::String("old".into()));
+    assert_eq!(n.new_value, Val::String("new".into()));
+    assert_eq!(n.position, -1);
+}
+
+#[test]
+fn notification_construct_with_position() {
+    // Ports Notification_Construct_WithPosition: an explicit position is kept.
+    let n = Notification::new(EventType::Add, None, Val::Null, Val::Int(42), 3, false);
+    assert_eq!(n.event(), EventType::Add);
+    assert_eq!(n.position, 3);
+}
+
+#[test]
+fn notification_default_position_minus_one() {
+    // Ports Notification_DefaultPosition_IsMinusOne.
+    let n = Notification::new(EventType::Create, None, Val::Null, Val::Null, -1, false);
+    assert_eq!(n.position, -1);
+}
+
+// ---------------------------------------------------------------------------
+// ChangeNotificationTests.cpp: EventType coverage
+// ---------------------------------------------------------------------------
+
+#[test]
+fn notification_event_type_values() {
+    // Ports Notification_EventType_Values: the C-like discriminants match C++.
+    assert_eq!(EventType::Create as i32, 0);
+    assert_eq!(EventType::Set as i32, 1);
+    assert_eq!(EventType::Unset as i32, 2);
+    assert_eq!(EventType::Add as i32, 3);
+    assert_eq!(EventType::Remove as i32, 4);
+    assert_eq!(EventType::AddMany as i32, 5);
+    assert_eq!(EventType::RemoveMany as i32, 6);
+    assert_eq!(EventType::Move as i32, 7);
+    assert_eq!(EventType::RemovingAdapter as i32, 8);
+    assert_eq!(EventType::Resolve as i32, 9);
+    assert_eq!(EventType::ContentType as i32, 10);
+}
+
+#[test]
+fn notification_event_type_round_trip() {
+    // Ports Notification_EventType_RoundTrip.
+    for t in [
+        EventType::Create,
+        EventType::Set,
+        EventType::Unset,
+        EventType::Add,
+        EventType::AddMany,
+        EventType::Remove,
+        EventType::RemoveMany,
+        EventType::Move,
+        EventType::RemovingAdapter,
+        EventType::Resolve,
+        EventType::ContentType,
+    ] {
+        let n = Notification::new(t, None, Val::Null, Val::Null, -1, false);
+        assert_eq!(n.event(), t);
+    }
+}
+
+#[test]
+fn notification_event_type_name_known_types() {
+    // Ports Notification_EventTypeName_KnownTypes.
+    assert_eq!(EventType::Set.name(), "SET");
+    assert_eq!(EventType::Add.name(), "ADD");
+    assert_eq!(EventType::Remove.name(), "REMOVE");
+    assert_eq!(EventType::Unset.name(), "UNSET");
+    assert_eq!(EventType::Move.name(), "MOVE");
+    assert_eq!(EventType::Create.name(), "CREATE");
+    assert_eq!(EventType::RemovingAdapter.name(), "REMOVING_ADAPTER");
+    assert_eq!(EventType::Resolve.name(), "RESOLVE");
+    assert_eq!(EventType::AddMany.name(), "ADD_MANY");
+    assert_eq!(EventType::RemoveMany.name(), "REMOVE_MANY");
+    assert_eq!(EventType::ContentType.name(), "CONTENT_TYPE");
+}
+
+#[test]
+fn notification_touch_marks_touched() {
+    // Ports Notification_Touch_MarksTouched: the was-set/touched flag starts
+    // false and is marked by the setter (Rust stand-in for C++ touch()).
+    let mut n = Notification::new(EventType::Set, None, Val::Null, Val::Null, 0, false);
+    assert!(!n.was_set());
+    n.set_was_set(true);
+    assert!(n.was_set());
+}
+
+// ---------------------------------------------------------------------------
+// ChangeNotificationTests.cpp: NotificationChain (std::vector) aggregation
+// ---------------------------------------------------------------------------
+
+#[test]
+fn notification_chain_aggregate() {
+    // Ports NotificationChain_Aggregate: a plain vector of notifications keeps
+    // insertion order and per-entry feature association.
+    let chain = vec![
+        Notification::new(
+            EventType::Add,
+            Some("a".into()),
+            Val::Null,
+            Val::Null,
+            -1,
+            false,
+        ),
+        Notification::new(
+            EventType::Remove,
+            Some("b".into()),
+            Val::Null,
+            Val::Null,
+            -1,
+            false,
+        ),
+        Notification::new(
+            EventType::Set,
+            Some("c".into()),
+            Val::Null,
+            Val::Null,
+            -1,
+            false,
+        ),
+    ];
+    assert_eq!(chain.len(), 3);
+    assert_eq!(chain[0].event(), EventType::Add);
+    assert_eq!(chain[1].event(), EventType::Remove);
+    assert_eq!(chain[2].event(), EventType::Set);
+    assert_eq!(chain[0].feature(), Some("a"));
+    assert_eq!(chain[1].feature(), Some("b"));
+    assert_eq!(chain[2].feature(), Some("c"));
+}
+
+#[test]
+fn notification_chain_empty() {
+    // Ports NotificationChain_Empty.
+    let chain: Vec<Notification> = Vec::new();
+    assert_eq!(chain.len(), 0);
+}
+
+#[test]
+fn notification_chain_merge() {
+    // Ports NotificationChain_Merge: appending a second collection grows the
+    // chain and drains the source.
+    let mut chain1 = NotificationChain::new();
+    chain1.add(Notification::new(
+        EventType::Add,
+        Some("a".into()),
+        Val::Null,
+        Val::Null,
+        -1,
+        false,
+    ));
+    let mut chain2 = vec![
+        Notification::new(
+            EventType::Remove,
+            Some("b".into()),
+            Val::Null,
+            Val::Null,
+            -1,
+            false,
+        ),
+        Notification::new(
+            EventType::Set,
+            Some("c".into()),
+            Val::Null,
+            Val::Null,
+            -1,
+            false,
+        ),
+    ];
+    chain1.merge(&mut chain2);
+    assert_eq!(chain1.len(), 3);
+    assert!(chain2.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// ChangeNotificationTests.cpp: eNotify delivery
+// ---------------------------------------------------------------------------
+
+#[test]
+fn enotify_delivers_to_adapter() {
+    // Ports ENotify_DeliversToAdapter: a single adapter receives the SET once.
+    let mut n = Notifier::new();
+    let (a, notifies, received) = Recording::new(1);
+    n.add_adapter(a);
+    let evt = Notification::new(EventType::Set, None, Val::Null, Val::Null, -1, false);
+    n.e_notify(&evt);
+    assert_eq!(notifies.get(), 1);
+    let r = received.borrow();
+    assert_eq!(r.len(), 1);
+    assert_eq!(r[0].event(), EventType::Set);
+}
+
+/// A zero-sized adapter used to exercise `add_adapter` de-duplication: two
+/// boxes of the same ZST compare pointer-identical, standing in for the C++
+/// "same adapter pointer added twice".
+struct ZstAdapter;
+static DUP_HITS: AtomicUsize = AtomicUsize::new(0);
+impl Adapter for ZstAdapter {
+    fn notify_changed(&mut self, _n: &Notification) {
+        DUP_HITS.fetch_add(1, Ordering::SeqCst);
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+#[test]
+fn enotify_duplicate_adapter_added_once() {
+    // Ports ENotify_DuplicateAdapter_AddedOnce: adding an identical adapter
+    // twice keeps a single entry and delivers the notification only once.
+    DUP_HITS.store(0, Ordering::SeqCst);
+    let mut n = Notifier::new();
+    n.add_adapter(Box::new(ZstAdapter));
+    n.add_adapter(Box::new(ZstAdapter));
+    assert_eq!(n.e_adapters().len(), 1);
+    n.e_notify(&Notification::new(
+        EventType::Set,
+        None,
+        Val::Null,
+        Val::Null,
+        -1,
+        false,
+    ));
+    assert_eq!(DUP_HITS.load(Ordering::SeqCst), 1);
+}
+
+// ---------------------------------------------------------------------------
+// ChangeNotificationTests.cpp: EAdapter target / isAdapterForType
+// ---------------------------------------------------------------------------
+
+#[test]
+fn eadapter_set_get_target() {
+    // Ports EAdapter_SetGetTarget: target defaults to null, then round-trips.
+    let (mut a, _, _) = Recording::new(1);
+    assert_eq!(a.target(), None);
+    a.set_target(Some(42));
+    assert_eq!(a.target(), Some(42));
+}
+
+#[test]
+fn eadapter_is_adapter_for_type_default_false() {
+    // Ports EAdapter_IsAdapterForType_DefaultFalse.
+    let (a, _, _) = Recording::new(1);
+    assert!(!a.is_adapter_for_type(""));
 }

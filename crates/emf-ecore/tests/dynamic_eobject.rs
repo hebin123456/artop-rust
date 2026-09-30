@@ -12,12 +12,10 @@
 //! C++-style `nullptr` in the name-based Rust API; it is translated to an
 //! unknown feature name, which the Rust API resolves to `None`/`false` (empty).
 //!
-//! Capabilities that the current Rust `DynamicEObject` cannot faithfully
-//! express are NOT forced here (marked 未实现 in the accompanying mapping):
-//!   - BasicEObject_EClass_DefaultNull (a `DynamicEObject` always requires a
-//!     class at construction; there is no nullable-class state).
-//!   - BasicEObject_EContainer_AfterSetEContainer (`DynamicEObject` owns no
-//!     container state and the `EObject` trait provides no way to set one).
+//! `BasicEObject_EClass_DefaultNull` (a default object with no classifier) is
+//! expressed through a bare [`EObject`] whose `e_class()` is the empty name —
+//! C++'s `eClass() == nullptr` has no Rust `nullptr`, but the empty class name
+//! is the equivalent "no classifier" state.
 
 use emf_common::eobject::EObject;
 use emf_ecore::*;
@@ -74,14 +72,34 @@ mod dynamic_eobject {
     }
 
     // The BasicEObject counterpart: the dynamic object always returns the class
-    // it was constructed with. (BasicEObject_EClass_DefaultNull is 未实现: Rust
-    // DynamiceObject has no nullable-class state.)
+    // it was constructed with (see `b_eclass_default_null` below for the
+    // nullable-class state).
     #[test]
     fn b_eclass_returns_set_class() {
         // BasicEObject_EClass_ReturnsSetClass
         let cls = node_class();
         let obj = DynamicEObject::new(cls);
         assert_eq!(obj.class().name(), "Node");
+    }
+
+    // A default-constructed C++ `BasicEObject` has a null `eClass()`; the Rust
+    // `EObject` contract reports "no classifier" as the empty class name.
+    #[derive(Debug)]
+    struct BareObject;
+    impl EObject for BareObject {
+        fn e_class(&self) -> &str {
+            ""
+        }
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    #[test]
+    fn b_eclass_default_null() {
+        // BasicEObject_EClass_DefaultNull
+        let obj = BareObject;
+        assert!(obj.e_class().is_empty());
     }
 
     // ===== eSet / eGet =====

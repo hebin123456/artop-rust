@@ -1,8 +1,16 @@
 [package]
 name = "arxml-validate"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 publish = false
 
+[[bin]]
+name = "arxml-validate"
+path = "src/main.rs"
+
 [dependencies]
+artop-runtime = { workspace = true }
+artop-validation = { workspace = true }
 emf-common = { workspace = true }
+emf-ecore = { workspace = true }
+emf-validation = { workspace = true }

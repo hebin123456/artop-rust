@@ -9,8 +9,8 @@
 //! `EObject*`-based `eInverseAdd/Remove`/`setEContainer` onto the `ObjectRef`
 //! (`Rc<RefCell<dyn EObject>>`) forms on the `EObject` trait.
 //!
-//! Still not portable at this layer (tracked in PARITY_TRACKER):
-//!   - `eClass` default null -> a Rust `DynamicEObject` always requires a class
+//! `eClass` default null is expressed via a bare `EObject` whose `e_class()`
+//! is the empty name (see `dynamic_eobject::b_eclass_default_null`).
 use emf_common::eobject::{EObject, InverseList};
 use emf_common::notification::{Adapter, EventType, Notification};
 use emf_common::value::ObjectRef;
@@ -121,6 +121,19 @@ fn e_dynamic_unset_unknown_feature_no_op() {
     let unknown = obj.e_unset_by_name("does-not-exist");
     assert!(!unknown);
     assert_eq!(obj.e_is_set_by_name("name"), Some(false));
+}
+
+#[test]
+fn b_e_dynamic_null_feature_cases() {
+    // Ports BasicEObject_EDynamicGet_NullFeature_ReturnsEmpty /
+    // EDynamicSet_NullFeature_NoOp / EDynamicIsSet_NullFeature_False /
+    // EDynamicUnset_NullFeature_NoOp: an unknown ("null") feature resolves to
+    // None/false and the write/unset calls are harmless no-ops.
+    let mut obj = DynamicEObject::new(simple_class());
+    assert_eq!(obj.e_get_by_name("no_such_feature"), None);
+    assert!(!obj.e_set_by_name("no_such_feature", Val::String("x".into())));
+    assert_eq!(obj.e_is_set_by_name("no_such_feature"), None);
+    assert!(!obj.e_unset_by_name("no_such_feature"));
 }
 
 // ===== test doubles =====
@@ -443,4 +456,13 @@ fn b_e_unset_fires_unset() {
     drop(rec);
     assert_eq!(obj.e_is_set_by_name("name"), Some(false));
     assert_eq!(obj.e_get_by_name("name"), Some(Val::Null));
+}
+
+// ===== framework smoke test =====
+
+#[test]
+fn placeholder() {
+    // C++ `EMF_TEST(Placeholder)` in `test_main.cpp` is the empty framework
+    // smoke test (`EXPECT_TRUE(true)`); ported verbatim as a no-op.
+    assert!(true);
 }

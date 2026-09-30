@@ -78,6 +78,29 @@ fn coerce_int_to_boolean() {
 }
 
 #[test]
+fn datatype_coerce() {
+    // Ports DataTypeUtil_Coerce in full: string "42" -> EInt 42, int 7 ->
+    // EString "7", int 1 -> EBoolean true.
+    assert_eq!(datatype::from_string("EInt", "42"), Val::Int(42));
+    assert_eq!(datatype::to_string("EInt", &Val::Int(7)), "7");
+    assert_eq!(datatype::from_string("EBoolean", "1"), Val::Bool(true));
+}
+
+#[test]
+fn datatype_default_value_for_classifier() {
+    // Ports DataTypeUtil_DefaultValueForClassifier: the EInt data type's
+    // default value is 0.
+    let pkg = ecore_package();
+    let name = pkg
+        .borrow()
+        .find_data_type("EInt")
+        .expect("registered")
+        .name()
+        .to_string();
+    assert_eq!(datatype::default_value(&name), Val::Int(0));
+}
+
+#[test]
 fn ns_uri_constant_matches_ecore_package() {
     let pkg = ecore_package();
     assert_eq!(pkg.borrow().ns_uri().unwrap().to_string(), ECORE_NS_URI);

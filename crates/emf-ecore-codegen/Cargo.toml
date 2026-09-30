@@ -1,6 +1,6 @@
 [package]
 name = "emf-ecore-codegen"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 license = "MIT"
 description = "Static modeling (code generation) from .ecore files. Port of C++ emf-ecore-codegen."

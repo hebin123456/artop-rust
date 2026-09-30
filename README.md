@@ -41,11 +41,37 @@ Each directory mirrors one C++ module; module names map 1:1 to C++ translation u
 | `emf-acceleo` | `emf-acceleo` (MTL/M2T engine) | **working** |
 | `emf-sphinx` | `emf-sphinx` (headless core) | **working** |
 | `emf-artop/autosar448-model` | `emf-artop/autosar448-model` (generated AUTOSAR 4.4.8 registry + reflection) | **working** |
-| `emf-artop/artop-runtime` | `emf-artop/emf-artop-runtime` (AUTOSAR ser/de, versions) | skeleton |
-| `emf-artop/artop-codegen` | `emf-artop/emf-artop-codegen` (.ecore → static model) | skeleton |
+| `emf-artop/artop-runtime` | `emf-artop/emf-artop-runtime` (AUTOSAR ser/de, versions) | **working** |
+| `emf-artop/artop-codegen` | `emf-artop/emf-artop-codegen` (.ecore → static model) | **working** |
 | `emf-artop/artop-validation` | `emf-artop/emf-artop-validation` (AUTOSAR business constraints over `emf-validation`) | **working** |
-| `examples/arxml-roundtrip` | `examples/arxml_roundtrip` | skeleton |
-| `examples/arxml-validate` | `examples/arxml_validate` | skeleton |
+| `examples/arxml-roundtrip` | `examples/arxml_roundtrip` | **working** |
+| `examples/arxml-validate` | `examples/arxml_validate` | **working** |
+
+## Read & write ARXML directly
+
+The `arxml-roundtrip` / `arxml-validate` binaries read and write ARXML through
+the generated `autosar448` static model, byte-for-byte identical to the C++/Java
+serializers:
+
+```sh
+arxml-roundtrip roundtrip in.arxml out.arxml   # load, then save
+arxml-roundtrip check     in.arxml             # load and report the root
+arxml-validate            in.arxml             # load and run AUTOSAR constraints
+```
+
+## Releases
+
+Tagging `v*` runs the four-platform release workflow
+(`.github/workflows/release.yml`), which builds and publishes three archives per
+platform — the Rust counterparts of the `artop-cpp` release libraries:
+
+| Archive | Contents |
+|---|---|
+| `artop-rust-base-<platform>-<ver>.zip` | **base library** — every generic `emf-*` rlib + command-line binaries |
+| `artop-rust-artop-runtime-<platform>-<ver>.zip` | **artop-runtime library** — `artop_runtime` + `artop_validation` rlib + the two arxml binaries |
+| `artop-model-autosar448-<platform>-<ver>.zip` | **autosar448 static model** — generated source + prebuilt rlib + `artop-codegen` |
+
+Platforms: `linux-x86_64`, `linux-aarch64`, `macos-aarch64`, `windows-x86_64`.
 
 ## Build & test (CI does this)
 
@@ -82,5 +108,8 @@ Detailed, per-module port progress lives in [`docs/PROGRESS.md`](docs/PROGRESS.m
 
 ## Module map / port tracking
 
-Each `artop-*` *skeleton* crate contains one placeholder module per C++
-translation unit to port. Fill a module to mark that unit ported.
+Each crate mirrors one C++ module. Conformance is tracked per C++ test in
+[`docs/PARITY_TRACKER.md`](docs/PARITY_TRACKER.md) and gated by
+[`docs/EMF_PARITY_GATE.md`](docs/EMF_PARITY_GATE.md): the EMF base is fully
+ported (`emf-ecore` 153/153 C++ oracle tests mapped and green, 0 pending /
+0 regression), so the artop layer is free to develop and release.

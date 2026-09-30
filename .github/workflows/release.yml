@@ -1,0 +1,142 @@
+name: Release
+
+# Builds and publishes the four-platform release archives (mirroring the
+# `hebin123456/artop-cpp` release layout): linux-x86_64, linux-aarch64,
+# macos-aarch64 and windows-x86_64.
+#
+# Each platform ships three archives:
+#   * artop-rust-base-<platform>-<version>.zip          底座库 (emf-*) + binaries
+#   * artop-rust-artop-runtime-<platform>-<version>.zip artop-runtime 库 + arxml 二进制
+#   * artop-model-autosar448-<platform>-<version>.zip   autosar448 静态模型库
+#
+# The 2105-class static model is compiled here, on GitHub, never in a dev box.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 版本号(不含前导 v), 仅 workflow_dispatch 时使用
+        default: "1.0.0"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  package:
+    name: Package (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x86_64
+            exe: ""
+          - os: ubuntu-24.04-arm
+            platform: linux-aarch64
+            exe: ""
+          - os: macos-latest
+            platform: macos-aarch64
+            exe: ""
+          - os: windows-latest
+            platform: windows-x86_64
+            exe: ".exe"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # Heavy: this builds the generated 2105-class static model + the runtime.
+      - name: Build the workspace (release)
+        run: cargo build --release --workspace
+
+      - name: Checkout artop-cpp reference (real AUTOSAR samples)
+        uses: actions/checkout@v4
+        with:
+          repository: hebin123456/artop-cpp
+          path: reference/artop-cpp
+          fetch-depth: 1
+
+      - name: Smoke-test the arxml binaries on a real sample
+        shell: bash
+        run: |
+          set -euo pipefail
+          sample=reference/artop-cpp/output/samples/GeneralDefinitionReferenceBase.arxml
+          ext="${{ matrix.exe }}"
+          ./target/release/arxml-roundtrip$ext check     "$sample"
+          ./target/release/arxml-roundtrip$ext roundtrip "$sample" roundtrip.arxml
+          cmp "$sample" roundtrip.arxml
+          # 校验器可以报出约束发现(退出码 1); 只把崩溃(101)/用法错误(2)视为失败。
+          set +e
+          ./target/release/arxml-validate$ext "$sample"
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+            echo "arxml-validate crashed (exit $rc)"; exit 1
+          fi
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then VERSION="${GITHUB_REF_NAME#v}"; fi
+          PY=$(command -v python3 || command -v python)
+          "$PY" tools/release/package.py \
+            --release-dir target/release \
+            --platform "${{ matrix.platform }}" \
+            --version "$VERSION" \
+            --out dist \
+            --exe "${{ matrix.exe }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: List archives
+        run: ls -la dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
+          body: |
+            Rust port of [`hebin123456/artop-cpp`](https://github.com/hebin123456/artop-cpp).
+
+            ## 四平台产物 (每个平台三个压缩包)
+
+            | 压缩包 | 内容 |
+            |---|---|
+            | `artop-rust-base-<platform>-<ver>.zip` | **底座库**: 全部 `emf-*` rlib + 命令行二进制 (`arxml-roundtrip`, `arxml-validate`, `artop-codegen`, `emf-ecore-codegen`) |
+            | `artop-rust-artop-runtime-<platform>-<ver>.zip` | **artop-runtime 库**: `artop_runtime` + `artop_validation` rlib + 两个 arxml 二进制 |
+            | `artop-model-autosar448-<platform>-<ver>.zip` | **autosar448 静态模型库**: 生成源 (`registry`/`lib`/`reflect`/`metamodel`) + 预编译 rlib + `artop-codegen` |
+
+            平台: `linux-x86_64` (ubuntu-latest) · `linux-aarch64` (ubuntu-24.04-arm) ·
+            `macos-aarch64` (macos-latest) · `windows-x86_64` (windows-latest).
+
+            ## 直接用二进制读写 arxml
+
+            ```bash
+            ./arxml-roundtrip roundtrip in.arxml out.arxml   # 读入再写出
+            ./arxml-roundtrip check     in.arxml             # 读入并报告根元素
+            ./arxml-validate in.arxml                        # 读入并跑 AUTOSAR 约束
+            ```
+
+            这两个二进制走的正是本 release 里的 `autosar448` 静态模型库
+            (2105 个 EClass / 6122 个特征)，读写结果与 C++/Java 逐字节一致。

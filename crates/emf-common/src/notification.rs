@@ -225,9 +225,11 @@ impl Notifier {
         }
     }
 
-    /// Remove adapter(s) matching a predicate. When delivery is enabled, all
-    /// *remaining* adapters are first sent a `REMOVING_ADAPTER` notification
-    /// (aligned to C++ `removeAdapter`), then the matched adapters are dropped.
+    /// Remove adapter(s) matching a predicate. When delivery is enabled, every
+    /// *current* adapter — including the ones about to be removed — is first
+    /// sent a `REMOVING_ADAPTER` notification (aligned to C++/Java
+    /// `eBasicRemoveAdapter`, which calls `eNotify` *before* erasing), then the
+    /// matched adapters are dropped.
     pub fn remove_adapter(&mut self, mut predicate: impl FnMut(&dyn Adapter) -> bool) {
         // Identity by thin data pointer: two adapters are "the same" iff their
         // object address matches (metadata/vtable is ignored).
@@ -250,10 +252,7 @@ impl Notifier {
                 false,
             );
             for a in &mut self.adapters {
-                let ptr = a.as_ref() as *const dyn Adapter as *const ();
-                if !removing.contains(&ptr) {
-                    a.notify_changed(&evt);
-                }
+                a.notify_changed(&evt);
             }
         }
         // Clear each removed adapter's target before dropping it

@@ -161,6 +161,19 @@ fn containment_single_is_set_and_unset() {
 }
 
 #[test]
+fn containment_null_value_no_container() {
+    // Ports DynamicEObject_Containment_NullValue_NoEContainer: setting a null
+    // containment value must not crash and must not set an eContainer. The
+    // feature counts as set and reads back as an empty/null value.
+    let parent = node();
+    assert!(parent.borrow_mut().e_set_by_name("child", Val::Null));
+    assert_eq!(parent.borrow().e_is_set_by_name("child"), Some(true));
+    assert_eq!(parent.borrow().e_get_by_name("child"), Some(Val::Null));
+    // A null child contributes nothing to eContents (no eContainer set).
+    assert!(parent.borrow().contents().is_empty());
+}
+
+#[test]
 fn e_unset_null_feature_no_op() {
     let mut obj = DynamicEObject::new(node_class());
     let ok = obj.e_unset_by_name("no_such");

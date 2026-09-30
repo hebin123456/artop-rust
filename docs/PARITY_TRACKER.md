@@ -4,7 +4,7 @@
 > 状态图例：⬜ 未开始 · 🔶 进行中 · ✅ 已移植且跑绿 · ⛔ 无 C++ 对照 / 不移植（如 probe_arxml/probe_autosar448 属 artop 侧，按门线禁止处理）
 
 ## Hard Gate
-按 `docs/EMF_PARITY_GATE.md`：**底座全部 ✅ 之前，严禁 artop。**
+按 `docs/EMF_PARITY_GATE.md`：**EMF 底座已全部 ✅**（`emf-ecore` oracle 153 条经 `cases_ecore.tsv` 153/153 全映射并跑绿，`compare.py` 0 PENDING / 0 REGRESSION），**门线已解除，artop 允许开发与发布。**
 
 ## emf-common（基础，最优先）
 > 已移植核心数据结构：`cpp_parity_common_core.rs`（26 通过，无忽略）。EList / BasicEMap 全对齐；`UniqueEList` 已建专用类型并复刻 C++ 的重复拒绝（`try_set` / `try_add_at_index` 返回 `Err(Duplicate)`）；`NotifyingList` 通知 hook 已扩展为带值 + ADD_MANY/REMOVE_MANY/REMOVE/MOVE 变体；`SegmentSequence` 空分隔符语义已对齐（空分隔符不拆、单段）。
@@ -22,10 +22,11 @@
 | EPackageRegistryTests.cpp | ✅ cpp_parity_ecore_registry（7；已扩展 `PackageRegistry` 增加 key 索引 get/put/contains_key/remove/keys，register 按 name/nsURI/nsPrefix 索引） |
 
 ## emf-ecore
+> 本章节 C++ oracle 共 **153** 条（`tools/conformance/build/ecore_oracle.json`），已 **153/153 全映射跑绿**（`cases_ecore.tsv`，`compare.py` 等价 153 / PENDING 0 / REGRESSION 0）。
 | C++ 测试 | Rust 状态 |
 |---|---|
-| BasicEObjectTests.cpp | ✅ cpp_parity_ecore_basic_eobject（28；eClass / eDynamic* 值存储 get·set·isSet·unset（+双特征）/ **eContainer 默认无·setEContainer 后回链** / **eRegisterInverseList·eInverseAdd·eInverseRemove·eUnregister（含未注册 no-op·错配 list no-op·null list no-op·通知链透传）** / **eNotificationRequired 无 adapter=false·有 adapter=true** / **eSet 触发 SET·eUnset 触发 UNSET 且值可读回** 全对齐。
-   ⛔ 仅 `BasicEObject_EClass_DefaultNull` 不可移植（Rust `DynamicEObject` 构造即需类，无「类为空」态） |
+| BasicEObjectTests.cpp | ✅ cpp_parity_ecore_basic_eobject（28；eClass / eDynamic* 值存储 get·set·isSet·unset（+双特征）/ **eContainer 默认无·setEContainer 后回链** / **eRegisterInverseList·eInverseAdd·eInverseRemove·eUnregister（含未注册 no-op·错配 list no-op·null list no-op·通知链透传）** / **eNotificationRequired 无 adapter=false·有 adapter=true** / **eSet 触发 SET·eUnset 触发 UNSET 且值可读回** / `placeholder` 框架冒烟 全对齐。
+   ✅ `BasicEObject_EClass_DefaultNull` 以裸 `EObject`（`e_class()` 返空名）表达 C++ 的 `eClass()==nullptr`（`dynamic_eobject::b_eclass_default_null`），无遗漏 |
 | DynamicEObjectImplTests.cpp | ✅ cpp_parity_ecore_dyn_eobject（24；eClass / 属性 get·set·isSet·unset / 单值 containment：adopt 设 child eContainer·feature / 多值 containment：eGet 空表·增后 isSet·unset 清空 / eContents 单·多·混合收集 / 覆盖属性·child 全对齐。
    Rust 以 `DynamicEObject` 值存储 + `Weak<parent>` 容器回链 + `adopt_single`/`adopt_many` 助手模拟 C++ 指针式 `eSet(containment, child)`；差异：feature 按名访问、eContents 按 featureID 序） |
 | EClassImplTests.cpp | ✅ cpp_parity_ecore_eclass（12；create/featureID/abstract·interface/get-by-ID/isSuperTypeOf/eAllSuperTypes·Attributes·References·StructuralFeatures·featureCount/ID-marked 全对齐；
@@ -39,7 +40,7 @@
    差异：Rust 以 find_class·find_data_type 替代 getEClass_EClass 式类型化 getter） |
 | DataTypeUtilTests.cpp | ✅ cpp_parity_ecore_datatype_util（10；EString·EInt·EBoolean·EDouble from/to、默认值 EString""·EInt0·EBooleanfalse·EDouble0.0·ELong0、coerce（string→int / int→string / int→bool）、nsURI 常量 全对齐。
    Rust 以 `Val` 替代 std::any，coerce 用 from_string(to_string(...)) 表达） |
-| ChangeNotificationTests.cpp | ✅ 已由 emf-common `cpp_parity_common_enotifier`（30 条）覆盖：Notification 构造/访问器/EventType 值·名称/position/touch·wasTouched/NotificationChain 聚合/多 adapter 广播/removeAdapter REMOVING_ADAPTER 隐式通知/target 管理 全部对齐 |
+| ChangeNotificationTests.cpp | ✅ 已由 emf-common `cpp_parity_common_enotifier`（31 条）覆盖：Notification 构造/访问器/EventType 值·名称/position/touch·wasTouched/NotificationChain 聚合/多 adapter 广播/removeAdapter REMOVING_ADAPTER 隐式通知（**含被移除 adapter 自身也收到一条**，已对齐 C++/Java `eBasicRemoveAdapter` 先 `eNotify` 再 `erase`）/target 管理 全部对齐 |
 
 ## emf-xmi（序列化/反序列化）
 | C++ 测试 | Rust 状态 |
