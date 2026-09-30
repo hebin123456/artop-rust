@@ -106,6 +106,15 @@ fn tag_feature(f: &mut EStructuralFeature, fm: &crate::registry::FeatureMeta) {
     if fm.seq_offset != -100 {
         ann.set_detail("internal-xml-sequenceOffset", fm.seq_offset.to_string());
     }
+    // `atp.Splitkey` sorts an *unordered* multi-valued feature's children (the
+    // C++ `sortChildrenBySplitkey`); `ordered=false` marks a feature as needing
+    // that sort (the C++ `isFeatureOrdered`, default true when absent).
+    if !fm.splitkey.is_empty() {
+        ann.set_detail("atp.Splitkey", fm.splitkey);
+    }
+    if !fm.ordered {
+        ann.set_detail("atp.unordered", "true");
+    }
     f.add_annotation(ann);
 }
 

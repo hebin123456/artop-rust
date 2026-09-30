@@ -103,7 +103,7 @@ class Feature:
         "transient", "volatile", "derived", "default_value",
         "xml_name", "xml_name_plural", "xml_attribute", "text_content",
         "seq_offset", "role_element", "role_wrapper", "type_element",
-        "type_wrapper", "feature_kind", "ns_prefix",
+        "type_wrapper", "feature_kind", "ns_prefix", "splitkey", "ordered",
     )
 
 
@@ -140,6 +140,12 @@ def parse_feature(el):
     f.xml_attribute = parse_bool(tv.get("xml.attribute", ""))
     f.text_content = parse_bool(tv.get("xml.text", ""))
     f.ns_prefix = tv.get("xml.nsPrefix") or ""
+    # `atp.Splitkey` (TaggedValues) drives child ordering for unordered features;
+    # `ordered` (ExtendedMetaData) defaults to true when absent, matching the C++
+    # `isFeatureOrdered`. Both are needed to reproduce the C++/Java serialization
+    # order of multi-valued features.
+    f.splitkey = tv.get("atp.Splitkey") or ""
+    f.ordered = (emd.get("ordered") or "true") != "false"
     if not f.xml_name:
         f.xml_name = f.name
     if not f.xml_name_plural:
@@ -408,6 +414,8 @@ def gen(gautosar_path, autosar_path):
         ("type_element", "bool"),
         ("type_wrapper", "bool"),
         ("default_value", "&'static str"),
+        ("splitkey", "&'static str"),
+        ("ordered", "bool"),
     ]:
         out.append("    pub %s: %s," % (fld, ty))
     out.append("}")
@@ -420,7 +428,7 @@ def gen(gautosar_path, autosar_path):
             "kind: %s, ty: %s, containment: %s, lower: %d, upper: %d, transient: %s, "
             "volatile_: %s, derived: %s, xml_attribute: %s, ns_prefix: %s, text_content: %s, seq_offset: %d, "
             "role_element: %s, role_wrapper: %s, type_element: %s, type_wrapper: %s, "
-            "default_value: %s },"
+            "default_value: %s, splitkey: %s, ordered: %s },"
             % (rlit(f.name), rlit(f.xml_name), rlit(f.xml_name_plural), rlit(f.feature_kind),
                kind, type_ref(f),
                "true" if f.containment else "false", f.lower, f.upper,
@@ -430,7 +438,7 @@ def gen(gautosar_path, autosar_path):
                "true" if f.text_content else "false", f.seq_offset,
                "true" if f.role_element else "false", "true" if f.role_wrapper else "false",
                "true" if f.type_element else "false", "true" if f.type_wrapper else "false",
-               rlit(f.default_value)))
+               rlit(f.default_value), rlit(f.splitkey), "true" if f.ordered else "false"))
     out.append("];")
     out.append("")
 

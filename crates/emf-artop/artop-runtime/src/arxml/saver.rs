@@ -15,10 +15,10 @@
 //!     `<FEATURE DEST="Type">short-name-path</FEATURE>` for references, and the
 //!     mixed-content sequence replay.
 //!
-//! Deliberately deferred from the C++ port (documented, not silently dropped):
-//! `atp.Splitkey` / `ordered` driven child sorting (the Rust static registry
-//! carries neither, so lists are emitted in model order) and unknown-content
-//! fragments (the loader skips unmappable elements).
+//! Multi-valued features marked `ordered=false` in the metamodel are sorted by
+//! their `atp.Splitkey` before serialization (the C++ `isFeatureOrdered` /
+//! `sortChildrenBySplitkey`), so a document whose children are not already in
+//! splitkey order still serializes exactly like the C++/Java implementations.
 //!
 //! Verified: the four non-empty AUTOSAR samples in `artop-cpp`'s
 //! `output/samples/` (largest ~820 KB) round-trip **byte-for-byte identical**
@@ -697,15 +697,68 @@ impl<'a> AutosarSaver<'a> {
         }
     }
 
+    // ---- splitkey-driven child ordering ----
+
+    /// Sort an *unordered* multi-valued feature's children by their
+    /// `atp.Splitkey` (C++ `sortChildrenBySplitkey` / Java
+    /// `AtpSplitkeyAwareComparator`). The sort is stable, so children with equal
+    /// keys keep their stored order.
+    fn sort_children_by_splitkey(&mut self, children: &mut [ObjectRef], f: &EStructuralFeature) {
+        let paths = splitkey_paths(f);
+        let mut keyed: Vec<(Vec<String>, ObjectRef)> = children
+            .iter()
+            .map(|c| {
+                let keys = paths.iter().map(|p| self.splitkey_value(c, p)).collect();
+                (keys, c.clone())
+            })
+            .collect();
+        keyed.sort_by(|a, b| a.0.cmp(&b.0));
+        for (i, (_, c)) in keyed.into_iter().enumerate() {
+            children[i] = c;
+        }
+    }
+
+    /// Resolve one `atp.Splitkey` feature path on `obj` (C++ `getSplitkeyValue`):
+    /// intermediate segments follow single-valued references, the final segment
+    /// yields the scalar value. A path that ends on an object (or an unknown
+    /// feature) yields `""`, mirroring the C++ fallback.
+    ///
+    /// The splitkey path uses ecore feature names, while a `DynamicEObject`
+    /// stores its values under the arxml element name, so each segment is
+    /// resolved through the registry first.
+    fn splitkey_value(&mut self, obj: &ObjectRef, path: &[String]) -> String {
+        let mut cur = obj.clone();
+        for seg in path {
+            let cname = cur.borrow().e_class().to_string();
+            let Some(fid) = autosar448_model::reflect::class_id(&cname)
+                .and_then(|cid| autosar448_model::reflect::find_feature(cid, seg))
+            else {
+                return String::new();
+            };
+            let xml = autosar448_model::reflect::feature(fid).xml_name;
+            let value = cur.borrow().e_get(xml);
+            match value {
+                Some(Val::Object(o)) => cur = o,
+                Some(Val::String(s)) => return s,
+                Some(Val::EnumLiteral(e)) => return e,
+                _ => return String::new(),
+            }
+        }
+        String::new()
+    }
+
     // ---- containment references ----
 
     /// Serialize a containment reference (C++ `saveContainment`).
     fn save_containment(&mut self, obj: &ObjectRef, f: &EStructuralFeature) {
         let is_many = f.is_many();
         let rule = resolve_aprxml_rule(f, is_many);
-        let children = extract_objects(obj.borrow().e_get(f.name()));
+        let mut children = extract_objects(obj.borrow().e_get(f.name()));
         if children.is_empty() {
             return;
+        }
+        if is_many && !is_feature_ordered(f) {
+            self.sort_children_by_splitkey(&mut children, f);
         }
 
         if rule == AprxmlRule::Rule0016 {
@@ -753,9 +806,12 @@ impl<'a> AutosarSaver<'a> {
 
     /// Serialize a non-containment reference (C++ `saveReference`).
     fn save_reference(&mut self, obj: &ObjectRef, f: &EStructuralFeature) {
-        let targets = extract_objects(obj.borrow().e_get(f.name()));
+        let mut targets = extract_objects(obj.borrow().e_get(f.name()));
         if targets.is_empty() {
             return;
+        }
+        if f.is_many() && !is_feature_ordered(f) {
+            self.sort_children_by_splitkey(&mut targets, f);
         }
         let use_wrapper = f.is_many() && f.is_role_wrapper() && has_distinct_plural(f);
         if use_wrapper {
@@ -1011,6 +1067,37 @@ fn resolve_aprxml_rule(f: &EStructuralFeature, is_many: bool) -> AprxmlRule {
     }
 }
 
+/// Whether a multi-valued feature's children keep their stored order (C++
+/// `isFeatureOrdered` / Java `ExtendedMetaData.ordered`, default `true`). The
+/// generated metamodel records `ordered=false` features as the
+/// `atp.unordered` tagged value.
+fn is_feature_ordered(f: &EStructuralFeature) -> bool {
+    f.tagged_value("atp.unordered") != Some("true")
+}
+
+/// Parse a feature's `atp.Splitkey` into the feature paths that order its
+/// children (C++ `sortChildrenBySplitkey`): split on `,`, then each part on `.`
+/// with whitespace trimmed — `"a, b.c"` → `[["a"], ["b", "c"]]`. Falls back to
+/// `["shortName"]` when the feature declares no splitkey.
+fn splitkey_paths(f: &EStructuralFeature) -> Vec<Vec<String>> {
+    let splitkey = f.tagged_value("atp.Splitkey").unwrap_or("shortName");
+    let mut paths: Vec<Vec<String>> = Vec::new();
+    for part in splitkey.split(',') {
+        let path: Vec<String> = part
+            .split('.')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !path.is_empty() {
+            paths.push(path);
+        }
+    }
+    if paths.is_empty() {
+        paths.push(vec!["shortName".to_string()]);
+    }
+    paths
+}
+
 /// Whether the feature declares a plural wrapper name distinct from its
 /// singular name (C++ `!xmlNamePlural.empty() && xmlNamePlural != xmlName`).
 fn has_distinct_plural(f: &EStructuralFeature) -> bool {
@@ -1196,6 +1283,26 @@ mod tests {
             Some(Val::List(l)) => assert_eq!(l.len(), 2),
             other => panic!("expected AR-PACKAGE list, got {other:?}"),
         }
+    }
+
+    /// A multi-valued feature marked `ordered=false` (here `ARPackage.arPackages`)
+    /// has its children sorted by their `atp.Splitkey` before serialization, so
+    /// children stored out of splitkey order still serialize in splitkey order.
+    #[test]
+    fn sorts_unordered_children_by_splitkey() {
+        let arxml = "<AUTOSAR xmlns=\"http://autosar.org/schema/r4.0\">\
+                     <AR-PACKAGES>\
+                     <AR-PACKAGE><SHORT-NAME>Zeta</SHORT-NAME></AR-PACKAGE>\
+                     <AR-PACKAGE><SHORT-NAME>Alpha</SHORT-NAME></AR-PACKAGE>\
+                     <AR-PACKAGE><SHORT-NAME>Mid</SHORT-NAME></AR-PACKAGE>\
+                     </AR-PACKAGES>\
+                     </AUTOSAR>";
+        let res = load(arxml);
+        let out = res.save_to_string();
+        let alpha = out.find("<SHORT-NAME>Alpha</SHORT-NAME>").expect("Alpha");
+        let mid = out.find("<SHORT-NAME>Mid</SHORT-NAME>").expect("Mid");
+        let zeta = out.find("<SHORT-NAME>Zeta</SHORT-NAME>").expect("Zeta");
+        assert!(alpha < mid && mid < zeta, "not sorted by splitkey:\n{out}");
     }
 
     #[test]
