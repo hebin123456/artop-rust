@@ -7,10 +7,13 @@
 //!     content, so a faithful arxml round-trip can reproduce the document layout;
 //!   * [`store`] — the per-object side tables (mixed content, comments,
 //!     reference bookkeeping) shared by the loader and the saver;
-//!   * [`loader`] — the arxml deserializer ([`AutosarXMLLoader`]).
+//!   * [`loader`] — the arxml deserializer ([`AutosarXMLLoader`]);
+//!   * [`saver`] — the arxml serializer ([`AutosarXMLSaver`]).
 
 pub mod dom;
 pub mod loader;
+pub mod saver;
 pub mod store;
 
 pub use loader::AutosarXMLLoader;
+pub use saver::AutosarXMLSaver;

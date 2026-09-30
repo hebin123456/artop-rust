@@ -68,7 +68,7 @@ examples/
 | `emf-acceleo` | ✅ 工作 | Acceleo MTL/`M2T` 引擎（对 C++ `AcceleoAst.h`/`AcceleoParser.cpp`/`AcceleoEngine.cpp` 的 1:1 移植）：`ast`（Block：Text/Expr/For/If/Let/File/Protected；Expr：Var/String/Int/Bool/Nav/Call/CollectionLit/If/Lambda）+ `parser`（递归下降：`[module]`/`template`/`query`/`import`/`extends`、`[for]/[if]/[let]/[file]/[protected]`、`post(...)` 容错）+ `engine`（`AcceleoEngine`/`AcceleoService`：上下文/服务注册/模板·查询查找、表达式求值、`=`/`or`/`and`/比较/算术、lambda + `->collect/select/reject/forAll/exists/size` 集合操作、`[file]` 落盘与 `[protected]` 区域合并）；C++ `AcceleoTests.cpp`(18) + `AlignmentTests.cpp`(8) 已逐条对照，26 条全 PASS（`cpp_parity_acceleo`） |
 | `emf-sphinx` | ✅ 工作 | headless 核心：`Node`（attributes/children fluent builder）+ `Root`/`Model`（全路径索引 O(1) `resolve`）+ 深度遍历（`Continue`/`Prune`/`Stop` 控制）；Sphinx 扩展：`metamodel`（`MetaModelDescriptor`/`AbstractMetaModelDescriptor` + `MetaModelVersionData` + thread-local `MetaModelDescriptorRegistry`）、`resource`（`SchemaLocationUriHandler`/`ExtendedBasicExtendedMetaData`/`ModelConverterRegistry`）、`scoping`（`FileResourceScope`/`FileResourceScopeProvider`/`ResourceScopeProviderRegistry`）、`ecore`（`OrderedFeatureMap`）、`util`（`EcoreResourceUtil`）；C++ 5 个测试文件 68 条已逐条对照并全 PASS（`cpp_parity_sphinx`） |
 | `emf-artop/artop-validation` | ✅ 工作 | AUTOSAR 业务约束层（对齐 `org.artop.aal.*.constraints`）：`autosar_constraints`（shortName 非空/同父唯一、uuid 非空/全局唯一、category 必填、no-unresolved-proxy；BATCH+LIVE）；叠在通用 `emf-validation` 底座之上，由调用方显式注册。C++ `AutosarConstraintsTests.cpp` 13 条已逐条对照 |
-| `emf-artop/artop-runtime` | 🟡 进行中 | 基座已落地：`AutosarMetaModelVersionData` / `AutosarReleaseDescriptor` / `IdentifiableUtil` / `AutosarLibraryIndex` / `UnknownElement`；资源层已落地：`AutosarResource` / `AutosarXMLResource` / `AutosarResourceFactory`（含 `register_default_autosar40_metamodel` 静态元模型注册）/ `AutosarResourceSet`（基于 `emf-xmi`，含 release / schemaLocation / 库索引 / `getResource` 按需加载 / `getEObject` 跨资源解析）；**C++ 对照已接入**：18 条用例逐条移植并全 PASS（conformance oracle）；arxml **读**已落地：`arxml/dom`（保留注释与混合内容的 DOM）+ `arxml/store`（混合内容/注释/引用信息侧表）+ `AutosarXMLLoader`（三阶段：建对象树 / shortName 路径索引 / 代理引用解析，含 wrapper 与 BASE 相对路径），并注入为 `AutosarResource` 的默认 `XMLLoader`；**待做** `AutosarXMLSaver`（arxml 写核心，当前写出仍走通用 XMI 路径） |
+| `emf-artop/artop-runtime` | 🟡 进行中 | 基座已落地：`AutosarMetaModelVersionData` / `AutosarReleaseDescriptor` / `IdentifiableUtil` / `AutosarLibraryIndex` / `UnknownElement`；资源层已落地：`AutosarResource` / `AutosarXMLResource` / `AutosarResourceFactory`（含 `register_default_autosar40_metamodel` 静态元模型注册）/ `AutosarResourceSet`（基于 `emf-xmi`，含 release / schemaLocation / 库索引 / `getResource` 按需加载 / `getEObject` 跨资源解析）；**C++ 对照已接入**：18 条用例逐条移植并全 PASS（conformance oracle）；arxml **读**已落地：`arxml/dom`（保留注释与混合内容的 DOM）+ `arxml/store`（混合内容/注释/引用信息侧表）+ `AutosarXMLLoader`（三阶段：建对象树 / shortName 路径索引 / 代理引用解析，含 wrapper 与 BASE 相对路径）；arxml **写**已落地：`arxml/saver`（`AutosarXMLSaver` = `PugiDomWriter` 延迟开标签流式 writer + APRXML 0012/0015/0016/default 规则 + 引用 `DEST`/shortName path/BASE 相对路径 + mixed 序列回放），读写二者均注入为 `AutosarResource` 的默认 `XMLSave`/`XMLLoader`；**待做** 字节级 round-trip 收敛与写路径 conformance 覆盖 |
 | `emf-artop/artop-codegen` | ⬜ 骨架 | `.ecore` → 静态模型 |
 
 ## 4. emf-common / emf-ecore 实现要点（已完成）
@@ -127,26 +127,34 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 4. `emf-sphinx` 剩余：`ExtendedResource`/`ProxyHelper`/`ModelDescriptor`/`EcoreTraversalHelper` 等在 C++ 侧仍为骨架或空测试，随上层用例补齐再逐条对照。
 5. `artop-runtime`：AUTOSAR 序列化/反序列化（届时才引入 artop 相关内容）。
 
-## 7.1 交接：下一棒 = `AutosarXMLSaver`（arxml 写核心）
+## 7.1 `AutosarXMLSaver`（arxml 写核心）—— 已完成
 
-**现状**：arxml **读**已完整落地并推送（`459c1d5`）；写出仍走 `emf-xmi` 通用 XMI 路径，尚未 arxml 化。
+**现状**：arxml **读**（`459c1d5`）与**写**均已落地。写出走新增的 `arxml/saver.rs`（`AutosarXMLSaver`），已在 `AutosarResource::new_inner` 里 `inner.set_xml_save(AutosarXMLSaver::new())` 并作为 `create_xml_save` 的返回值，与 C++ `AutosarXMLResource::createXMLSave` 一致。
 
-**参考实现**：`/tmp/artop-cpp-ref/cpp/emf-cpp/emf-artop/emf-artop-runtime/src/AutosarXMLSaver.cpp`（2023 行，对齐 Java `AutosarXMLSaveImpl`）。关键函数定位：
+**已实现**（对照 C++ `AutosarXMLSaver.cpp`）：
 
-- `save()`（L567）：根元素 `<AUTOSAR xmlns xmlns:xsi xsi:schemaLocation>`，遍历 contents，末尾 `\n`。
-- `PugiDomWriter`（L214）：**延迟开标签**流式 writer —— 递归生成，`beginElement` 只压栈，首个子节点/文本才写开标签；`endElement` 决定 `<TAG/>`、`\n+indent</TAG>`、inline `</TAG>`；`encodeText` / `encodeAttributeValue` 的转义集就是 round-trip 字节一致的关键。
-- `saveObjectContent()`（L615）：`simple`/`mixed`/默认三条 path；`elementsOnly` 变体。
-- `collectSortedFeaturesUncached()`（L890）、`saveAttribute()`（L1021）、`attrValueToString()`（L1083）。
-- `saveContainment()`（L1157）+ `resolveAprxmlRule()`（L1303）：APRXML 0012/0015/0016/default 决定 wrapper 包裹方式。
-- `saveReference()`（L1329）：`<FEATURE DEST="TypeXmlName">short-name-path</FEATURE>`，DEST 优先取 loader 存的原始 `refDestStore`。
-- `saveSingleMixedElement()`（L1487）、`tryComputeBaseRelative()`（L1602）+ `getReferenceBasePrefix/readReferenceBaseShortLabel/readReferenceBaseIsDefault`（L1659-1718）。
-- `getShortNamePath()`（L1787）、`getTypeXmlNameUncached()`（L1854）、`isFeatureOrdered()`（L1879）、`getSplitkeyValue/sortChildrenBySplitkey/sortChildrenByShortName`（L1895-2016）。
+- `DomWriter`（C++ `PugiDomWriter`）：延迟开标签流式 writer，`<TAG/>` / `\n+indent</TAG>` / inline `</TAG>` 三态；`encode_text` / `encode_attribute_value` 转义集对齐。
+- `run()`：根 `<AUTOSAR xmlns xmlns:xsi xsi:schemaLocation>`，遍历 contents，末尾 `\n`。
+- `save_object_content()`：`simple`/`mixed`/默认三条 path + `elements_only` 变体。
+- `save_containment()` + `resolve_aprxml_rule()`：APRXML 0012/0015/0016/default wrapper 规则。
+- `save_reference()` / `write_reference_body()`：`<FEATURE DEST="TypeXmlName">short-name-path</FEATURE>`，DEST 优先取 loader 侧表 `ref_dest`。
+- `save_mixed_content()`：按 `store::mixed_content` 回放原始序列（文本/注释/子元素），wrapper 去重。
+- `try_compute_base_relative()` + `reference_base_prefix` / `read_reference_base_short_label` / `read_reference_base_is_default`：BASE 相对路径与 `isDefault` 收敛。
+- `short_name_path()` / `type_xml_name()` / `sorted_features()`（按 `sequence_offset` 稳定排序）。
 
-**Rust 落地点**：新增 `crates/emf-artop/artop-runtime/src/arxml/saver.rs`，实现 `emf_xmi::XMLSave`（trait 仅 `fn save(&self, res: &XMIResource) -> String`），公开 `AutosarXMLSaver`；在 `autosar_resource.rs::create_xml_save` 返回它，并像 loader 那样在 `new_inner` 里 `inner.set_xml_save(AutosarXMLSaver)`。
+**已延后（文档化，未静默丢弃）**：XML 属性上的 `nsPrefix`（如 `xml:space`）、`atp.Splitkey` / `ordered` 驱动的子元素排序（Rust 静态注册表未携带这两个标记，列表按模型顺序输出）、未知内容片段（loader 已跳过不可映射元素）。
 
-**可直接复用的已有件**：`arxml::dom::{Element,Node,parse}`、`arxml::store`（`mixed_content` / `comments` / `mixed_text` / `ref_dest` / `ref_is_default`，供 saver 读取 loader 写入的侧表）、`loader.rs` 的 `explicit_plural` / `find_feature` 约定、元模型注解读法 `EStructuralFeature::{xml_name,xml_name_plural,is_xml_attribute,is_role_element,is_role_wrapper,is_type_element,is_type_wrapper,tagged_feature_kind,sequence_offset}`、`EClass::content_kind()`、`XMIResource::{options(),get_xsi_schema_location(),resource()}`、`AutosarResource::{schema_location(),create_xml_save()}`。
+**下一棒 —— arxml 互读互写收敛**（剩余工作）：
 
-**验收**：(1) 写 URI 测试接 `AutosarXMLResource`；(2) `load → save` 对 `Empty401.arxml` 等 fixture 做 round-trip（先按 DOM 结构等价，再逐步收敛到字节级）；(3) 扩 `tools/conformance` 的 oracle/TSV 覆盖写路径；(4) `cargo fmt/clippy/test --workspace` 全绿。
+1. `load → save` 对 `Empty401.arxml` 等真实 fixture 做 round-trip，先按 DOM 结构等价，再逐步收敛到字节级（含 `nsPrefix`、`Splitkey` / `ordered` 排序）。
+2. 扩 `tools/conformance` 的 oracle/TSV 覆盖**写**路径（当前 oracle 只覆盖读）。
+3. 建立 Rust ↔ C++ 双向 arxml 互读互写 CI 用例（对齐现有 `interop_xmi.py` 的形态）。
+
+**参考实现**：`AutosarXMLSaver.cpp`（2023 行，对齐 Java `AutosarXMLSaveImpl`），关键函数定位供收敛时比对：`save()`(L567)、`PugiDomWriter`(L214)、`saveObjectContent()`(L615)、`collectSortedFeaturesUncached()`(L890)、`saveAttribute()`(L1021)、`attrValueToString()`(L1083)、`saveContainment()`(L1157)+`resolveAprxmlRule()`(L1303)、`saveReference()`(L1329)、`saveSingleMixedElement()`(L1487)、`tryComputeBaseRelative()`(L1602)+`getReferenceBasePrefix/readReferenceBaseShortLabel/readReferenceBaseIsDefault`(L1659-1718)、`getShortNamePath()`(L1787)、`getTypeXmlNameUncached()`(L1854)、`isFeatureOrdered()`(L1879)、`getSplitkeyValue/sortChildrenBySplitkey/sortChildrenByShortName`(L1895-2016)。
+
+**可直接复用的已有件**：`arxml::dom::{Element,Node,parse}`、`arxml::store`（`mixed_content` / `comments` / `mixed_text` / `ref_dest` / `ref_is_default`，saver 读 loader 写入的侧表）、元模型注解读法 `EStructuralFeature::{xml_name,xml_name_plural,is_xml_attribute,is_role_element,is_role_wrapper,is_type_element,is_type_wrapper,tagged_feature_kind,sequence_offset}`、`EClass::content_kind()`、`XMIResource::{options(),get_xsi_schema_location(),resource()}`。
+
+**质量门禁**：`cargo fmt --all` / `cargo test --workspace --all-targets` / `cargo clippy --workspace --all-targets` 全绿。
 
 **注意**：不要在 `emf-*` 通用底座里引入 arxml/AUTOSAR 概念（见 §1 分层原则）；写路径全部留在 `emf-artop/artop-runtime`。
 
@@ -291,6 +299,18 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - 一致性框架接入：新增 `tools/conformance/build_artop_runtime_oracle.sh`（编译并运行 C++ `emf-artop-runtime` 单测二进制 → `build/artop_runtime_oracle.json`，18 条，含 `EMF_ARTOP_AUTOSAR40_ECORE` 宏注入与适配 EMF_RUN 输出的日志解析）与 `tools/conformance/cases_artop_runtime.tsv`（18 条 C++↔Rust 映射）；`compare.py` 对 `artop-runtime` 输出 **18 条全 PASS，0 PENDING，0 REGRESSION**；CI `conformance` job 增加 artop-runtime 的 oracle 构建与比对步骤。
   - 质量门禁：全工作区 fmt / test（全绿，0 失败）/ clippy / release 通过，无回归。
   - **待续**：`AutosarXMLLoader` / `AutosarXMLSaver`（arxml 读写核心，APRXML 规则 / 引用代理 / shortName path）、arxml 双向互读互写 CI。
+
+- **Milestone 22 — arxml 写核心 `AutosarXMLSaver`（本轮新增）**：在 arxml 读（`AutosarXMLLoader`，见 §7.1）落地后，补齐写路径，使 AUTOSAR 资源可 load → save 往返。
+  - 新增 `crates/emf-artop/artop-runtime/src/arxml/saver.rs`：`AutosarXMLSaver` 实现 `emf_xmi::XMLSave`，内部 `AutosarSaver` 承载一次序列化上下文。
+  - `DomWriter`（对齐 C++ `PugiDomWriter`）：延迟开标签流式 writer，`<TAG/>` / `\n+indent</TAG>` / inline `</TAG>` 三态 + `encode_text` / `encode_attribute_value` 转义集逐字符对齐。
+  - 特征遍历：`simple` / `mixed` / 默认三条 path 与 `elements_only` 变体；`sorted_features` 按 `internal-xml-sequenceOffset` 稳定排序（祖先优先）。
+  - APRXML：`resolve_aprxml_rule` 判 0012/0015/0016/default，`save_containment` 据此决定 wrapper 包裹 / 直接铺开。
+  - 引用：`save_reference` / `write_reference_body` 输出 `<FEATURE DEST="TypeXmlName">short-name-path</FEATURE>`，DEST 优先取 loader 侧表 `store::ref_dest`；`try_compute_base_relative` + `ReferenceBase` 前缀 / `SHORT-LABEL` / `IS-DEFAULT` 支持 BASE 相对路径。
+  - 混合内容：`save_mixed_content` 按 `store::mixed_content` 回放原始 文本/注释/子元素 顺序，role-wrapper 去重。
+  - 接入：`AutosarResource::new_inner` 与 `create_xml_save` 均返回 `AutosarXMLSaver`（对齐 C++ `AutosarXMLResource::createXMLSave`）；`arxml::mod` 导出 `AutosarXMLSaver` 与 `saver` 模块。
+  - 测试：saver 单测 5 条（根元素 + 命名空间/schemaLocation、`<AR-PACKAGES>` wrapper 下的嵌套包 round-trip、引用 DEST/path、属性元素与文本转义），全绿。
+  - 质量门禁：`cargo fmt --all` / `cargo test --workspace --all-targets`（0 失败）/ `cargo clippy --workspace --all-targets`（0 告警）全绿。
+  - **待续**：见 §7.1「下一棒」——字节级 round-trip 收敛 + 写路径 conformance + Rust↔C++ 双向 arxml CI。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 

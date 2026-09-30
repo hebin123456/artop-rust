@@ -20,9 +20,9 @@ use std::rc::Rc;
 
 use emf_common::uri::Uri;
 use emf_ecore::PackageRegistry;
-use emf_xmi::{XMIResource, XMLHelper, XMLLoader, XMLSave, XMLSaveImpl};
+use emf_xmi::{XMIResource, XMLHelper, XMLLoader, XMLSave};
 
-use crate::arxml::AutosarXMLLoader;
+use crate::arxml::{AutosarXMLLoader, AutosarXMLSaver};
 use crate::autosar_library_index::AutosarLibraryIndex;
 use crate::release_descriptor::AutosarReleaseDescriptor;
 
@@ -72,13 +72,15 @@ impl AutosarResource {
         }
     }
 
-    /// Build the wrapped resource with the arxml deserializer installed as its
-    /// [`XMLLoader`] (the C++ `AutosarXMLResource::createXMLLoad` seam). Rust
-    /// has no virtual dispatch on the resource, so the loader is injected at
-    /// construction instead of being queried during `load`.
+    /// Build the wrapped resource with the arxml deserializer and serializer
+    /// installed (the C++ `AutosarXMLResource::createXMLLoad` /
+    /// `createXMLSave` seams). Rust has no virtual dispatch on the resource, so
+    /// both are injected at construction instead of being queried during
+    /// `load` / `save`.
     fn new_inner(uri: Uri, registry: PackageRegistry) -> XMIResource {
         let mut inner = XMIResource::new(uri, registry);
         inner.set_xml_load(AutosarXMLLoader::new());
+        inner.set_xml_save(AutosarXMLSaver::new());
         inner
     }
 
@@ -111,12 +113,10 @@ impl AutosarResource {
 
     /// Create the serializer for this resource (C++ `createXMLSave`).
     ///
-    /// The dedicated arxml serializer (`AutosarXMLSaver`) is a follow-up
-    /// milestone; until it lands, AUTOSAR resources serialize through the
-    /// generic XMI serializer, which already handles the element-form features
-    /// arxml uses (see the C++ `XMISaver` element-kind path).
+    /// Returns the dedicated arxml serializer ([`AutosarXMLSaver`]), matching
+    /// the C++ `AutosarXMLResource::createXMLSave`.
     pub fn create_xml_save(&self) -> Rc<dyn XMLSave> {
-        Rc::new(XMLSaveImpl)
+        Rc::new(AutosarXMLSaver::new())
     }
 
     /// Create the deserializer for this resource (C++ `createXMLLoad`).
