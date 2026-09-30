@@ -123,8 +123,8 @@ impl AutosarResource {
     ///
     /// The dedicated arxml deserializer ([`AutosarXMLLoader`]) drives the load:
     /// it maps arxml elements to features through the bridged metamodel and
-    /// resolves short-name-path references. The serializer is still the generic
-    /// XMI one (see [`Self::create_xml_save`]).
+    /// resolves short-name-path references. Its counterpart
+    /// [`Self::create_xml_save`] returns the dedicated [`AutosarXMLSaver`].
     pub fn create_xml_load(&self) -> Rc<dyn XMLLoader> {
         Rc::new(AutosarXMLLoader::new())
     }
