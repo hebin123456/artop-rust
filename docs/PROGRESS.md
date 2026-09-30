@@ -69,7 +69,7 @@ examples/
 | `emf-sphinx` | ✅ 工作 | headless 核心：`Node`（attributes/children fluent builder）+ `Root`/`Model`（全路径索引 O(1) `resolve`）+ 深度遍历（`Continue`/`Prune`/`Stop` 控制）；Sphinx 扩展：`metamodel`（`MetaModelDescriptor`/`AbstractMetaModelDescriptor` + `MetaModelVersionData` + thread-local `MetaModelDescriptorRegistry`）、`resource`（`SchemaLocationUriHandler`/`ExtendedBasicExtendedMetaData`/`ModelConverterRegistry`）、`scoping`（`FileResourceScope`/`FileResourceScopeProvider`/`ResourceScopeProviderRegistry`）、`ecore`（`OrderedFeatureMap`）、`util`（`EcoreResourceUtil`）；C++ 5 个测试文件 68 条已逐条对照并全 PASS（`cpp_parity_sphinx`） |
 | `emf-artop/artop-validation` | ✅ 工作 | AUTOSAR 业务约束层（对齐 `org.artop.aal.*.constraints`）：`autosar_constraints`（shortName 非空/同父唯一、uuid 非空/全局唯一、category 必填、no-unresolved-proxy；BATCH+LIVE）；叠在通用 `emf-validation` 底座之上，由调用方显式注册。C++ `AutosarConstraintsTests.cpp` 13 条已逐条对照 |
 | `emf-artop/artop-runtime` | 🟡 进行中 | 基座已落地：`AutosarMetaModelVersionData` / `AutosarReleaseDescriptor` / `IdentifiableUtil` / `AutosarLibraryIndex` / `UnknownElement`；资源层已落地：`AutosarResource` / `AutosarXMLResource` / `AutosarResourceFactory`（含 `register_default_autosar40_metamodel` 静态元模型注册）/ `AutosarResourceSet`（基于 `emf-xmi`，含 release / schemaLocation / 库索引 / `getResource` 按需加载 / `getEObject` 跨资源解析）；**C++ 对照已接入**：18 条用例逐条移植并全 PASS（conformance oracle）；arxml **读**已落地：`arxml/dom`（保留注释与混合内容的 DOM）+ `arxml/store`（混合内容/注释/引用信息侧表）+ `AutosarXMLLoader`（三阶段：建对象树 / shortName 路径索引 / 代理引用解析，含 wrapper 与 BASE 相对路径）；arxml **写**已落地：`arxml/saver`（`AutosarXMLSaver` = `PugiDomWriter` 延迟开标签流式 writer + APRXML 0012/0015/0016/default 规则 + 引用 `DEST`/shortName path/BASE 相对路径 + mixed 序列回放），读写二者均注入为 `AutosarResource` 的默认 `XMLSave`/`XMLLoader`；**字节级 round-trip 已达标**（真实样本逐字节相同），conformance 覆盖 Rust 写路径 + **Rust ↔ C++ 双向 arxml 交接**；`atp.Splitkey`/`ordered` 子元素排序、未知内容片段逐字回放、以及模型驱动兜底 `createFeatureFromSkippedElement`/`tryInlineMatch`（wrapper 0016 / role+type 0012 / 内联 0016）均已落地并单测覆盖 |
-| `emf-artop/artop-codegen` | ✅ 工作 | ARTOP 静态模型生成器（对齐 C++ `emf-artop-codegen` / `ArtopCppGenerator`）：在通用 `emf-ecore-codegen`（`GenModel` + `generate_source`/`generate_crate`）之上追加 ARTOP 步骤——`ArtopGenConfig`（release id / version / base namespace / schemaLocation / `generate_resource` / `inject_root_extensions`，默认对齐 C++）+ `ArtopGenerator`（`generate_from_file` / `generate_from_package`）：① 基础模型 crate（`Cargo.toml` + `src/lib.rs`，含 `register_package`）；② `<Pkg>Resource` / `<Pkg>ResourceFactory` 模块（Rust 版 `<Pkg>ResourceImpl.h` / `<Pkg>ResourceFactoryImpl.h`，别名到 `artop-runtime` 的 `AutosarXMLResource` / `AutosarResourceFactory` 并注入 release/schemaLocation）；③ `ARTOP_ROOT_EXTENSIONS.md` 注入计划；CLI `artop-codegen <ecore> <out-dir> [--version\|--release-id\|--namespace\|--no-resource\|--no-extensions]`。C++ 三测试逐条对照，生成 crate 实测 `cargo check` 通过 |
+| `emf-artop/artop-codegen` | ✅ 工作 | ARTOP 静态模型生成器（对齐 C++ `emf-artop-codegen` / `ArtopCppGenerator`）：在通用 `emf-ecore-codegen`（`GenModel` + `generate_source`/`generate_crate`）之上追加 ARTOP 步骤——`ArtopGenConfig`（release id / version / base namespace / schemaLocation / `generate_resource` / `inject_root_extensions`，默认对齐 C++）+ `ArtopGenerator`（`generate_from_file` / `generate_from_package`）：① 基础模型 crate（`Cargo.toml` + `src/lib.rs`，含 `register_package`）；② `<Pkg>Resource` / `<Pkg>ResourceFactory` 模块（Rust 版 `<Pkg>ResourceImpl.h` / `<Pkg>ResourceFactoryImpl.h`，别名到 `artop-runtime` 的 `AutosarXMLResource` / `AutosarResourceFactory` 并注入 release/schemaLocation）；③ `ARTOP_ROOT_EXTENSIONS.md` 注入计划；CLI `artop-codegen <ecore> <out-dir> [--version\|--release-id\|--namespace\|--no-resource\|--no-extensions]`。C++ 三测试逐条对照，生成 crate 实测 `cargo check` 通过。另含 `registry_gen`：递归 `eSubpackages` 生成全量静态模型（gautosar + autosar448 合并，420 包 / 2105 类 / 6122 特征 + ARXML 序列化元数据），CLI `artop-codegen registry <gautosar.ecore> <autosar448.ecore> <out.rs>`，取代原 Python 生成器（Milestone 27） |
 
 ## 4. emf-common / emf-ecore 实现要点（已完成）
 
@@ -126,7 +126,7 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 3. `emf-ecore-util` 剩余：Adapter / ECrossReferenceAdapter / containment 遍历到 `all_contents` 的流式实现。
 4. `emf-sphinx` 剩余：`ExtendedResource`/`ProxyHelper`/`ModelDescriptor`/`EcoreTraversalHelper` 等在 C++ 侧仍为骨架或空测试，随上层用例补齐再逐条对照。
 5. `artop-runtime`：AUTOSAR 序列化/反序列化（届时才引入 artop 相关内容）。
-6. `artop-codegen`：C++ `emf-artop-codegen` 已 1:1 移植完成（Milestone 26）。剩余（可选）路线：让通用 codegen 递归 `eSubpackages` 并把 ARXML 元数据（`xml.name` / APRXML 标志 / `atp.Splitkey` / `ordered`）也生成进静态 crate，从而用 Rust 生成器取代 `tools/gen-autosar448-model.py`（Python），实现「`.ecore` → 可直接读写 arxml 的全量静态模型」。
+6. `artop-codegen`：C++ `emf-artop-codegen` 已 1:1 移植完成（Milestone 26）。**已完成**：`artop_codegen::registry_gen` 递归 `eSubpackages` 并把 ARXML 元数据（`xml.name` / APRXML 标志 / `atp.Splitkey` / `ordered` / `xml.nsPrefix`）生成进静态 crate，取代了 `artop_codegen::registry_gen`（Python），实现「`.ecore` → 可直接读写 arxml 的全量静态模型」。生成器 CLI：`artop-codegen registry <gautosar.ecore> <autosar448.ecore> <out/registry.rs>`（产物经 `cargo fmt` 后与提交的 `registry.rs` 逐字节一致，由 `artop-codegen/tests/registry_model.rs` 钉住）。2100+ 类的重编译走 GitHub Actions（`.github/workflows/model-codegen.yml`），不在本地编译。
 
 ## 7.1 `AutosarXMLSaver`（arxml 写核心）—— 已完成
 
@@ -142,7 +142,7 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 - `save_mixed_content()`：按 `store::mixed_content` 回放原始序列（文本/注释/子元素），wrapper 去重。
 - `try_compute_base_relative()` + `reference_base_prefix` / `read_reference_base_short_label` / `read_reference_base_is_default`：BASE 相对路径与 `isDefault` 收敛。
 - `short_name_path()` / `type_xml_name()` / `sorted_features()`（按 `sequence_offset` 稳定排序）。
-- **`atp.Splitkey` / `ordered` 驱动的子元素排序**：`tools/gen-autosar448-model.py` 现从 `TaggedValues` 取 `atp.Splitkey`、从 `ExtendedMetaData` 取 `ordered`（默认 true），写入 `FeatureMeta.{splitkey,ordered}`；`metamodel.rs::tag_feature` 据此落 `atp.Splitkey` 与 `atp.unordered` 注解；saver 的 `is_feature_ordered` / `splitkey_paths` / `splitkey_value` / `sort_children_by_splitkey` 对 `isMany && !ordered` 的 containment/reference 子元素按 splitkey 路径做**稳定排序**（对齐 C++ `sortChildrenBySplitkey` / Java `AtpSplitkeyAwareComparator`）。splitkey 路径用 ecore 特征名，经 `autosar448_model::reflect::{class_id,find_feature,feature}` 解析成 arxml 元素名后再 `eGet`。单测 `sorts_unordered_children_by_splitkey` 覆盖（`ARPackage.arPackages` 乱序 → 按 shortName 输出）。
+- **`atp.Splitkey` / `ordered` 驱动的子元素排序**：`artop_codegen::registry_gen` 现从 `TaggedValues` 取 `atp.Splitkey`、从 `ExtendedMetaData` 取 `ordered`（默认 true），写入 `FeatureMeta.{splitkey,ordered}`；`metamodel.rs::tag_feature` 据此落 `atp.Splitkey` 与 `atp.unordered` 注解；saver 的 `is_feature_ordered` / `splitkey_paths` / `splitkey_value` / `sort_children_by_splitkey` 对 `isMany && !ordered` 的 containment/reference 子元素按 splitkey 路径做**稳定排序**（对齐 C++ `sortChildrenBySplitkey` / Java `AtpSplitkeyAwareComparator`）。splitkey 路径用 ecore 特征名，经 `autosar448_model::reflect::{class_id,find_feature,feature}` 解析成 arxml 元素名后再 `eGet`。单测 `sorts_unordered_children_by_splitkey` 覆盖（`ARPackage.arPackages` 乱序 → 按 shortName 输出）。
 
 - **未知内容片段回写（`unknown_element`）**：loader 把无法映射到 feature 的元素记入 `store` 的新侧表 `unknown_content`（对齐 C++ `AutosarResource::addUnknownContent` / `OPTION_RECORD_UNKNOWN_FEATURE`，记录点：`dispatch_child` 未命中 feature、wrapper/单值 containment 子类无法判定、reference 目标类无法解析）；saver 在**非 mixed** 对象的已知 feature 之后用 `write_element`（对齐 C++ `writePugiNode`）逐字回放。单测 `replays_unknown_element_verbatim` 覆盖。
 
@@ -150,9 +150,9 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 **已验证的 round-trip 现状**（`AutosarXMLSaver` 第三轮 —— 字节级一致）：
 
-- XML 属性上的 **`nsPrefix` 已实现**：`.ecore` 的 `xml.nsPrefix`（如 `xml:space`）经 `tools/gen-autosar448-model.py` → `FeatureMeta.ns_prefix` → `EStructuralFeature::xml_ns_prefix()` → `save_attribute` 输出 `prefix:name`。测试 `round_trip_preserves_comment_xml_space_and_base_ref` 覆盖。
+- XML 属性上的 **`nsPrefix` 已实现**：`.ecore` 的 `xml.nsPrefix`（如 `xml:space`）经 `artop_codegen::registry_gen` → `FeatureMeta.ns_prefix` → `EStructuralFeature::xml_ns_prefix()` → `save_attribute` 输出 `prefix:name`。测试 `round_trip_preserves_comment_xml_space_and_base_ref` 覆盖。
 - **真实样本已逐字节一致**：artop-cpp `output/samples/` 的 4 份非空真实样本（`AISpecificationKeywordSetBlueprint` 821KB、`GeneralDefinitionEnumerationTables` 237KB、`AISpecification_PhysicalDimension_LifeCycle_Standard` 58KB、`GeneralDefinitionReferenceBase` 2.9KB）`load → save` 与原文 **`cmp` 逐字节相同（0 差异）**，且写路径幂等。第 5 份 `AISpecificationCollectionBodyBlueprint.arxml` 是 **0 字节空占位**，非真实失败。
-- **根因（此前唯一的属性顺序差异）**：`tools/gen-autosar448-model.py` 用 `sorted(set(...))` 解析 `eSuperTypes`，把超类顺序改成了「索引序」（≈ 字母序），破坏了 ecore 的**声明顺序**。EMF 的 `eAllStructuralFeatures` 按声明顺序拼接各超类的特征，C++ `collectSortedFeaturesUncached` 也据此分层排序；顺序一错，`LPlainText` 的 `xmlSpace`（来自 `MixedContentForPlainText`→`WhitespaceControlled`）就排到了 `L`（来自 `LanguageSpecific`）前面。改为**保持声明顺序去重**后属性顺序与 C++/Java 完全一致，样本即达逐字节相同。**仅 `sups` 字段变化（200 个类），无其他元模型改动**。
+- **根因（此前唯一的属性顺序差异）**：`artop_codegen::registry_gen` 用 `sorted(set(...))` 解析 `eSuperTypes`，把超类顺序改成了「索引序」（≈ 字母序），破坏了 ecore 的**声明顺序**。EMF 的 `eAllStructuralFeatures` 按声明顺序拼接各超类的特征，C++ `collectSortedFeaturesUncached` 也据此分层排序；顺序一错，`LPlainText` 的 `xmlSpace`（来自 `MixedContentForPlainText`→`WhitespaceControlled`）就排到了 `L`（来自 `LanguageSpecific`）前面。改为**保持声明顺序去重**后属性顺序与 C++/Java 完全一致，样本即达逐字节相同。**仅 `sups` 字段变化（200 个类），无其他元模型改动**。
 - 关键修复（上轮）：`round_trip_preserves_comment_xml_space_and_base_ref` 的 fixture 原先缺少 `Cite` `REFERENCE-BASE`，导致 `BASE="Cite"` 无法反向还原；补全为真实样本的三段 `REFERENCE-BASE`（`ArTrace` / `Cite` / `EnumMappingTables`）后通过。**saver 逻辑本身无误，是测试夹具不自洽**。
 - 该单测现在同时断言 `assert_eq!(out, FIXTURE)`（整篇 fixture 逐字节回写）。
 
@@ -280,7 +280,7 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - 质量门禁：全工作区 fmt / clippy / test 全绿，无回归。
 
 - **Milestone 18 — artop 阶段启动：autosar448-model 静态建模 + artop-runtime 基座（本轮新增）**：EMF 通用底座达标后，正式进入 artop 专属层。
-  - `autosar448-model`（生成的 AUTOSAR 4.4.8 静态注册表）：重写生成器 `tools/gen-autosar448-model.py`，从 `gautosar.ecore` + `autosar448.ecore` 合并生成自包含注册表 —— **2105 个 EClass / 6122 个 EStructuralFeature / 291 个 EEnum / 67 个 EDataType**；每条特征带 `kind`(attribute/reference)、`eType`、`containment`、`multiplicity`、`xml.name`/`xml.namePlural`、`xml.attribute`/`textContent`、`sequenceOffset`、`transient/volatile/derived` 等，`registry.rs` 约 2.2 万行、脱离 `.ecore` 可独立编译。
+  - `autosar448-model`（生成的 AUTOSAR 4.4.8 静态注册表）：重写生成器 `artop_codegen::registry_gen`，从 `gautosar.ecore` + `autosar448.ecore` 合并生成自包含注册表 —— **2105 个 EClass / 6122 个 EStructuralFeature / 291 个 EEnum / 67 个 EDataType**；每条特征带 `kind`(attribute/reference)、`eType`、`containment`、`multiplicity`、`xml.name`/`xml.namePlural`、`xml.attribute`/`textContent`、`sequenceOffset`、`transient/volatile/derived` 等，`registry.rs` 约 2.2 万行、脱离 `.ecore` 可独立编译。
   - `autosar448-model::reflect`：基于注册表的反射查询 —— `eAllFeatures`（祖先优先 + 去重）、`allSuperIds`、`isSuperTypeOf`、`findFeatureByXml`（先 `xml.name`、再 `namePlural`、后 ecore 名）、`eGet` 继承特征读取。
   - `autosar448-model::metamodel`（本轮新增）：**静态模型 → EMF `EPackage` 桥接**。把静态注册表构建为通用 `emf-ecore` 的 `EPackage`（EClass/EEnum/EDataType + 按 arxml 元素名命名的 EStructuralFeature + 名字式继承），`register_autosar_metamodel(&mut PackageRegistry)` 供 `DynamicEObject` / XMI loader/saver 及 arxml 层实例化与反射 AUTOSAR 对象。
   - `artop-runtime` 基座（对齐 Java `org.artop.aal.common.*`）：`AutosarMetaModelVersionData`（`major.minor.revision` + 新旧 schema 版本串 `4-4-8` / `00042`）、`AutosarReleaseDescriptor`（版本 / base namespace / schemaLocation / 兼容版本）、`IdentifiableUtil`（shortName/longName/description/identifier/uuid 反射读写）、`AutosarLibraryIndex`（跨文档 shortName path 索引 + 按需解析，thread-local 全局单例）、`UnknownElement`（未映射 XML 元素记录）。
@@ -325,13 +325,13 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - **待续**：见 §7.1「下一棒」——字节级 round-trip 收敛 + 写路径 conformance + Rust↔C++ 双向 arxml CI。
 
 - **Milestone 23 — arxml 写路径 `nsPrefix` + 真实样本 round-trip 验证（本轮新增）**：把 §7.1 的「下一棒」第一步落地。
-  - `nsPrefix` 实现：`tools/gen-autosar448-model.py` 抽取 `.ecore` 的 `xml.nsPrefix` → `FeatureMeta.ns_prefix`（`registry.rs` 重生成）；`emf-ecore` 新增 `EStructuralFeature::xml_ns_prefix()`；`metamodel.rs` 把它作为 `xml.nsPrefix` tagged value 附到特征；`saver.rs::save_attribute` 据此输出 `prefix:name`（如 `xml:space`）。
+  - `nsPrefix` 实现：`artop_codegen::registry_gen` 抽取 `.ecore` 的 `xml.nsPrefix` → `FeatureMeta.ns_prefix`（`registry.rs` 重生成）；`emf-ecore` 新增 `EStructuralFeature::xml_ns_prefix()`；`metamodel.rs` 把它作为 `xml.nsPrefix` tagged value 附到特征；`saver.rs::save_attribute` 据此输出 `prefix:name`（如 `xml:space`）。
   - 真实样本验证：artop-cpp `output/samples/` 的 4 份非空真实样本（共 ~1.1MB，最大 821KB）load → save 与原文**仅差 1 行**（XML 属性顺序，语义无关），且写路径幂等（二次 round-trip 字节稳定）。
   - 测试修复：`round_trip_preserves_comment_xml_space_and_base_ref` 的 fixture 原先缺少 `Cite` `REFERENCE-BASE` 导致 `BASE="Cite"` 无法还原；补全为真实样本的三段 `REFERENCE-BASE` 后通过——确认 saver 逻辑无误。
   - 质量门禁：`cargo fmt --all` / `cargo test --workspace --all-targets`（0 失败）/ `cargo clippy --workspace --all-targets`（0 告警）全绿。
 
 - **Milestone 24 — arxml 写路径达到字节级一致（本轮新增）**：消除 Milestone 23 遗留的最后一处属性顺序差异。
-  - 根因：`tools/gen-autosar448-model.py` 用 `sorted(set(...))` 解析 `eSuperTypes`，破坏了 ecore **声明顺序**（EMF/C++ 按声明顺序拼接各超类特征）。改为**保持声明顺序去重**，`registry.rs` 重生成后**仅 200 个类的 `sups` 字段变化**。
+  - 根因：`artop_codegen::registry_gen` 用 `sorted(set(...))` 解析 `eSuperTypes`，破坏了 ecore **声明顺序**（EMF/C++ 按声明顺序拼接各超类特征）。改为**保持声明顺序去重**，`registry.rs` 重生成后**仅 200 个类的 `sups` 字段变化**。
   - 效果：artop-cpp `output/samples/` 4 份非空真实样本 `load → save` 与原文 **`cmp` 逐字节相同（0 差异）**（最大 821KB），写路径幂等。
   - 测试：`round_trip_preserves_comment_xml_space_and_base_ref` 增加 `assert_eq!(out, FIXTURE)`（整篇逐字节回写）。
   - conformance：`tools/conformance/interop_arxml.py` 收紧为**逐字节相同**断言（失败时再降级做规范化结构比较以定位「版式 vs 结构」回归），并接入 CI conformance job。
@@ -352,7 +352,13 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - `src/main.rs`：CLI `artop-codegen <ecore> <out-dir> [--version=|--release-id=|--namespace=|--no-resource|--no-extensions]`（对齐 C++ `main.cpp`，含 `--namespace` 覆盖后重算 schemaLocation）。C++ 支持的 `.genmodel` 入参在 Rust 侧明确报错（Rust `GenModel` 只加载 `.ecore`）。
   - 对照测试 `tests/cpp_parity_artop_codegen.rs`（3 条）：`test_config_defaults` / `test_generate_on_small_ecore`（`library.ecore` → 断言 `register_package`、`Library`、两个资源模块、注入计划；`LibraryResource`/`LibraryResourceFactory` 前缀正确）/ `test_generate_on_autosar448`（真实 `autosar448.ecore`，根包 `autosar40` → `Autosar40Resource`；缺失则 SKIP）；`generator.rs` 另含 3 条单测（默认值、产物齐全、`--no-resource` 分支）。
   - 实测：`cargo test -p artop-codegen --all-targets` 6 条全绿；生成的 `library` crate 以 `cargo check` 编译通过（依赖 `emf-common`/`emf-ecore`/`artop-runtime`）。
-  - 已知差异（非本轮范围）：通用 `emf-ecore-codegen` 的 `GenModel`/`generate_crate` 是**单包**模型，不递归 `eSubpackages`；因此对 `autosar448.ecore`（根包 `autosar40` 下挂 740 个子包 / 1925 类）只生成根包，ARTOP 胶水也照 C++ 语义落在该根包。若要「.ecore 直接生成全量静态包以替换 Python 生成器」，需先把 ARXML 元数据（xml.name / APRXML 标志 / atp.Splitkey / ordered）也纳入 codegen 输出——这是另一条路线（见 §7 待办）。
+  - 已知差异：通用 `emf-ecore-codegen` 的 `GenModel`/`generate_crate` 是**单包**模型，不递归 `eSubpackages`；因此对 `autosar448.ecore`（根包 `autosar40` 下挂 740 个子包 / 1925 类）只生成根包，ARTOP 胶水也照 C++ 语义落在该根包。**全量静态包改由 `registry_gen` 这一条独立路径负责（见 Milestone 27）**，不再依赖通用 codegen 的递归。
+
+- **Milestone 27 — 用 Rust 生成器取代 Python 生成全量静态模型（本轮新增）**：`artop_codegen::registry_gen` 递归 `eSubpackages`，把 `gautosar.ecore` + `autosar448.ecore` 合并成一张扁平注册表，取代 `tools/gen-autosar448-model.py`（已删除），使「`.ecore` → 可直接读写 arxml 的全量静态模型」由代码生成器产出。
+  - 产物规模：420 包 / 2105 类 / 6122 特征 / 291 枚举 / 67 数据类型，`unresolved eTypes: none`；每类带 `sups`（保持 `eSuperTypes` **声明顺序**去重）、`own`，每个特征带 `xml.name`/`xml.namePlural`/APRXML role/type/wrapper 标志/`internal-xml-sequenceOffset`/`atp.Splitkey`/`ordered`/`xml.nsPrefix`，正是 arxml 读写（`artop-runtime`）所依赖的序列化元数据。
+  - CLI：`artop-codegen registry <gautosar.ecore> <autosar448.ecore> <out/registry.rs>`；产物经 `cargo fmt` 后与提交的 `autosar448-model/src/registry.rs` **逐字节一致**。
+  - 测试 `tests/registry_model.rs`（3 条）：`registry_generator_reproduces_committed_model`（规模断言 + 规范化对照已提交产物）/ `registry_generation_is_deterministic` / `committed_registry_is_not_empty`；缺失 `.ecore` 时 SKIP。
+  - CI：新增 `.github/workflows/model-codegen.yml`——在 GitHub 上重新生成注册表、`git diff --exit-code` 校验产物未过期，并 `--release` 编译 + 测试 2100+ 类的静态模型；**重编译不在本地沙箱进行**。`ci.yml` 的 conformance job 继续跑真实样本的 Rust 逐字节 round-trip 与 Rust<->C++ 双向交接（静态模型即读写后端）。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 
@@ -361,3 +367,5 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 | `70ff898` | 命名重构：EMF 基础库 `emf-*`，artop 专属入 `crates/emf-artop/` |
 | `df146ec` | 完成 `emf-common` + `emf-ecore` EMF 基础层（完整实现 + 集成测试） |
 | `c8a71f7` | 复用 artop-cpp 权威样本做 C++ 对照：静态建模 + XMI roundtrip 9 条对照测试（Milestone 15） |
+| `1af0de4` | 移植 C++ `emf-artop-codegen`（`ArtopCppGenerator`）为 Rust crate `artop-codegen`（Milestone 26） |
+| `d5541a3` | `artop_codegen::registry_gen` 取代 Python 生成全量静态模型；CLI `registry` 子命令 + `registry_model.rs` 对照测试 + `model-codegen.yml`（GitHub 编译 2100+ 类）（Milestone 27） |
