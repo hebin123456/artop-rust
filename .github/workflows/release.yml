@@ -58,8 +58,15 @@ jobs:
       # Only the real AUTOSAR samples are needed for the smoke test. Sparse
       # checkout avoids the reference repo's very deep `libs/opensource/...`
       # paths, which Windows cannot materialise ("Filename too long").
+      # `core.autocrlf=false` keeps the samples byte-identical to the repo
+      # (Windows git would otherwise check them out with CRLF, breaking the
+      # byte-for-byte round-trip assertion).
       - name: Checkout artop-cpp reference (real AUTOSAR samples)
         uses: actions/checkout@v4
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: "false"
         with:
           repository: hebin123456/artop-cpp
           path: reference/artop-cpp
