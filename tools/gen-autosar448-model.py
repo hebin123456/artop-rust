@@ -103,7 +103,7 @@ class Feature:
         "transient", "volatile", "derived", "default_value",
         "xml_name", "xml_name_plural", "xml_attribute", "text_content",
         "seq_offset", "role_element", "role_wrapper", "type_element",
-        "type_wrapper", "feature_kind",
+        "type_wrapper", "feature_kind", "ns_prefix",
     )
 
 
@@ -139,6 +139,7 @@ def parse_feature(el):
     f.type_wrapper = parse_bool(tv.get("xml.typeWrapperElement", ""))
     f.xml_attribute = parse_bool(tv.get("xml.attribute", ""))
     f.text_content = parse_bool(tv.get("xml.text", ""))
+    f.ns_prefix = tv.get("xml.nsPrefix") or ""
     if not f.xml_name:
         f.xml_name = f.name
     if not f.xml_name_plural:
@@ -391,6 +392,7 @@ def gen(gautosar_path, autosar_path):
         ("volatile_", "bool"),
         ("derived", "bool"),
         ("xml_attribute", "bool"),
+        ("ns_prefix", "&'static str"),
         ("text_content", "bool"),
         ("seq_offset", "i32"),
         ("role_element", "bool"),
@@ -408,7 +410,7 @@ def gen(gautosar_path, autosar_path):
         out.append(
             "    FeatureMeta { name: %s, xml_name: %s, xml_name_plural: %s, feature_kind: %s, "
             "kind: %s, ty: %s, containment: %s, lower: %d, upper: %d, transient: %s, "
-            "volatile_: %s, derived: %s, xml_attribute: %s, text_content: %s, seq_offset: %d, "
+            "volatile_: %s, derived: %s, xml_attribute: %s, ns_prefix: %s, text_content: %s, seq_offset: %d, "
             "role_element: %s, role_wrapper: %s, type_element: %s, type_wrapper: %s, "
             "default_value: %s },"
             % (rlit(f.name), rlit(f.xml_name), rlit(f.xml_name_plural), rlit(f.feature_kind),
@@ -416,6 +418,7 @@ def gen(gautosar_path, autosar_path):
                "true" if f.containment else "false", f.lower, f.upper,
                "true" if f.transient else "false", "true" if f.volatile else "false",
                "true" if f.derived else "false", "true" if f.xml_attribute else "false",
+               rlit(f.ns_prefix),
                "true" if f.text_content else "false", f.seq_offset,
                "true" if f.role_element else "false", "true" if f.role_wrapper else "false",
                "true" if f.type_element else "false", "true" if f.type_wrapper else "false",

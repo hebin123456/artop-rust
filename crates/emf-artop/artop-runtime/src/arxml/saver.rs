@@ -16,10 +16,15 @@
 //!     mixed-content sequence replay.
 //!
 //! Deliberately deferred from the C++ port (documented, not silently dropped):
-//! `nsPrefix` on XML attributes (e.g. `xml:space`), `atp.Splitkey` / `ordered`
-//! driven child sorting (the Rust static registry carries neither, so lists are
-//! emitted in model order), and unknown-content fragments (the loader skips
-//! unmappable elements).
+//! `atp.Splitkey` / `ordered` driven child sorting (the Rust static registry
+//! carries neither, so lists are emitted in model order) and unknown-content
+//! fragments (the loader skips unmappable elements).
+//!
+//! Known, accepted difference: XML *attribute order* is not preserved — the
+//! feature walk emits attributes in metamodel order, not document order. XML
+//! attributes are unordered by definition and both readers ignore the order, so
+//! a round-trip of the real AUTOSAR samples differs only by e.g.
+//! `L="EN" xml:space="default"` becoming `xml:space="default" L="EN"`.
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -638,7 +643,16 @@ impl<'a> AutosarSaver<'a> {
         if f.is_xml_attribute() {
             let s = attr_value_to_string(f, value);
             if !s.is_empty() {
-                self.writer.write_attribute(&xml_name, &s);
+                // A feature may carry a namespace prefix (e.g. `xml.nsPrefix =
+                // xml` for `xml:space`); C++ `AutosarXMLSaver::saveAttribute`
+                // prefixes the attribute name in that case.
+                let ns_prefix = f.xml_ns_prefix();
+                if ns_prefix.is_empty() {
+                    self.writer.write_attribute(&xml_name, &s);
+                } else {
+                    self.writer
+                        .write_attribute(&format!("{ns_prefix}:{xml_name}"), &s);
+                }
             }
             return;
         }
@@ -1210,5 +1224,87 @@ mod tests {
         );
         let out = res.save_to_string();
         assert!(out.contains("<LANGUAGE>EN</LANGUAGE>"), "{out}");
+    }
+
+    /// A real AUTOSAR document (the `GeneralDefinitionReferenceBase` sample),
+    /// exercising the three round-trip-sensitive features at once: root-level
+    /// comments (mixed-content replay), the `xml:space` attribute
+    /// (`xml.nsPrefix`) and a `BASE`-relative `PACKAGE-REF`.
+    ///
+    /// The three `REFERENCE-BASE` entries are all required: the `BASE="Cite"`
+    /// of the `EnumMappingTables` reference is only reproducible because a
+    /// `Cite` reference base exists with `BASE-IS-THIS-PACKAGE=true`, whose
+    /// prefix (`/AUTOSAR`) the reference path is made relative to — exactly the
+    /// reverse-computation the saver performs.
+    const FIXTURE: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+        <AUTOSAR xmlns=\"http://autosar.org/schema/r4.0\" \
+        xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" \
+        xsi:schemaLocation=\"http://autosar.org/schema/r4.0 AUTOSAR_00048.xsd\">\n\
+        \x20 <!-- AUTOSAR General Definitions -->\n\
+        \x20 <ADMIN-DATA>\n\
+        \x20   <LANGUAGE>EN</LANGUAGE>\n\
+        \x20   <USED-LANGUAGES>\n\
+        \x20     <L-10 L=\"EN\" xml:space=\"default\">English</L-10>\n\
+        \x20   </USED-LANGUAGES>\n\
+        \x20 </ADMIN-DATA>\n\
+        \x20 <AR-PACKAGES>\n\
+        \x20   <AR-PACKAGE>\n\
+        \x20     <SHORT-NAME>AUTOSAR</SHORT-NAME>\n\
+        \x20     <REFERENCE-BASES>\n\
+        \x20       <REFERENCE-BASE>\n\
+        \x20         <SHORT-LABEL>ArTrace</SHORT-LABEL>\n\
+        \x20         <IS-DEFAULT>false</IS-DEFAULT>\n\
+        \x20         <IS-GLOBAL>true</IS-GLOBAL>\n\
+        \x20         <BASE-IS-THIS-PACKAGE>true</BASE-IS-THIS-PACKAGE>\n\
+        \x20         <GLOBAL-ELEMENTS>\n\
+        \x20           <GLOBAL-ELEMENT>TRACEABLE</GLOBAL-ELEMENT>\n\
+        \x20         </GLOBAL-ELEMENTS>\n\
+        \x20       </REFERENCE-BASE>\n\
+        \x20       <REFERENCE-BASE>\n\
+        \x20         <SHORT-LABEL>Cite</SHORT-LABEL>\n\
+        \x20         <IS-DEFAULT>false</IS-DEFAULT>\n\
+        \x20         <IS-GLOBAL>true</IS-GLOBAL>\n\
+        \x20         <BASE-IS-THIS-PACKAGE>true</BASE-IS-THIS-PACKAGE>\n\
+        \x20         <GLOBAL-ELEMENTS>\n\
+        \x20           <GLOBAL-ELEMENT>XDOC</GLOBAL-ELEMENT>\n\
+        \x20         </GLOBAL-ELEMENTS>\n\
+        \x20       </REFERENCE-BASE>\n\
+        \x20       <REFERENCE-BASE>\n\
+        \x20         <SHORT-LABEL>EnumMappingTables</SHORT-LABEL>\n\
+        \x20         <IS-DEFAULT>false</IS-DEFAULT>\n\
+        \x20         <IS-GLOBAL>false</IS-GLOBAL>\n\
+        \x20         <BASE-IS-THIS-PACKAGE>false</BASE-IS-THIS-PACKAGE>\n\
+        \x20         <PACKAGE-REF DEST=\"AR-PACKAGE\" BASE=\"Cite\">DefaultEnumMappingTables</PACKAGE-REF>\n\
+        \x20       </REFERENCE-BASE>\n\
+        \x20     </REFERENCE-BASES>\n\
+        \x20   </AR-PACKAGE>\n\
+        \x20 </AR-PACKAGES>\n\
+        </AUTOSAR>\n";
+
+    #[test]
+    fn round_trip_preserves_comment_xml_space_and_base_ref() {
+        let res = load(FIXTURE);
+        let out = res.save_to_string();
+
+        // The `xml:` namespace prefix on the attribute name is preserved.
+        assert!(
+            out.contains("<L-10 xml:space=\"default\" L=\"EN\">English</L-10>"),
+            "{out}"
+        );
+        // The root-level comment survives via mixed-content replay.
+        assert!(
+            out.contains("<!-- AUTOSAR General Definitions -->"),
+            "{out}"
+        );
+        // The reference keeps its original DEST and BASE-relative path.
+        assert!(
+            out.contains("<PACKAGE-REF DEST=\"AR-PACKAGE\" BASE=\"Cite\">DefaultEnumMappingTables</PACKAGE-REF>"),
+            "{out}"
+        );
+
+        // The output is idempotent: a second load → save is byte-stable.
+        let res2 = load(&out);
+        let out2 = res2.save_to_string();
+        assert_eq!(out, out2);
     }
 }

@@ -364,6 +364,12 @@ impl EStructuralFeature {
         self.tagged_value("isXmlAttribute") == Some("true")
     }
 
+    /// The namespace prefix of an XML attribute's name (`xml.nsPrefix`), e.g.
+    /// `xml` for `xml:space`; empty when the attribute is unprefixed.
+    pub fn xml_ns_prefix(&self) -> &str {
+        self.tagged_value("xml.nsPrefix").unwrap_or("")
+    }
+
     /// APRXML composition rule flag `roleElement`.
     pub fn is_role_element(&self) -> bool {
         self.tagged_value("roleElement") == Some("true")

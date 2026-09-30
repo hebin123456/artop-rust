@@ -85,6 +85,9 @@ fn tag_feature(f: &mut EStructuralFeature, fm: &crate::registry::FeatureMeta) {
     if fm.xml_attribute {
         ann.set_detail("isXmlAttribute", "true");
     }
+    if !fm.ns_prefix.is_empty() {
+        ann.set_detail("xml.nsPrefix", fm.ns_prefix);
+    }
     if fm.text_content {
         ann.set_detail("textContent", "true");
     }
