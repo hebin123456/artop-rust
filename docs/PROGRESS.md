@@ -144,20 +144,19 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 **已延后（文档化，未静默丢弃）**：`atp.Splitkey` / `ordered` 驱动的子元素排序（Rust 静态注册表未携带这两个标记，列表按模型顺序输出）、未知内容片段（loader 已跳过不可映射元素）。
 
-**已验证的 round-trip 现状**（`AutosarXMLSaver` 第二轮）：
+**已验证的 round-trip 现状**（`AutosarXMLSaver` 第三轮 —— 字节级一致）：
 
-- XML 属性上的 **`nsPrefix` 已实现**（不再延后）：`.ecore` 的 `xml.nsPrefix`（如 `xml:space`）经 `tools/gen-autosar448-model.py` → `FeatureMeta.ns_prefix` → `EStructuralFeature::xml_ns_prefix()` → `save_attribute` 输出 `prefix:name`。测试 `round_trip_preserves_comment_xml_space_and_base_ref` 覆盖。
-- 用 artop-cpp 的 5 份真实样本（`output/samples/*.arxml`，共 ~1.1MB）跑 `cargo run -p artop-runtime --example arxml_roundtrip -- roundtrip <in> <out>`：
-  - 4 份真实样本（`AISpecificationKeywordSetBlueprint` 821KB、`GeneralDefinitionEnumerationTables` 237KB、`AISpecification_PhysicalDimension_LifeCycle_Standard` 58KB、`GeneralDefinitionReferenceBase` 2.9KB）**load → save 与原文仅差 1 行**——`<L-10 L="EN" xml:space="default">` 的属性顺序变为 `<L-10 xml:space="default" L="EN">`。XML 属性无序，C++/Java 读者均忽略顺序，属已知且接受的差异（已在 `saver.rs` 模块文档注明）。元素顺序、嵌套、`DEST` / `BASE` / 文本全部一致。
-  - 第 5 份 `AISpecificationCollectionBodyBlueprint.arxml` 是 **0 字节空占位文件**，非真实失败。
-  - 4 份样本均满足二次 `load → save` **字节稳定**（写路径幂等）。
-- 关键修复：`round_trip_preserves_comment_xml_space_and_base_ref` 原先的 fixture **缺少 `Cite` 这个 `REFERENCE-BASE`**，导致 `BASE="Cite"` 无法反向还原（无匹配 `ReferenceBase` → 退化为 `autosar-proxy` 路径）。改用真实样本的完整三段 `REFERENCE-BASE`（`ArTrace` / `Cite`(BASE-IS-THIS-PACKAGE=true) / `EnumMappingTables`）后，`try_compute_base_relative` 正确还原 `BASE="Cite"`。**saver 逻辑本身无误，是测试夹具不自洽**。
+- XML 属性上的 **`nsPrefix` 已实现**：`.ecore` 的 `xml.nsPrefix`（如 `xml:space`）经 `tools/gen-autosar448-model.py` → `FeatureMeta.ns_prefix` → `EStructuralFeature::xml_ns_prefix()` → `save_attribute` 输出 `prefix:name`。测试 `round_trip_preserves_comment_xml_space_and_base_ref` 覆盖。
+- **真实样本已逐字节一致**：artop-cpp `output/samples/` 的 4 份非空真实样本（`AISpecificationKeywordSetBlueprint` 821KB、`GeneralDefinitionEnumerationTables` 237KB、`AISpecification_PhysicalDimension_LifeCycle_Standard` 58KB、`GeneralDefinitionReferenceBase` 2.9KB）`load → save` 与原文 **`cmp` 逐字节相同（0 差异）**，且写路径幂等。第 5 份 `AISpecificationCollectionBodyBlueprint.arxml` 是 **0 字节空占位**，非真实失败。
+- **根因（此前唯一的属性顺序差异）**：`tools/gen-autosar448-model.py` 用 `sorted(set(...))` 解析 `eSuperTypes`，把超类顺序改成了「索引序」（≈ 字母序），破坏了 ecore 的**声明顺序**。EMF 的 `eAllStructuralFeatures` 按声明顺序拼接各超类的特征，C++ `collectSortedFeaturesUncached` 也据此分层排序；顺序一错，`LPlainText` 的 `xmlSpace`（来自 `MixedContentForPlainText`→`WhitespaceControlled`）就排到了 `L`（来自 `LanguageSpecific`）前面。改为**保持声明顺序去重**后属性顺序与 C++/Java 完全一致，样本即达逐字节相同。**仅 `sups` 字段变化（200 个类），无其他元模型改动**。
+- 关键修复（上轮）：`round_trip_preserves_comment_xml_space_and_base_ref` 的 fixture 原先缺少 `Cite` `REFERENCE-BASE`，导致 `BASE="Cite"` 无法反向还原；补全为真实样本的三段 `REFERENCE-BASE`（`ArTrace` / `Cite` / `EnumMappingTables`）后通过。**saver 逻辑本身无误，是测试夹具不自洽**。
+- 该单测现在同时断言 `assert_eq!(out, FIXTURE)`（整篇 fixture 逐字节回写）。
 
 **下一棒 —— arxml 互读互写收敛**（剩余工作）：
 
-1. 扩 `tools/conformance` 的 oracle/TSV 覆盖**写**路径（当前 oracle 只覆盖读）。
-2. 建立 Rust ↔ C++ 双向 arxml 互读互写 CI 用例（对齐现有 `interop_xmi.py` 的形态）。C++ 侧 `cpp/emf-cpp/examples/arxml_roundtrip_demo.cpp` 目前是**空占位**，需先补一个 C++ roundtrip harness（走 `emf-artop-runtime` 动态 EMF 路径，读 `model/autosar40.ecore`），再按 `interop_xmi.py` 做 A/B/C/D 四步文件交接。
-3. 若需字节级一致：在 `collect_sorted_features` 里对齐 C++ 的 XML 属性输出顺序（当前按元模型顺序，非文档顺序）。
+1. `tools/conformance/interop_arxml.py` 已覆盖**写**路径（load→save、写路径幂等、与原文**逐字节相同**）并接入 CI conformance job。
+2. 建立 Rust ↔ C++ 双向 arxml 交接 CI 用例（对齐 `interop_xmi.py` 的四步 A/B/C/D）。C++ 侧 `cpp/emf-cpp/examples/arxml_roundtrip_demo.cpp` 目前是**空占位**，需先补一个 C++ roundtrip harness（走 `emf-artop-runtime` 动态 EMF 路径），再交接。
+3. 收敛上文「已延后」项：`atp.Splitkey` / `ordered` 驱动的子元素排序、未知内容片段（`unknown_element`）。
 
 **参考实现**：`AutosarXMLSaver.cpp`（2023 行，对齐 Java `AutosarXMLSaveImpl`），关键函数定位供收敛时比对：`save()`(L567)、`PugiDomWriter`(L214)、`saveObjectContent()`(L615)、`collectSortedFeaturesUncached()`(L890)、`saveAttribute()`(L1021)、`attrValueToString()`(L1083)、`saveContainment()`(L1157)+`resolveAprxmlRule()`(L1303)、`saveReference()`(L1329)、`saveSingleMixedElement()`(L1487)、`tryComputeBaseRelative()`(L1602)+`getReferenceBasePrefix/readReferenceBaseShortLabel/readReferenceBaseIsDefault`(L1659-1718)、`getShortNamePath()`(L1787)、`getTypeXmlNameUncached()`(L1854)、`isFeatureOrdered()`(L1879)、`getSplitkeyValue/sortChildrenBySplitkey/sortChildrenByShortName`(L1895-2016)。
 
@@ -326,6 +325,13 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - 真实样本验证：artop-cpp `output/samples/` 的 4 份非空真实样本（共 ~1.1MB，最大 821KB）load → save 与原文**仅差 1 行**（XML 属性顺序，语义无关），且写路径幂等（二次 round-trip 字节稳定）。
   - 测试修复：`round_trip_preserves_comment_xml_space_and_base_ref` 的 fixture 原先缺少 `Cite` `REFERENCE-BASE` 导致 `BASE="Cite"` 无法还原；补全为真实样本的三段 `REFERENCE-BASE` 后通过——确认 saver 逻辑无误。
   - 质量门禁：`cargo fmt --all` / `cargo test --workspace --all-targets`（0 失败）/ `cargo clippy --workspace --all-targets`（0 告警）全绿。
+
+- **Milestone 24 — arxml 写路径达到字节级一致（本轮新增）**：消除 Milestone 23 遗留的最后一处属性顺序差异。
+  - 根因：`tools/gen-autosar448-model.py` 用 `sorted(set(...))` 解析 `eSuperTypes`，破坏了 ecore **声明顺序**（EMF/C++ 按声明顺序拼接各超类特征）。改为**保持声明顺序去重**，`registry.rs` 重生成后**仅 200 个类的 `sups` 字段变化**。
+  - 效果：artop-cpp `output/samples/` 4 份非空真实样本 `load → save` 与原文 **`cmp` 逐字节相同（0 差异）**（最大 821KB），写路径幂等。
+  - 测试：`round_trip_preserves_comment_xml_space_and_base_ref` 增加 `assert_eq!(out, FIXTURE)`（整篇逐字节回写）。
+  - conformance：`tools/conformance/interop_arxml.py` 收紧为**逐字节相同**断言（失败时再降级做规范化结构比较以定位「版式 vs 结构」回归），并接入 CI conformance job。
+  - 质量门禁：`cargo fmt --all --check` / `cargo test --workspace --all-targets`（0 失败）/ `cargo clippy --workspace --all-targets`（0 告警）全绿。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 

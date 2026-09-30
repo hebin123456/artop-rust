@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """arxml 写路径 round-trip 校验（真实 AUTOSAR 样本）。
 
-在 Rust ↔ C++ 双向 arxml 交接 harness（C++ 侧 `arxml_roundtrip_demo.cpp` 目前仍是
-空占位，见 docs/PROGRESS.md §7.1）落地之前，这个脚本先把 Rust 写路径钉死：
-
-  对 artop-cpp `output/samples/` 下的每份非空真实样本：
+对 artop-cpp `output/samples/` 下的每份非空真实样本：
     A. load -> save 必须成功（期望 stdout 含 `ROUNDTRIP-OK`）；
     B. 写路径幂等：对再一次 load -> save 的输出必须与第一次**逐字节相同**；
-    C. 结构等价：`save` 的输出与原文在 **规范化** 后必须相等——元素顺序、嵌套、
-       属性集合/取值、文本、注释全部一致，唯一放宽的是 **XML 属性顺序**
-       （XML 属性无序，C++/Java 读者均忽略；这是已知且接受的差异）。
+    C. load -> save 的输出必须与原文**逐字节相同**（Rust saver 已复刻 C++/Java
+       的 arxml 版式，含 XML 属性顺序）；若不同，则进一步用规范化比较区分
+       「只是版式差异」还是「结构真的不同」，以便定位回归。
+
+样本来自 artop-cpp（CI 中 checkout 到 reference/artop-cpp），因此这条用例同时
+证明了 Rust 能读 C++ 生态产出的真实 arxml、并原样写回。
 
 用法:
   python3 tools/conformance/interop_arxml.py \
@@ -124,16 +124,24 @@ def main():
             else:
                 print(f"[PASS] {name}: write path idempotent")
 
-            # C: structural equivalence with the original (attribute order relaxed).
-            try:
-                if canonical_xml(src) != canonical_xml(out1):
-                    print(f"[FAIL] {name}: output not structurally equal to original")
-                    failures.append(f"{name}: canonical equal")
-                else:
-                    print(f"[PASS] {name}: structurally equal to original (modulo attribute order)")
-            except Exception as e:  # noqa: BLE001 - report and continue
-                print(f"[FAIL] {name}: canonical compare error: {e}")
-                failures.append(f"{name}: canonical error")
+            # C: byte-for-byte equality with the original. The Rust saver now
+            # reproduces the C++/Java arxml layout exactly (including XML
+            # attribute order), so a real round-trip must be byte-identical.
+            with open(src, "rb") as f:
+                src_bytes = f.read()
+            with open(out1, "rb") as f:
+                out_bytes = f.read()
+            if src_bytes == out_bytes:
+                print(f"[PASS] {name}: byte-identical to original")
+            else:
+                # Distinguish a cosmetic regression from a semantic one.
+                try:
+                    structural = canonical_xml(src) == canonical_xml(out1)
+                except Exception:  # noqa: BLE001 - diagnostic only
+                    structural = False
+                kind = "structurally equal, layout differs" if structural else "STRUCTURALLY DIFFERENT"
+                print(f"[FAIL] {name}: output != original ({kind})")
+                failures.append(f"{name}: byte-identical ({kind})")
 
     print()
     if failures:
@@ -141,7 +149,7 @@ def main():
         for f in failures:
             print(f"  - {f}")
         return 1
-    print(f"arxml interop: {checked} sample(s) OK (load/save + idempotent + structurally equal)")
+    print(f"arxml interop: {checked} sample(s) OK (load/save + idempotent + byte-identical)")
     return 0
 
 

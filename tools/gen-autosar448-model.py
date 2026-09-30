@@ -244,16 +244,24 @@ def gen(gautosar_path, autosar_path):
         d.pkg = package_id(d.qualified.rsplit("/", 1)[0] if "/" in d.qualified else "")
 
     # ---- resolve supers ----
+    # Preserve the declaration order of `eSuperTypes`: EMF builds
+    # `eAllStructuralFeatures` by walking the supertypes in declaration order,
+    # so a derived class's inherited features keep the same relative order as in
+    # the C++/Java implementations. Deduplicate keeping the first occurrence
+    # (a plain `set` + `sorted` would impose index order and silently reorder
+    # inherited features, e.g. flipping `xml:space` before the `L` attribute).
     sup_idx = []
     for c in classes:
-        r = set()
+        seen = set()
+        r = []
         for s in c.supers:
             nm = leaf(s)
             if nm in class_by_name:
                 i = class_by_name[nm]
-                if i != class_by_name[c.name]:
-                    r.add(i)
-        sup_idx.append(sorted(r))
+                if i != class_by_name[c.name] and i not in seen:
+                    seen.add(i)
+                    r.append(i)
+        sup_idx.append(r)
 
     # ---- flatten features (class-qualified; ids are global) ----
     feature_index = {}

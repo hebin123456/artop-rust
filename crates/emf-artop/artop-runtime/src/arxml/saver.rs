@@ -20,11 +20,12 @@
 //! carries neither, so lists are emitted in model order) and unknown-content
 //! fragments (the loader skips unmappable elements).
 //!
-//! Known, accepted difference: XML *attribute order* is not preserved — the
-//! feature walk emits attributes in metamodel order, not document order. XML
-//! attributes are unordered by definition and both readers ignore the order, so
-//! a round-trip of the real AUTOSAR samples differs only by e.g.
-//! `L="EN" xml:space="default"` becoming `xml:space="default" L="EN"`.
+//! Verified: the four non-empty AUTOSAR samples in `artop-cpp`'s
+//! `output/samples/` (largest ~820 KB) round-trip **byte-for-byte identical**
+//! through load → save (see `tools/conformance/interop_arxml.py`). Getting there
+//! required the metamodel to keep the *declaration order* of `eSuperTypes`
+//! (see `tools/gen-autosar448-model.py`), so inherited features — and hence XML
+//! attribute order — match the C++/Java serializers exactly.
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -1286,9 +1287,11 @@ mod tests {
         let res = load(FIXTURE);
         let out = res.save_to_string();
 
-        // The `xml:` namespace prefix on the attribute name is preserved.
+        // The `xml:` namespace prefix on the attribute name is preserved, and
+        // the attribute order matches the source document (`L` before
+        // `xml:space`), i.e. the inherited-feature order of the metamodel.
         assert!(
-            out.contains("<L-10 xml:space=\"default\" L=\"EN\">English</L-10>"),
+            out.contains("<L-10 L=\"EN\" xml:space=\"default\">English</L-10>"),
             "{out}"
         );
         // The root-level comment survives via mixed-content replay.
@@ -1301,6 +1304,10 @@ mod tests {
             out.contains("<PACKAGE-REF DEST=\"AR-PACKAGE\" BASE=\"Cite\">DefaultEnumMappingTables</PACKAGE-REF>"),
             "{out}"
         );
+
+        // The whole document round-trips byte-for-byte (comments, namespaced
+        // attributes, BASE-relative references and all).
+        assert_eq!(out, FIXTURE);
 
         // The output is idempotent: a second load → save is byte-stable.
         let res2 = load(&out);
