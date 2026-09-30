@@ -3,9 +3,11 @@ name = "artop-codegen"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "See README: artop-rust skeleton crate."
+description = "ARTOP static-model generator (port of C++ emf-artop-codegen / ArtopCppGenerator)."
 
 [dependencies]
 emf-common = { workspace = true }
+emf-ecore = { workspace = true }
+emf-ecore-codegen = { workspace = true }
 
 [lints.rust]
