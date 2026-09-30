@@ -21,27 +21,69 @@
 //! `autosar448_model::metamodel`), and the APRXML role/type/wrapper flags come
 //! from the same annotations — replacing the Java `AutosarXMLRuleRegistry`.
 //!
-//! Elements that map to no feature are recorded in the [`store`] unknown-content
-//! table (`OPTION_RECORD_UNKNOWN_FEATURE`, the C++
-//! `AutosarResource::addUnknownContent`) and replayed verbatim by the saver.
+//! Elements that map to no feature are matched against the model (the C++
+//! `applyChildElement` fallback chain) before being treated as unknown:
 //!
-//! Deliberately deferred from the C++ port (documented, not silently dropped):
-//! the model-driven `createFeatureFromSkippedElement` / `tryInlineMatch`
-//! fallbacks for wrapper (0016) / role+type (0012) elements.
+//!   * `createFeatureFromSkippedElement` — an element named after a feature of
+//!     the target type of one of the owner's wrapper (0016/0013) / role+type
+//!     (0012) references; the wrapper object carries no XML element of its own.
+//!   * `tryInlineMatch` — an element belonging to the inlined content of a 0016
+//!     containment (all four APRXML flags false), e.g. a `Compu`'s content
+//!     serialized as `<COMPU-SCALES>` directly under `<COMPU-INTERNAL-TO-PHYS>`.
+//!
+//! Whatever still maps to nothing goes into the [`store`] unknown-content table
+//! (`OPTION_RECORD_UNKNOWN_FEATURE`, the C++ `AutosarResource::addUnknownContent`)
+//! and is replayed verbatim by the saver.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use emf_common::uri::Uri;
 use emf_common::value::{ObjectRef, Val};
 use emf_ecore::dynamic::DynamicEObject;
-use emf_ecore::{EClass, EStructuralFeature, PackageRegistry};
+use emf_ecore::{EClass, EStructuralFeature, PackageRef, PackageRegistry};
 use emf_xmi::{XMIResource, XMLLoader};
 
 use crate::arxml::dom::{self, Element, Node};
 use crate::arxml::store::{self, MixedEntry};
 use crate::autosar_library_index::AutosarLibraryIndex;
+
+thread_local! {
+    /// `base class name -> subtype ecore names` (the C++ `subtypeCache`): the
+    /// model is static, so a subtype list is computed once and reused.
+    static SUBTYPE_CACHE: RefCell<HashMap<String, Vec<String>>> = RefCell::new(HashMap::new());
+}
+
+/// Whether a reference is a wrapper (0016/0013) or role+type (0012) reference
+/// (C++ `isWrapperOrRoleTypeReference` / Java
+/// `AutosarPersistenceRules.isCompositePropertyRepresentation00XX`).
+fn is_wrapper_or_role_type_reference(f: &EStructuralFeature) -> bool {
+    if !f.is_reference() {
+        return false;
+    }
+    f.is_role_wrapper() || (f.is_role_element() && f.is_type_element())
+}
+
+/// Whether a containment is a 0016 *inline* containment — all four APRXML flags
+/// false, so the contained object's content is inlined into the parent's XML
+/// (C++ `isInlineContainment` / Java
+/// `AutosarPersistenceRules.isCompositePropertyRepresentation0016`).
+fn is_inline_containment(f: &EStructuralFeature) -> bool {
+    f.is_containment()
+        && !f.is_role_element()
+        && !f.is_role_wrapper()
+        && !f.is_type_element()
+        && !f.is_type_wrapper()
+}
+
+/// A wrapper feature match (C++ `WrappedFeature`): `outer` is the owner's
+/// wrapper containment, `inner` the feature on the wrapper's type that the
+/// skipped element actually names.
+struct WrappedFeature {
+    outer: EStructuralFeature,
+    inner: EStructuralFeature,
+}
 
 /// The AUTOSAR arxml root element local name.
 const ROOT_ELEMENT: &str = "AUTOSAR";
@@ -229,8 +271,18 @@ impl ArxmlLoader {
     ) -> Option<ObjectRef> {
         let feature = self.find_feature(class, &el.local);
         let Some(feature) = feature else {
-            // Unknown element: record it so the saver replays it verbatim
-            // (C++ `addUnknownContent` under `OPTION_RECORD_UNKNOWN_FEATURE`).
+            // Model-driven fallbacks (C++ `applyChildElement`'s chain): the
+            // element may name an inner feature of a wrapper (0016/0013) or
+            // role+type (0012) reference, or belong to the inlined content of a
+            // 0016 containment. Only when all of them miss is the element truly
+            // unknown and replayed verbatim by the saver (C++
+            // `addUnknownContent` under `OPTION_RECORD_UNKNOWN_FEATURE`).
+            if let Some(wrapped) = self.create_feature_from_skipped_element(class, &el.local) {
+                return self.apply_wrapped_element(obj, el, &wrapped);
+            }
+            if self.try_inline_match(obj, class, el, 0) {
+                return None;
+            }
             store::push_unknown_content(obj, el.clone());
             return None;
         };
@@ -441,6 +493,270 @@ impl ArxmlLoader {
             }
         }
         declared.and_then(|d| self.reg.find_class(d))
+    }
+
+    // ---- model-driven fallbacks (C++ `applyChildElement` fallback chain) ----
+
+    /// Find a *reference* feature by its arxml element name (C++
+    /// `findReferenceByXmlName`).
+    fn find_reference(&self, class: &EClass, xml_name: &str) -> Option<EStructuralFeature> {
+        self.find_feature(class, xml_name)
+            .filter(|f| f.is_reference())
+    }
+
+    /// All registered subtypes of `base`, cached by name (C++ `collectSubtypes`):
+    /// the metamodel is static, so the walk runs once per base class.
+    fn subtypes(&self, base: &EClass) -> Vec<EClass> {
+        let names = SUBTYPE_CACHE.with(|cache| {
+            cache
+                .borrow_mut()
+                .entry(base.name().to_string())
+                .or_insert_with(|| self.collect_subtype_names(base))
+                .clone()
+        });
+        names
+            .iter()
+            .filter_map(|n| self.reg.find_class(n))
+            .collect()
+    }
+
+    fn collect_subtype_names(&self, base: &EClass) -> Vec<String> {
+        /// Flatten a package and its sub-packages into one class list.
+        fn flatten(pkg: &PackageRef, out: &mut Vec<EClass>) {
+            let (classes, subs) = {
+                let p = pkg.borrow();
+                (p.classes().to_vec(), p.sub_packages().to_vec())
+            };
+            out.extend(classes);
+            for sub in &subs {
+                flatten(sub, out);
+            }
+        }
+
+        let mut all = Vec::new();
+        for pkg in self.reg.packages() {
+            flatten(pkg, &mut all);
+        }
+        // The registry lookup is linear, so the ancestry walk works off a local
+        // name index instead (2105 classes; a per-name `find_class` would make
+        // this quadratic).
+        let by_name: HashMap<&str, &EClass> = all.iter().map(|c| (c.name(), c)).collect();
+        let is_subtype = |cls: &EClass| {
+            let mut seen: HashSet<&str> = HashSet::new();
+            let mut stack = vec![cls];
+            while let Some(c) = stack.pop() {
+                for sup in c.e_super_types() {
+                    if sup == base.name() {
+                        return true;
+                    }
+                    if seen.insert(sup) {
+                        if let Some(parent) = by_name.get(sup.as_str()) {
+                            stack.push(parent);
+                        }
+                    }
+                }
+            }
+            false
+        };
+        all.iter()
+            .filter(|c| c.name() != base.name() && is_subtype(c))
+            .map(|c| c.name().to_string())
+            .collect()
+    }
+
+    /// C++ `createFeatureFromSkippedElement`: match `qname` against an inner
+    /// feature of the target type of one of `owner_class`'s wrapper (0016/0013)
+    /// or role+type (0012) references, searching that type's subtypes too. The
+    /// wrapper object has no XML element of its own, so the element is a
+    /// grandchild that the plain feature lookup cannot see.
+    fn create_feature_from_skipped_element(
+        &self,
+        owner_class: &EClass,
+        qname: &str,
+    ) -> Option<WrappedFeature> {
+        for outer in owner_class.e_all_references(&self.reg).iter().rev() {
+            if !is_wrapper_or_role_type_reference(outer) {
+                continue;
+            }
+            let Some(wrapper_type) = outer.type_name().and_then(|t| self.reg.find_class(t)) else {
+                continue;
+            };
+            if let Some(inner) = self.find_reference(&wrapper_type, qname) {
+                return Some(WrappedFeature {
+                    outer: outer.clone(),
+                    inner,
+                });
+            }
+            for sub in self.subtypes(&wrapper_type) {
+                if let Some(inner) = self.find_reference(&sub, qname) {
+                    return Some(WrappedFeature {
+                        outer: outer.clone(),
+                        inner,
+                    });
+                }
+            }
+        }
+        None
+    }
+
+    /// C++ `applyWrappedElement`: build the wrapper object (`outer`'s target
+    /// type, carrying no XML element of its own), apply the element to `inner`
+    /// on it, then attach the wrapper to the owner's `outer` reference.
+    fn apply_wrapped_element(
+        &mut self,
+        obj: &ObjectRef,
+        el: &Element,
+        wrapped: &WrappedFeature,
+    ) -> Option<ObjectRef> {
+        let wrapper_type = wrapped
+            .outer
+            .type_name()
+            .and_then(|t| self.reg.find_class(t))?;
+        let wrapper_obj: ObjectRef = Rc::new(RefCell::new(DynamicEObject::new_in(
+            wrapper_type,
+            self.reg.clone(),
+        )));
+        let built = if wrapped.inner.is_containment() {
+            self.handle_containment(&wrapper_obj, &wrapped.inner, el)
+        } else {
+            self.handle_reference(&wrapper_obj, &wrapped.inner, el)
+        };
+        self.attach(obj, &wrapped.outer, &wrapper_obj);
+        built
+    }
+
+    /// C++ `getOrCreateInlineObject`: reuse the existing inline object, else
+    /// create one when the inline type is concrete.
+    fn get_or_create_inline_object(
+        &mut self,
+        owner: &ObjectRef,
+        inline_ref: &EStructuralFeature,
+    ) -> Option<ObjectRef> {
+        let existing = object_list(owner.borrow().e_get(inline_ref.name())).unwrap_or_default();
+        if let Some(first) = existing.first() {
+            return Some(first.clone());
+        }
+        let inline_type = inline_ref
+            .type_name()
+            .and_then(|t| self.reg.find_class(t))?;
+        if inline_type.is_abstract() {
+            return None;
+        }
+        let inline_obj: ObjectRef = Rc::new(RefCell::new(DynamicEObject::new_in(
+            inline_type,
+            self.reg.clone(),
+        )));
+        self.attach(owner, inline_ref, &inline_obj);
+        Some(inline_obj)
+    }
+
+    /// C++ `tryInlineMatch`: match `child` against the inlined content of one of
+    /// `owner_class`'s 0016 inline containments (all four APRXML flags false), in
+    /// the C++ case order:
+    ///
+    ///   * **A** — the element names a feature of the inline type.
+    ///   * **D** — the element names a feature of one of the inline type's
+    ///     *subtypes* (e.g. `VT` of `CompuConstTextContent`).
+    ///   * **B** — the element names an `EClass` that is a subtype of the inline
+    ///     type (e.g. `<COMPU-SCALES>` under a `Compu`).
+    ///   * **C** — recurse into a concrete inline object (nested 0016).
+    fn try_inline_match(
+        &mut self,
+        owner: &ObjectRef,
+        owner_class: &EClass,
+        child: &Element,
+        depth: usize,
+    ) -> bool {
+        if depth > 8 {
+            return false;
+        }
+        for inline_ref in owner_class.e_all_structural_features(&self.reg) {
+            if !is_inline_containment(&inline_ref) {
+                continue;
+            }
+            let Some(inline_type) = inline_ref.type_name().and_then(|t| self.reg.find_class(t))
+            else {
+                continue;
+            };
+
+            // Case A: the element names a feature of the inline type.
+            if self.find_feature(&inline_type, &child.local).is_some() {
+                if let Some(inline_obj) = self.get_or_create_inline_object(owner, &inline_ref) {
+                    if let Some(cls) = self.class_of(&inline_obj) {
+                        self.dispatch_child(&inline_obj, &cls, child);
+                    }
+                    return true;
+                }
+            }
+
+            // Case D: the element names a feature of one of the inline type's
+            // subtypes (checked independently of, and before, Case B).
+            let existing = object_list(owner.borrow().e_get(inline_ref.name())).unwrap_or_default();
+            let mut matched = false;
+            for ex in &existing {
+                if let Some(cls) = self.class_of(ex) {
+                    if self.find_feature(&cls, &child.local).is_some() {
+                        self.dispatch_child(ex, &cls, child);
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+            if matched {
+                return true;
+            }
+            if existing.is_empty() || inline_ref.is_many() {
+                for subtype in self.subtypes(&inline_type) {
+                    if self.find_feature(&subtype, &child.local).is_none() {
+                        continue;
+                    }
+                    let inline_obj: ObjectRef = Rc::new(RefCell::new(DynamicEObject::new_in(
+                        subtype.clone(),
+                        self.reg.clone(),
+                    )));
+                    self.attach(owner, &inline_ref, &inline_obj);
+                    self.dispatch_child(&inline_obj, &subtype, child);
+                    return true;
+                }
+            }
+
+            // Case B: the element names an EClass that is a subtype of the
+            // inline type (`isSuperTypeOf` is reflexive in EMF).
+            if let Some(e_class) = self.reg.find_class_by_xml_name(&child.local) {
+                if e_class.name() == inline_type.name()
+                    || e_class.is_super_type_of(inline_type.name(), &self.reg)
+                {
+                    let inline_obj: ObjectRef = Rc::new(RefCell::new(DynamicEObject::new_in(
+                        e_class.clone(),
+                        self.reg.clone(),
+                    )));
+                    self.apply_attributes(&inline_obj, &e_class, child);
+                    for grandchild in child.element_children() {
+                        self.dispatch_child(&inline_obj, &e_class, grandchild);
+                    }
+                    if e_class.content_kind() == "mixed" {
+                        let text = child.text();
+                        if !text.trim().is_empty() {
+                            store::set_mixed_text(&inline_obj, text);
+                        }
+                    }
+                    self.attach(owner, &inline_ref, &inline_obj);
+                    return true;
+                }
+            }
+
+            // Case C: recurse into a concrete inline object (nested 0016).
+            if !inline_type.is_abstract() {
+                if let Some(inline_obj) = self.get_or_create_inline_object(owner, &inline_ref) {
+                    if let Some(cls) = self.class_of(&inline_obj) {
+                        if self.try_inline_match(&inline_obj, &cls, child, depth + 1) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
     }
 
     /// Convert a literal to the feature's value type (C++ `EFactory.createFromString`).
@@ -741,6 +1057,99 @@ mod tests {
 
     fn root(res: &AutosarXMLResource) -> ObjectRef {
         res.resource().contents()[0].clone()
+    }
+
+    /// The first object of a multi-valued / single-valued feature.
+    fn obj_one(obj: &ObjectRef, feature: &str) -> Option<ObjectRef> {
+        object_list(obj.borrow().e_get(feature))
+            .unwrap_or_default()
+            .into_iter()
+            .next()
+    }
+
+    /// Load, save, re-load and save again: the two outputs must be identical
+    /// (load/save is a fixed point once the canonical layout is reached).
+    fn assert_idempotent_save(arxml: &str) {
+        let res = load(arxml);
+        let out1 = res.save_to_string();
+        let res2 = load(&out1);
+        let out2 = res2.save_to_string();
+        assert_eq!(out1, out2, "arxml save is not idempotent");
+    }
+
+    #[test]
+    fn inline_containment_matches_subtype_class_element() {
+        // `Compu` (`<COMPU-INTERNAL-TO-PHYS>`) has a 0016 *inline* containment
+        // `compuContent` (all four APRXML flags false), so its content is
+        // serialized directly under the Compu's element. The element name
+        // `<COMPU-SCALES>` names the `CompuScales` subclass of the abstract
+        // inline type `CompuContent` (C++ `tryInlineMatch` Case B/D).
+        let arxml = "<AUTOSAR xmlns=\"http://autosar.org/schema/r4.0\">\
+                     <AR-PACKAGES><AR-PACKAGE><SHORT-NAME>P</SHORT-NAME>\
+                     <ELEMENTS><COMPU-METHOD><SHORT-NAME>M</SHORT-NAME>\
+                     <COMPU-INTERNAL-TO-PHYS><COMPU-SCALES>\
+                     <COMPU-SCALE><SHORT-LABEL>S</SHORT-LABEL></COMPU-SCALE>\
+                     </COMPU-SCALES></COMPU-INTERNAL-TO-PHYS>\
+                     </COMPU-METHOD></ELEMENTS>\
+                     </AR-PACKAGE></AR-PACKAGES></AUTOSAR>";
+        let res = load(arxml);
+        let pkg = obj_one(&root(&res), "AR-PACKAGE").expect("package");
+        let cm = obj_one(&pkg, "ELEMENT").expect("COMPU-METHOD");
+        assert_eq!(cm.borrow().e_class(), "CompuMethod");
+        let compu = obj_one(&cm, "COMPU-INTERNAL-TO-PHYS").expect("COMPU-INTERNAL-TO-PHYS");
+        assert_eq!(compu.borrow().e_class(), "Compu");
+
+        // The inline element became a real `CompuScales` object rather than an
+        // opaque unknown-content blob replayed by the saver.
+        let scales = obj_one(&compu, "COMPU-CONTENT").expect("inline CompuScales");
+        assert_eq!(scales.borrow().e_class(), "CompuScales");
+        let scale = obj_one(&scales, "COMPU-SCALE").expect("COMPU-SCALE");
+        assert_eq!(scale.borrow().e_class(), "CompuScale");
+        assert!(
+            store::unknown_content(&compu).is_none(),
+            "inline element must not be recorded as unknown content"
+        );
+
+        assert_idempotent_save(arxml);
+    }
+
+    #[test]
+    fn skipped_element_builds_wrapper_object() {
+        // `<PACKAGE-REF>` names no `ARPackage` feature, but it names a reference
+        // of `ReferenceBase` — the target type of the owner's wrapper (0016)
+        // reference `referenceBases`. The C++ `createFeatureFromSkippedElement`
+        // therefore builds a `ReferenceBase` wrapper (which has no XML element of
+        // its own) and applies the element to its `PACKAGE-REF` reference.
+        let arxml = "<AUTOSAR xmlns=\"http://autosar.org/schema/r4.0\">\
+                     <AR-PACKAGES>\
+                     <AR-PACKAGE><SHORT-NAME>Other</SHORT-NAME></AR-PACKAGE>\
+                     <AR-PACKAGE><SHORT-NAME>P</SHORT-NAME>\
+                     <PACKAGE-REF DEST=\"AR-PACKAGE\">/Other</PACKAGE-REF>\
+                     </AR-PACKAGE>\
+                     </AR-PACKAGES></AUTOSAR>";
+        let res = load(arxml);
+        let root_reg = root(&res);
+        let pkgs = object_list(root_reg.borrow().e_get("AR-PACKAGE")).unwrap();
+        let p = pkgs
+            .iter()
+            .find(|p| p.borrow().e_get("SHORT-NAME") == Some(Val::String("P".into())))
+            .expect("package P")
+            .clone();
+
+        // The wrapper object carries the reference resolved to package `Other`.
+        let base = obj_one(&p, "REFERENCE-BASE").expect("ReferenceBase wrapper");
+        assert_eq!(base.borrow().e_class(), "ReferenceBase");
+        let target = obj_one(&base, "PACKAGE-REF").expect("PACKAGE-REF");
+        assert_eq!(
+            target.borrow().e_get("SHORT-NAME"),
+            Some(Val::String("Other".into()))
+        );
+        assert!(
+            store::unknown_content(&p).is_none(),
+            "wrapper element must not be recorded as unknown content"
+        );
+
+        assert_idempotent_save(arxml);
     }
 
     #[test]
