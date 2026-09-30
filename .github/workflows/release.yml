@@ -55,12 +55,18 @@ jobs:
       - name: Build the workspace (release)
         run: cargo build --release --workspace
 
+      # Only the real AUTOSAR samples are needed for the smoke test. Sparse
+      # checkout avoids the reference repo's very deep `libs/opensource/...`
+      # paths, which Windows cannot materialise ("Filename too long").
       - name: Checkout artop-cpp reference (real AUTOSAR samples)
         uses: actions/checkout@v4
         with:
           repository: hebin123456/artop-cpp
           path: reference/artop-cpp
           fetch-depth: 1
+          sparse-checkout: |
+            output/samples
+          sparse-checkout-cone-mode: true
 
       - name: Smoke-test the arxml binaries on a real sample
         shell: bash
