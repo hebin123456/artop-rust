@@ -18,10 +18,13 @@
 | `build_acceleo_oracle.sh` | 同上，C++ emf-acceleo 单测 → `build/acceleo_oracle.json` |
 | `build_xcore_oracle.sh` | 同上，C++ emf-xcore 单测 → `build/xcore_oracle.json` |
 | `build_sphinx_oracle.sh` | 同上，C++ emf-sphinx 单测 → `build/sphinx_oracle.json` |
-| `cases.tsv` / `cases_ecore.tsv` / `cases_edit.tsv` / `cases_acceleo.tsv` / `cases_xcore.tsv` / `cases_sphinx.tsv` | 各模块 C++ 测试 ↔ Rust 测试 等价映射表（`group<TAB>cpp_test<TAB>rust_test<TAB>pkg`） |
+| `build_artop_runtime_oracle.sh` | 同上，C++ emf-artop-runtime 单测 → `build/artop_runtime_oracle.json`（并产出 `build/libemf_artop_runtime_modules.a` 供 interop 复用） |
+| `cases.tsv` / `cases_ecore.tsv` / `cases_edit.tsv` / `cases_acceleo.tsv` / `cases_xcore.tsv` / `cases_sphinx.tsv` / `cases_artop_runtime.tsv` | 各模块 C++ 测试 ↔ Rust 测试 等价映射表（`group<TAB>cpp_test<TAB>rust_test<TAB>pkg`） |
 | `compare.py` | 跑 oracle + 逐条跑 Rust 测试，输出 `PASS/PENDING/REGRESSION` 汇总 |
 | `interop_xmi.py` | Rust ↔ C++ **双向 XMI** 文件交接（4 步：A Rust 写/C++ 读、B C++ 写/Rust 读、C/D 交叉回写） |
-| `interop_arxml.py` | artop-cpp 真实 `output/samples/*.arxml` 的 Rust **写路径** round-trip：load→save、写路径幂等、且与原文**逐字节相同**（Rust saver 已复刻 C++/Java 的 arxml 版式） |
+| `build_xmi_interop.sh` | 构建 `interop_xmi.py` 的 C++ 半侧（`interop_xmi_main.cpp`）→ `build/interop_xmi` |
+| `interop_arxml.py` | artop-cpp 真实 `output/samples/*.arxml` 的 round-trip：Rust 写路径（load→save、幂等、**逐字节相同**）+ 给出 `--cpp` 时追加 **Rust ↔ C++ 双向交接**（A/B/C/D 四步） |
+| `build_arxml_interop.sh` | 构建 `interop_arxml.py` 的 C++ 半侧（`interop_arxml_main.cpp`）→ `build/interop_arxml` |
 
 ## 用法
 
@@ -60,5 +63,6 @@ python3 tools/conformance/compare.py
 | `emf-acceleo` | 26 | 26 PASS（0 PENDING） | `compare.py --oracle build/acceleo_oracle.json --cases cases_acceleo.tsv --pkg emf-acceleo` |
 | `emf-xcore` | 14 | 14 PASS（0 PENDING） | `compare.py --oracle build/xcore_oracle.json --cases cases_xcore.tsv --pkg emf-xcore` |
 | `emf-sphinx` | 68 | 68 PASS（0 PENDING） | `compare.py --oracle build/sphinx_oracle.json --cases cases_sphinx.tsv --pkg emf-sphinx` |
+| `artop-runtime` | 18 | 18 PASS（0 PENDING） | `compare.py --oracle build/artop_runtime_oracle.json --cases cases_artop_runtime.tsv --pkg artop-runtime` |
 
 > 各模块 oracle 均已在 CI `conformance` job 中自动构建并比对（无 `REGRESSION` 即通过）。

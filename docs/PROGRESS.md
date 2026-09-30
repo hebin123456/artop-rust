@@ -68,7 +68,7 @@ examples/
 | `emf-acceleo` | ✅ 工作 | Acceleo MTL/`M2T` 引擎（对 C++ `AcceleoAst.h`/`AcceleoParser.cpp`/`AcceleoEngine.cpp` 的 1:1 移植）：`ast`（Block：Text/Expr/For/If/Let/File/Protected；Expr：Var/String/Int/Bool/Nav/Call/CollectionLit/If/Lambda）+ `parser`（递归下降：`[module]`/`template`/`query`/`import`/`extends`、`[for]/[if]/[let]/[file]/[protected]`、`post(...)` 容错）+ `engine`（`AcceleoEngine`/`AcceleoService`：上下文/服务注册/模板·查询查找、表达式求值、`=`/`or`/`and`/比较/算术、lambda + `->collect/select/reject/forAll/exists/size` 集合操作、`[file]` 落盘与 `[protected]` 区域合并）；C++ `AcceleoTests.cpp`(18) + `AlignmentTests.cpp`(8) 已逐条对照，26 条全 PASS（`cpp_parity_acceleo`） |
 | `emf-sphinx` | ✅ 工作 | headless 核心：`Node`（attributes/children fluent builder）+ `Root`/`Model`（全路径索引 O(1) `resolve`）+ 深度遍历（`Continue`/`Prune`/`Stop` 控制）；Sphinx 扩展：`metamodel`（`MetaModelDescriptor`/`AbstractMetaModelDescriptor` + `MetaModelVersionData` + thread-local `MetaModelDescriptorRegistry`）、`resource`（`SchemaLocationUriHandler`/`ExtendedBasicExtendedMetaData`/`ModelConverterRegistry`）、`scoping`（`FileResourceScope`/`FileResourceScopeProvider`/`ResourceScopeProviderRegistry`）、`ecore`（`OrderedFeatureMap`）、`util`（`EcoreResourceUtil`）；C++ 5 个测试文件 68 条已逐条对照并全 PASS（`cpp_parity_sphinx`） |
 | `emf-artop/artop-validation` | ✅ 工作 | AUTOSAR 业务约束层（对齐 `org.artop.aal.*.constraints`）：`autosar_constraints`（shortName 非空/同父唯一、uuid 非空/全局唯一、category 必填、no-unresolved-proxy；BATCH+LIVE）；叠在通用 `emf-validation` 底座之上，由调用方显式注册。C++ `AutosarConstraintsTests.cpp` 13 条已逐条对照 |
-| `emf-artop/artop-runtime` | 🟡 进行中 | 基座已落地：`AutosarMetaModelVersionData` / `AutosarReleaseDescriptor` / `IdentifiableUtil` / `AutosarLibraryIndex` / `UnknownElement`；资源层已落地：`AutosarResource` / `AutosarXMLResource` / `AutosarResourceFactory`（含 `register_default_autosar40_metamodel` 静态元模型注册）/ `AutosarResourceSet`（基于 `emf-xmi`，含 release / schemaLocation / 库索引 / `getResource` 按需加载 / `getEObject` 跨资源解析）；**C++ 对照已接入**：18 条用例逐条移植并全 PASS（conformance oracle）；arxml **读**已落地：`arxml/dom`（保留注释与混合内容的 DOM）+ `arxml/store`（混合内容/注释/引用信息侧表）+ `AutosarXMLLoader`（三阶段：建对象树 / shortName 路径索引 / 代理引用解析，含 wrapper 与 BASE 相对路径）；arxml **写**已落地：`arxml/saver`（`AutosarXMLSaver` = `PugiDomWriter` 延迟开标签流式 writer + APRXML 0012/0015/0016/default 规则 + 引用 `DEST`/shortName path/BASE 相对路径 + mixed 序列回放），读写二者均注入为 `AutosarResource` 的默认 `XMLSave`/`XMLLoader`；**待做** 字节级 round-trip 收敛与写路径 conformance 覆盖 |
+| `emf-artop/artop-runtime` | 🟡 进行中 | 基座已落地：`AutosarMetaModelVersionData` / `AutosarReleaseDescriptor` / `IdentifiableUtil` / `AutosarLibraryIndex` / `UnknownElement`；资源层已落地：`AutosarResource` / `AutosarXMLResource` / `AutosarResourceFactory`（含 `register_default_autosar40_metamodel` 静态元模型注册）/ `AutosarResourceSet`（基于 `emf-xmi`，含 release / schemaLocation / 库索引 / `getResource` 按需加载 / `getEObject` 跨资源解析）；**C++ 对照已接入**：18 条用例逐条移植并全 PASS（conformance oracle）；arxml **读**已落地：`arxml/dom`（保留注释与混合内容的 DOM）+ `arxml/store`（混合内容/注释/引用信息侧表）+ `AutosarXMLLoader`（三阶段：建对象树 / shortName 路径索引 / 代理引用解析，含 wrapper 与 BASE 相对路径）；arxml **写**已落地：`arxml/saver`（`AutosarXMLSaver` = `PugiDomWriter` 延迟开标签流式 writer + APRXML 0012/0015/0016/default 规则 + 引用 `DEST`/shortName path/BASE 相对路径 + mixed 序列回放），读写二者均注入为 `AutosarResource` 的默认 `XMLSave`/`XMLLoader`；**字节级 round-trip 已达标**（真实样本逐字节相同），conformance 覆盖 Rust 写路径 + **Rust ↔ C++ 双向 arxml 交接**；**待做** `atp.Splitkey`/`ordered` 子元素排序与未知内容片段收敛 |
 | `emf-artop/artop-codegen` | ⬜ 骨架 | `.ecore` → 静态模型 |
 
 ## 4. emf-common / emf-ecore 实现要点（已完成）
@@ -154,8 +154,8 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 **下一棒 —— arxml 互读互写收敛**（剩余工作）：
 
-1. `tools/conformance/interop_arxml.py` 已覆盖**写**路径（load→save、写路径幂等、与原文**逐字节相同**）并接入 CI conformance job。
-2. 建立 Rust ↔ C++ 双向 arxml 交接 CI 用例（对齐 `interop_xmi.py` 的四步 A/B/C/D）。C++ 侧 `cpp/emf-cpp/examples/arxml_roundtrip_demo.cpp` 目前是**空占位**，需先补一个 C++ roundtrip harness（走 `emf-artop-runtime` 动态 EMF 路径），再交接。
+1. `tools/conformance/interop_arxml.py` 已覆盖**写**路径（load→save、写路径幂等、与原文**逐字节相同**）并接入 CI conformance job；给出 `--cpp` 时追加 **Rust ↔ C++ 双向交接**（A/B/C/D 四步，见 Milestone 25），C++ 半侧 harness 为 `tools/conformance/interop_arxml_main.cpp`（构建脚本 `tools/conformance/build_arxml_interop.sh`）。
+2. ~~建立 Rust ↔ C++ 双向 arxml 交接 CI 用例~~ —— 已完成（Milestone 25）。
 3. 收敛上文「已延后」项：`atp.Splitkey` / `ordered` 驱动的子元素排序、未知内容片段（`unknown_element`）。
 
 **参考实现**：`AutosarXMLSaver.cpp`（2023 行，对齐 Java `AutosarXMLSaveImpl`），关键函数定位供收敛时比对：`save()`(L567)、`PugiDomWriter`(L214)、`saveObjectContent()`(L615)、`collectSortedFeaturesUncached()`(L890)、`saveAttribute()`(L1021)、`attrValueToString()`(L1083)、`saveContainment()`(L1157)+`resolveAprxmlRule()`(L1303)、`saveReference()`(L1329)、`saveSingleMixedElement()`(L1487)、`tryComputeBaseRelative()`(L1602)+`getReferenceBasePrefix/readReferenceBaseShortLabel/readReferenceBaseIsDefault`(L1659-1718)、`getShortNamePath()`(L1787)、`getTypeXmlNameUncached()`(L1854)、`isFeatureOrdered()`(L1879)、`getSplitkeyValue/sortChildrenBySplitkey/sortChildrenByShortName`(L1895-2016)。
@@ -332,6 +332,15 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
   - 测试：`round_trip_preserves_comment_xml_space_and_base_ref` 增加 `assert_eq!(out, FIXTURE)`（整篇逐字节回写）。
   - conformance：`tools/conformance/interop_arxml.py` 收紧为**逐字节相同**断言（失败时再降级做规范化结构比较以定位「版式 vs 结构」回归），并接入 CI conformance job。
   - 质量门禁：`cargo fmt --all --check` / `cargo test --workspace --all-targets`（0 失败）/ `cargo clippy --workspace --all-targets`（0 告警）全绿。
+
+- **Milestone 25 — Rust ↔ C++ arxml 双向交接（本轮新增）**：把「Rust 能读 C++ 产出的 arxml 并原样写回」升级为**跨进程双向文件交接**用例。
+  - C++ 半侧 harness `tools/conformance/interop_arxml_main.cpp`：`roundtrip <in> <out>` / `check <in>`；元模型优先取 `ARXML_INTEROP_ECORE_448`（+ `ARXML_INTEROP_ECORE_GAUTOSAR`）动态加载完整 autosar448/gautosar `.ecore`，否则回退 C++ 内置最小 `autosar40.ecore`；把根包额外注册到裸 nsURI `http://autosar.org/schema/r4.0`。构建脚本 `tools/conformance/build_arxml_interop.sh`（复用 `build_artop_runtime_oracle.sh` 产出的模块归档）。
+  - 踩坑记录：动态加载的 `.ecore` 在进程退出/资源析构阶段会触发 `double free or corruption`（结果已产出，仅退出阶段崩溃）——harness 改为泄漏式持有资源 + `std::_Exit(rc)` 跳过静态析构，使退出码真实可信。
+  - `check` 断言「能读成 `AUTOSAR` 根 + 至少一个 `AR-PACKAGE`」，feature 同时兼容完整模型的 `arPackages` 与最小模型的 `AR-PACKAGE` 两种命名。
+  - `tools/conformance/interop_arxml.py` 扩展为两段：**一、Rust 写路径**（load→save / 幂等 / 逐字节相同，始终执行）；**二、Rust ↔ C++ 双向交接**（给出 `--cpp` 时执行）——A. Rust 写→C++ 读；B. C++ 写→Rust 读；C. Rust 读 C++ 的写回再写回→C++ 读；D. C++ 读 Rust 的写回再写回→Rust 读。
+  - 本地实测：4 份非空真实样本（0.003–0.8MB）全部通过（Rust 侧逐字节相同；A/B/C/D 双向全绿）。
+  - 已明确并文档化 C++ 侧现状：artop-cpp 的 artop-runtime 默认只带**最小** `autosar40.ecore`（其注释亦写明「完整对齐时可用 codegen 生成全量静态包替换」），故 C++ 侧 `roundtrip` 不保证逐字节，`check` 只作为文件级交接验收条件；Rust 侧才是逐字节的那一侧。
+  - CI：conformance job 新增「Build C++ ARXML interop harness」与「ARXML round-trip + Rust <-> C++ interop over real AUTOSAR samples」两步（`--ecore448` / `--ecore-gautosar` 指向 `reference/artop-cpp/models/...`）。
 
 ## 9. 提交记录（与本仓库进度相关的近期提交）
 

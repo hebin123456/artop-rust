@@ -90,8 +90,10 @@ jobs:
         run: python3 tools/conformance/interop_xmi.py --cpp tools/conformance/build/interop_xmi --rust target/debug/examples/interop_xmi
       - name: Build Rust ARXML roundtrip harness
         run: cargo build -p artop-runtime --example arxml_roundtrip
-      - name: ARXML round-trip over real AUTOSAR samples (Rust write path)
-        run: python3 tools/conformance/interop_arxml.py --rust target/debug/examples/arxml_roundtrip --samples reference/artop-cpp/output/samples
+      - name: Build C++ ARXML interop harness
+        run: bash tools/conformance/build_arxml_interop.sh reference/artop-cpp/cpp/emf-cpp/emf-artop/emf-artop-runtime reference/artop-cpp/cpp/emf-cpp/emf-xmi reference/artop-cpp/cpp/emf-cpp/emf-ecore-codegen reference/artop-cpp/cpp/emf-cpp/emf-ecore reference/artop-cpp/cpp/emf-cpp/emf-ecore-util reference/artop-cpp/cpp/emf-cpp/emf-common
+      - name: ARXML round-trip + Rust <-> C++ interop over real AUTOSAR samples
+        run: python3 tools/conformance/interop_arxml.py --rust target/debug/examples/arxml_roundtrip --cpp tools/conformance/build/interop_arxml --samples reference/artop-cpp/output/samples --ecore448 reference/artop-cpp/models/autosar448/autosar448.ecore --ecore-gautosar reference/artop-cpp/models/gautosar/gautosar.ecore
       - name: Compare Rust vs oracle (emf-common)
         run: python3 tools/conformance/compare.py --oracle tools/conformance/build/oracle.json --cases tools/conformance/cases.tsv --pkg emf-common
       - name: Compare Rust vs oracle (emf-ecore)
