@@ -122,7 +122,10 @@ pub fn clear_for_objects(keys: &HashSet<usize>) {
     if keys.is_empty() {
         return;
     }
-    fn prune<V>(cell: &'static std::thread::LocalKey<RefCell<HashMap<usize, V>>>, keys: &HashSet<usize>) {
+    fn prune<V>(
+        cell: &'static std::thread::LocalKey<RefCell<HashMap<usize, V>>>,
+        keys: &HashSet<usize>,
+    ) {
         cell.with(|m| {
             let mut m = m.borrow_mut();
             for k in keys {

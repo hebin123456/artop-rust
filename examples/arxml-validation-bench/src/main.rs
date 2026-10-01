@@ -133,7 +133,11 @@ fn main() -> ExitCode {
     println!();
     println!("=== Summary (excl. warmup) ===");
     println!("Avg load:              {:.0} ms", sum_load / n);
-    println!("Avg batch validate:    {:.0} ms ({} diagnostics)", sum_vs / n, diag_count);
+    println!(
+        "Avg batch validate:    {:.0} ms ({} diagnostics)",
+        sum_vs / n,
+        diag_count
+    );
     println!("Avg live attach:       {:.0} ms", sum_attach / n);
     println!("Avg live validateNow:  {:.0} ms", sum_live / n);
     println!("=== DONE ===");

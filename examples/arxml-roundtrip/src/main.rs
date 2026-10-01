@@ -81,7 +81,11 @@ fn bench(in_path: &str, iterations: usize) -> Result<(), String> {
     let file_size = src.len() as f64;
     println!("=== Rust artop-runtime Arxml Benchmark ===");
     println!("File: {in_path}");
-    println!("Size: {:.1} MB ({} bytes)", file_size / 1048576.0, src.len());
+    println!(
+        "Size: {:.1} MB ({} bytes)",
+        file_size / 1048576.0,
+        src.len()
+    );
     println!("Iterations: {iterations}\n");
 
     let mut load_ms = Vec::new();
@@ -124,8 +128,16 @@ fn bench(in_path: &str, iterations: usize) -> Result<(), String> {
     let avg_load: f64 = load_ms[skip..].iter().sum::<f64>() / n;
     let avg_save: f64 = save_ms[skip..].iter().sum::<f64>() / n;
     println!("\n=== Summary (excl. warmup) ===");
-    println!("Avg load: {:.0} ms ({:.1} MB/s)", avg_load, file_size / 1024.0 / avg_load);
-    println!("Avg save: {:.0} ms ({:.1} MB/s)", avg_save, file_size / 1024.0 / avg_save);
+    println!(
+        "Avg load: {:.0} ms ({:.1} MB/s)",
+        avg_load,
+        file_size / 1024.0 / avg_load
+    );
+    println!(
+        "Avg save: {:.0} ms ({:.1} MB/s)",
+        avg_save,
+        file_size / 1024.0 / avg_save
+    );
     println!("Avg total: {:.0} ms", avg_load + avg_save);
     println!("=== DONE ===");
     Ok(())

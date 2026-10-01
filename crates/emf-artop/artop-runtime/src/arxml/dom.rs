@@ -313,7 +313,8 @@ fn decode_entity(ent: &str) -> Option<char> {
         "quot" => '"',
         "apos" => '\'',
         _ => {
-            let code = if let Some(hex) = ent.strip_prefix("#x").or_else(|| ent.strip_prefix("#X")) {
+            let code = if let Some(hex) = ent.strip_prefix("#x").or_else(|| ent.strip_prefix("#X"))
+            {
                 u32::from_str_radix(hex, 16).ok()?
             } else {
                 ent.strip_prefix('#')?.parse::<u32>().ok()?

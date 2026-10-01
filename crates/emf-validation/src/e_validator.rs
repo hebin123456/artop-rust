@@ -90,9 +90,7 @@ fn emf_default_constraints(target: &dyn EObject) -> Vec<emf_common::diagnostic::
             // Java `validate_MultiplicityConforms`, whose `eGet(...) == null` test
             // is unreachable for attributes.
             if !dyno.e_is_set(f.name()) {
-                let is_null = dyno
-                    .e_get(f.name())
-                    .is_none_or(|v| matches!(v, Val::Null));
+                let is_null = dyno.e_get(f.name()).is_none_or(|v| matches!(v, Val::Null));
                 if is_null {
                     out.push(Diagnostic::new(
                         Severity::Error,
