@@ -67,6 +67,21 @@ thread_local! {
     static DCC_COUNT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
+/// 当前进程常驻内存（MB，Linux），仅用于内存打点。
+fn rss_mb() -> u64 {
+    let s = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
+    for line in s.lines() {
+        if let Some(rest) = line.strip_prefix("VmRSS:") {
+            if let Some(kb) = rest.split_whitespace().next() {
+                if let Ok(v) = kb.parse::<u64>() {
+                    return v / 1024;
+                }
+            }
+        }
+    }
+    0
+}
+
 /// Whether a reference is a wrapper (0016/0013) or role+type (0012) reference
 /// (C++ `isWrapperOrRoleTypeReference` / Java
 /// `AutosarPersistenceRules.isCompositePropertyRepresentation00XX`).
@@ -140,7 +155,12 @@ impl XMLLoader for AutosarXMLLoader {
         let t_parse = std::time::Instant::now();
         let root = dom::parse(input)?;
         if timing {
-            eprintln!("[timing] dom_parse = {:?}", t_parse.elapsed());
+            eprintln!(
+                "[timing] dom_parse = {:?} rss={} MB (input string = {} MB)",
+                t_parse.elapsed(),
+                rss_mb(),
+                input.len() / 1048576
+            );
         }
         if root.local() != ROOT_ELEMENT {
             return Err(format!(
@@ -158,7 +178,7 @@ impl XMLLoader for AutosarXMLLoader {
         let t_build = std::time::Instant::now();
         let root_obj = loader.build_object(&root, &autosar_class);
         if timing {
-            eprintln!("[timing] build = {:?}", t_build.elapsed());
+            eprintln!("[timing] build = {:?} rss={} MB", t_build.elapsed(), rss_mb());
             let objs = OBJ_COUNT.with(|c| c.get());
             let new_in = NEW_IN_NS.with(|c| c.get());
             eprintln!(
