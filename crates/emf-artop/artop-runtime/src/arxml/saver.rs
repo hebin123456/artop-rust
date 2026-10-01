@@ -1331,14 +1331,14 @@ mod tests {
         let res = load(arxml);
         let out = res.save_to_string();
         let root = dom::parse(&out).expect("reparse");
-        assert_eq!(root.local, "AUTOSAR");
+        assert_eq!(root.local(), "AUTOSAR");
         // The two AR-PACKAGE are wrapped in a single <AR-PACKAGES> role
         // wrapper, as AUTOSAR arxml requires.
         let wrapper = root
             .children
             .iter()
             .find_map(|c| match c {
-                dom::Node::Element(e) if e.local == "AR-PACKAGES" => Some(e),
+                dom::Node::Element(e) if e.local() == "AR-PACKAGES" => Some(e),
                 _ => None,
             })
             .expect("expected an AR-PACKAGES wrapper");
@@ -1346,7 +1346,7 @@ mod tests {
             .children
             .iter()
             .filter_map(|c| match c {
-                dom::Node::Element(e) if e.local == "AR-PACKAGE" => Some(e),
+                dom::Node::Element(e) if e.local() == "AR-PACKAGE" => Some(e),
                 _ => None,
             })
             .count();

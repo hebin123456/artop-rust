@@ -25,10 +25,6 @@ pub enum Node {
 pub struct Element {
     /// Raw qualified name, e.g. `"xsi:schemaLocation"`'s owner `"AUTOSAR"`.
     pub name: String,
-    /// Namespace prefix (`"ns"`), or `None` when the name is unqualified.
-    pub prefix: Option<String>,
-    /// Local part (`"AUTOSAR"`).
-    pub local: String,
     /// Attributes as `(raw_name, decoded_value)`, in document order.
     pub attrs: Vec<(String, String)>,
     /// Ordered content (elements, text, comments).
@@ -36,6 +32,26 @@ pub struct Element {
 }
 
 impl Element {
+    /// Local part of the name (`"AUTOSAR"`, or `"type"` for `"xsi:type"`).
+    ///
+    /// Derived from [`Self::name`] rather than stored: for the common
+    /// unprefixed arxml element the local part *is* the whole name, so keeping
+    /// both fields duplicated every element's name. `Element` is embedded
+    /// by value in [`Node`], so shedding its two name strings shrinks both the
+    /// element and every `Vec<Node>` slot — the parse tree dominates peak
+    /// memory during load.
+    pub fn local(&self) -> &str {
+        match self.name.split_once(':') {
+            Some((_, l)) => l,
+            None => &self.name,
+        }
+    }
+
+    /// Namespace prefix (`"ns"`), or `None` when the name is unqualified.
+    pub fn prefix(&self) -> Option<&str> {
+        self.name.split_once(':').map(|(p, _)| p)
+    }
+
     /// Look up an attribute by its raw qname.
     pub fn attr(&self, name: &str) -> Option<&str> {
         self.attrs
@@ -142,7 +158,6 @@ impl<'a> Parser<'a> {
         }
         self.pos += 1; // consume '<'
         let name = self.read_name()?;
-        let (prefix, local) = split_name(&name);
 
         let mut attrs = Vec::new();
         loop {
@@ -154,8 +169,6 @@ impl<'a> Parser<'a> {
                     self.expect(b'>')?;
                     return Ok(Some(Element {
                         name,
-                        prefix,
-                        local,
                         attrs,
                         children: Vec::new(),
                     }));
@@ -193,8 +206,6 @@ impl<'a> Parser<'a> {
                 }
                 return Ok(Some(Element {
                     name,
-                    prefix,
-                    local,
                     attrs,
                     children,
                 }));
@@ -285,14 +296,6 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// Split a raw qname into `(prefix, local)`.
-fn split_name(name: &str) -> (Option<String>, String) {
-    match name.split_once(':') {
-        Some((p, l)) => (Some(p.to_string()), l.to_string()),
-        None => (None, name.to_string()),
-    }
-}
-
 /// Find the first occurrence of `needle` at or after `from`.
 fn find(hay: &[u8], from: usize, needle: &[u8]) -> Option<usize> {
     if from >= hay.len() {
@@ -368,10 +371,10 @@ mod tests {
     #[test]
     fn parses_root_attributes_and_children() {
         let root = parse("<AUTOSAR xmlns=\"urn:x\"><SHORT-NAME>a</SHORT-NAME></AUTOSAR>").unwrap();
-        assert_eq!(root.local, "AUTOSAR");
+        assert_eq!(root.local(), "AUTOSAR");
         assert_eq!(root.attr("xmlns"), Some("urn:x"));
         let sn = root.element_children().next().unwrap();
-        assert_eq!(sn.local, "SHORT-NAME");
+        assert_eq!(sn.local(), "SHORT-NAME");
         assert_eq!(sn.text(), "a");
     }
 
@@ -411,8 +414,8 @@ mod tests {
     #[test]
     fn handles_prefixes_and_self_closing() {
         let root = parse("<a:B xmlns:c=\"urn:c\" c:d=\"1\"/>").unwrap();
-        assert_eq!(root.prefix.as_deref(), Some("a"));
-        assert_eq!(root.local, "B");
+        assert_eq!(root.prefix(), Some("a"));
+        assert_eq!(root.local(), "B");
         assert_eq!(root.attr("c:d"), Some("1"));
     }
 }

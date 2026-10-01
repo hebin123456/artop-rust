@@ -7,6 +7,7 @@ use crate::{DynamicEObject, EClass, EDataType, EEnum, Val};
 use emf_common::fast_hash::FxHashMap;
 use emf_common::uri::Uri;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 /// A handle to an owned metamodel package.
 pub type PackageRef = std::rc::Rc<std::cell::RefCell<EPackage>>;
@@ -188,98 +189,117 @@ impl EPackage {
     }
 }
 
-/// A registry of named packages (`EPackageRegistry`), modeled after
-/// `EPackage.Registry` in EMF. Bridges from `nsURI` / name to a package and
-/// enables reflection lookup for `DynamicEObject`.
+/// Backing storage of a [`PackageRegistry`], shared behind an `Rc` so that
+/// cloning a registry is a refcount bump.
 #[derive(Debug, Clone, Default)]
-pub struct PackageRegistry {
+struct RegistryInner {
     packages: Vec<PackageRef>,
     /// Packages also indexed under their `name`, `nsURI` and `nsPrefix` keys,
     /// mirroring C++ `EPackageRegistry` (all keys resolve to the same package).
     key_index: HashMap<String, PackageRef>,
 }
 
+/// A registry of named packages (`EPackageRegistry`), modeled after
+/// `EPackage.Registry` in EMF. Bridges from `nsURI` / name to a package and
+/// enables reflection lookup for `DynamicEObject`.
+///
+/// The contents live behind an `Rc` and mutate copy-on-write: every object of
+/// a load holds a registry binding (for inheritance resolution) and the loader
+/// hands each new object `self.reg.clone()`. With a by-value `Vec` + `HashMap`
+/// that clone cost ~450 bytes *per object* — tens of MB on a large document —
+/// whereas an `Rc` bump is a pointer copy. Registration happens once, before
+/// any object shares the registry, so `Rc::make_mut` never actually deep-copies
+/// in practice.
+#[derive(Debug, Clone, Default)]
+pub struct PackageRegistry {
+    inner: Rc<RegistryInner>,
+}
+
 impl PackageRegistry {
     /// New empty registry.
     pub fn new() -> Self {
-        Self {
-            packages: Vec::new(),
-            key_index: HashMap::new(),
-        }
+        Self::default()
     }
 
     /// Register a package, indexing it under `name`, `nsURI` and `nsPrefix`.
     pub fn register(&mut self, pkg: PackageRef) {
+        let inner = Rc::make_mut(&mut self.inner);
         let name = pkg.borrow().name().to_string();
-        if !self
+        if !inner
             .packages
             .iter()
-            .any(|p| std::rc::Rc::ptr_eq(p, &pkg) || p.borrow().name() == name)
+            .any(|p| Rc::ptr_eq(p, &pkg) || p.borrow().name() == name)
         {
-            self.packages.push(pkg.clone());
+            inner.packages.push(pkg.clone());
         }
-        self.key_index.insert(name.clone(), pkg.clone());
+        inner.key_index.insert(name.clone(), pkg.clone());
         if let Some(u) = pkg.borrow().ns_uri() {
-            self.key_index.insert(u.to_string(), pkg.clone());
+            inner.key_index.insert(u.to_string(), pkg.clone());
         }
         let ns_prefix = pkg.borrow().ns_prefix().to_string();
-        self.key_index.insert(ns_prefix, pkg);
+        inner.key_index.insert(ns_prefix, pkg);
     }
 
     /// Look up a package by any registered key (`name`, `nsURI`, `nsPrefix`).
     pub fn get(&self, key: &str) -> Option<&PackageRef> {
-        self.key_index.get(key)
+        self.inner.key_index.get(key)
     }
 
     /// Register a package directly under an explicit key (C++ `EPackageRegistry::put`).
     pub fn put(&mut self, key: impl Into<String>, pkg: PackageRef) {
+        let inner = Rc::make_mut(&mut self.inner);
         let key = key.into();
-        if !self
+        if !inner
             .packages
             .iter()
-            .any(|p| std::rc::Rc::ptr_eq(p, &pkg) || p.borrow().name() == key)
+            .any(|p| Rc::ptr_eq(p, &pkg) || p.borrow().name() == key)
         {
-            self.packages.push(pkg.clone());
+            inner.packages.push(pkg.clone());
         }
-        self.key_index.insert(key, pkg);
+        inner.key_index.insert(key, pkg);
     }
 
     /// Whether any package is registered under `key`.
     pub fn contains_key(&self, key: &str) -> bool {
-        self.key_index.contains_key(key)
+        self.inner.key_index.contains_key(key)
     }
 
     /// Remove a package from `key`; returns the removed handle if present.
     pub fn remove(&mut self, key: &str) -> Option<PackageRef> {
-        self.key_index.remove(key)
+        Rc::make_mut(&mut self.inner).key_index.remove(key)
     }
 
     /// All registered keys (each package appears under its name/nsURI/nsPrefix).
     pub fn keys(&self) -> Vec<String> {
-        self.key_index.keys().cloned().collect()
+        self.inner.key_index.keys().cloned().collect()
     }
 
     /// Look up a package by name.
     pub fn package(&self, name: &str) -> Option<&PackageRef> {
-        self.packages.iter().find(|p| p.borrow().name() == name)
+        self.inner
+            .packages
+            .iter()
+            .find(|p| p.borrow().name() == name)
     }
 
     /// Look up a package by `nsURI` (string form).
     pub fn package_by_ns_uri(&self, ns_uri: &str) -> Option<&PackageRef> {
-        self.packages
+        self.inner
+            .packages
             .iter()
             .find(|p| p.borrow().ns_uri().map(|u| u.to_string()).as_deref() == Some(ns_uri))
     }
 
     /// All registered packages.
     pub fn packages(&self) -> &[PackageRef] {
-        &self.packages
+        &self.inner.packages
     }
 
     /// Find a class by name across every package. Returns an owned clone so it
     /// can be used without fighting the `Rc<RefCell>` borrow checker.
     pub fn find_class(&self, cls_name: &str) -> Option<EClass> {
-        self.packages
+        self.inner
+            .packages
             .iter()
             .find_map(|p| p.borrow().find_class(cls_name).cloned())
     }
@@ -289,7 +309,8 @@ impl PackageRegistry {
     /// `findEClassByXmlName`, which lets arxml element tags such as
     /// `AR-OBJECT` / `SWC-IMPLEMENTATION` resolve without a hard-coded map.
     pub fn find_class_by_xml_name(&self, xml_name: &str) -> Option<EClass> {
-        self.packages
+        self.inner
+            .packages
             .iter()
             .find_map(|p| p.borrow().find_class_by_xml_name(xml_name).cloned())
     }
@@ -297,7 +318,8 @@ impl PackageRegistry {
     /// Find an enum by name across every package. Returns an owned clone, like
     /// [`Self::find_class`], so callers avoid the `Rc<RefCell>` borrow.
     pub fn find_enum(&self, name: &str) -> Option<EEnum> {
-        self.packages
+        self.inner
+            .packages
             .iter()
             .find_map(|p| p.borrow().find_enum(name).cloned())
     }
@@ -311,7 +333,8 @@ impl PackageRegistry {
     /// Find the package that declares a class by name (for nsPrefix/nsURI in
     /// XML/XMI serialization). Returns an owned `PackageRef`.
     pub fn find_package_of_class(&self, cls_name: &str) -> Option<PackageRef> {
-        self.packages
+        self.inner
+            .packages
             .iter()
             .find(|p| p.borrow().find_class(cls_name).is_some())
             .cloned()

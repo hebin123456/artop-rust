@@ -142,10 +142,10 @@ impl XMLLoader for AutosarXMLLoader {
         if timing {
             eprintln!("[timing] dom_parse = {:?}", t_parse.elapsed());
         }
-        if root.local != ROOT_ELEMENT {
+        if root.local() != ROOT_ELEMENT {
             return Err(format!(
                 "AutosarXMLLoader: 期望根元素 <{ROOT_ELEMENT}>，实际为 <{}>",
-                root.local
+                root.local()
             ));
         }
         let reg = emf_ecore::ecore_package::global();
@@ -390,7 +390,7 @@ impl ArxmlLoader {
         el: &Element,
     ) -> Option<ObjectRef> {
         let t_ff = std::time::Instant::now();
-        let feature = self.find_feature(class, &el.local);
+        let feature = self.find_feature(class, el.local());
         FIND_FEATURE_NS.with(|c| c.set(c.get() + t_ff.elapsed().as_nanos() as u64));
         let Some(feature) = feature else {
             // Model-driven fallbacks (C++ `applyChildElement`'s chain): the
@@ -399,7 +399,7 @@ impl ArxmlLoader {
             // 0016 containment. Only when all of them miss is the element truly
             // unknown and replayed verbatim by the saver (C++
             // `addUnknownContent` under `OPTION_RECORD_UNKNOWN_FEATURE`).
-            if let Some(wrapped) = self.create_feature_from_skipped_element(class, &el.local) {
+            if let Some(wrapped) = self.create_feature_from_skipped_element(class, el.local()) {
                 return self.apply_wrapped_element(obj, el, &wrapped);
             }
             if self.try_inline_match(obj, class, el, 0) {
@@ -450,7 +450,7 @@ impl ArxmlLoader {
         // Multi-valued role-wrapper: the wrapper name wraps singular inner values.
         if f.is_many()
             && f.is_role_wrapper()
-            && plural == Some(el.local.as_str())
+            && plural == Some(el.local())
             && plural != Some(f.name())
         {
             let mut values = Vec::new();
@@ -488,7 +488,7 @@ impl ArxmlLoader {
         let plural = explicit_plural(f);
         let is_wrapper = (f.is_role_wrapper() || f.is_type_wrapper())
             && f.is_many()
-            && plural == Some(el.local.as_str())
+            && plural == Some(el.local())
             && plural != Some(f.name());
         if is_wrapper {
             let mut last = None;
@@ -529,7 +529,7 @@ impl ArxmlLoader {
         let plural = explicit_plural(f);
         let is_wrapper = (f.is_role_wrapper() || f.is_type_wrapper())
             && f.is_many()
-            && plural == Some(el.local.as_str())
+            && plural == Some(el.local())
             && plural != Some(f.name());
         if is_wrapper {
             let mut last = None;
@@ -610,7 +610,7 @@ impl ArxmlLoader {
             DCC_NS.with(|c| c.set(c.get() + t.elapsed().as_nanos() as u64));
             return r;
         }
-        let key = (el.local.clone(), declared.unwrap_or("").to_string());
+        let key = (el.local().to_string(), declared.unwrap_or("").to_string());
         if let Some(v) = self.dcc_cache.borrow().get(&key) {
             DCC_NS.with(|c| c.set(c.get() + t.elapsed().as_nanos() as u64));
             return v.clone();
@@ -628,7 +628,7 @@ impl ArxmlLoader {
                 return Some(c);
             }
         }
-        if let Some(c) = self.reg.find_class_by_xml_name(&el.local) {
+        if let Some(c) = self.reg.find_class_by_xml_name(el.local()) {
             match declared {
                 Some(d) => {
                     if c.is_super_type_of(d, &self.reg) {
@@ -828,7 +828,7 @@ impl ArxmlLoader {
             };
 
             // Case A: the element names a feature of the inline type.
-            if self.find_feature(&inline_type, &child.local).is_some() {
+            if self.find_feature(&inline_type, child.local()).is_some() {
                 if let Some(inline_obj) = self.get_or_create_inline_object(owner, &inline_ref) {
                     if let Some(cls) = self.class_of(&inline_obj) {
                         self.dispatch_child(&inline_obj, &cls, child);
@@ -843,7 +843,7 @@ impl ArxmlLoader {
             let mut matched = false;
             for ex in &existing {
                 if let Some(cls) = self.class_of(ex) {
-                    if self.find_feature(&cls, &child.local).is_some() {
+                    if self.find_feature(&cls, child.local()).is_some() {
                         self.dispatch_child(ex, &cls, child);
                         matched = true;
                         break;
@@ -855,7 +855,7 @@ impl ArxmlLoader {
             }
             if existing.is_empty() || inline_ref.is_many() {
                 for subtype in self.subtypes(&inline_type) {
-                    if self.find_feature(&subtype, &child.local).is_none() {
+                    if self.find_feature(&subtype, child.local()).is_none() {
                         continue;
                     }
                     let inline_obj: ObjectRef = Rc::new(RefCell::new(DynamicEObject::new_in(
@@ -870,7 +870,7 @@ impl ArxmlLoader {
 
             // Case B: the element names an EClass that is a subtype of the
             // inline type (`isSuperTypeOf` is reflexive in EMF).
-            if let Some(e_class) = self.reg.find_class_by_xml_name(&child.local) {
+            if let Some(e_class) = self.reg.find_class_by_xml_name(child.local()) {
                 if e_class.name() == inline_type.name()
                     || e_class.is_super_type_of(inline_type.name(), &self.reg)
                 {

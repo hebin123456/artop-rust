@@ -538,12 +538,12 @@ fn clone_subtree_node(src: &ObjectRef) -> DynNode {
 
     // Copy non-containment values (atomic attributes and plain references).
     let feats = dy.all_structural_features();
-    for (name, val) in &dy.dynamic_settings {
+    for (name, val) in dy.settings() {
         let is_containment = feats.iter().any(|f| f.name() == name && f.is_containment());
         if is_containment {
             continue;
         }
-        dst.borrow_mut().e_set_by_name(name, val.clone());
+        dst.borrow_mut().e_set_by_name(&name, val);
     }
     // Recursively clone containment children.
     for child in contents(src) {
