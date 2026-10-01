@@ -278,3 +278,53 @@ fn save_reload_save_idempotent() {
     let xmi2 = save(&reg, &loaded);
     assert_eq!(xmi1, xmi2, "re-saving the reloaded resource is identical");
 }
+
+/// 11) C++-produces-XMI direction: a model built through the generated static
+/// API and serialized must be consumable by a Java EMF reader — i.e. the
+/// document uses the same Java-compatible shape (prefixed single root, plain
+/// attributes, feature-named containment tags, an `xmi:id`). C++
+/// `E2E_GenModelXmi_CppProducesXmi_JavaConsumes` builds the model with the
+/// generated typed API and hands the file to a Java `XMIReader`; here we build
+/// the equivalent model reflectively (the Rust equivalent of that typed API),
+/// assert the serialization shape, and reload to show a consuming reader
+/// reconstructs every field.
+#[test]
+fn cpp_produces_xmi_java_consumes() {
+    let reg = registry();
+    let lib = dyn_of(&reg, "Library");
+    lib.borrow_mut()
+        .e_set("name", Val::String("Cpp Produced Library".into()));
+
+    let book = dyn_of(&reg, "Book");
+    book.borrow_mut()
+        .e_set("title", Val::String("C++ Produces Book".into()));
+    book.borrow_mut().e_set("pages", Val::Int(424));
+    lib.borrow_mut()
+        .e_set("books", Val::List(vec![Val::Object(book)]));
+
+    let xmi = save(&reg, &[lib]);
+
+    // Java-compatible serialization shape.
+    assert!(xmi.contains("<library:Library "), "{xmi}");
+    assert!(xmi.contains("name=\"Cpp Produced Library\""), "{xmi}");
+    assert!(xmi.contains("<books "), "{xmi}");
+    assert!(xmi.contains("title=\"C++ Produces Book\""), "{xmi}");
+    assert!(xmi.contains("pages=\"424\""), "{xmi}");
+    assert!(xmi.contains("xmi:id="), "{xmi}");
+
+    // A consuming loader reconstructs every field from the produced document.
+    let loaded = reload(&reg, &xmi);
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded[0].borrow().e_class(), "Library");
+    assert_eq!(
+        loaded[0].borrow().e_get("name"),
+        Some(Val::String("Cpp Produced Library".into()))
+    );
+    let books = list_of(&loaded[0], "books");
+    assert_eq!(books.len(), 1, "the produced book is consumable");
+    assert_eq!(
+        books[0].borrow().e_get("title"),
+        Some(Val::String("C++ Produces Book".into()))
+    );
+    assert_eq!(books[0].borrow().e_get("pages"), Some(Val::Int(424)));
+}

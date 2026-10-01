@@ -1,16 +1,28 @@
 //! C++ parity suite: the `XMISaverTests.cpp` contract.
 //!
-//! Ports the C++ `emf-xmi/tests/XMISaverTests.cpp` assertions onto the Rust
-//! [`emf_xmi::metamodel_saver`], which serializes an `EPackage` meta-model back
-//! into an `<ecore:EPackage>` XMI document. Every assertion below is a
-//! substring find against produced XML, exactly like the C++ `EXPECT_TRUE`,
-//! so behaviour (not byte layout) is what we align.
+//! Ports the C++ `emf-xmi/tests/XMISaverTests.cpp` assertions. Most exercise
+//! the Rust [`emf_xmi::metamodel_saver`], which serializes an `EPackage`
+//! meta-model back into an `<ecore:EPackage>` XMI document; the two
+//! ExtendedMetaData / `useEncodedAttributeStyle` cases at the end exercise the
+//! *instance* serializer [`emf_xmi::saver`], which is what the C++ tests use
+//! (`XMIResource::saveToString` over a live model object). Every assertion is a
+//! substring find against produced XML, exactly like the C++ `EXPECT_TRUE`, so
+//! behaviour (not byte layout) is what we align.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use emf_common::value::{ObjectRef, Val};
 use emf_ecore::datatype::names::{E_BOOLEAN, E_INT, E_STRING};
 use emf_ecore::structural::FeatureKind;
-use emf_ecore::{EClass, EClassKind, EEnum, EPackage, EStructuralFeature};
+use emf_ecore::{
+    make_package_ref, DynamicEObject, EAnnotation, EClass, EClassKind, EEnum, EPackage,
+    EStructuralFeature, PackageRegistry,
+};
+use emf_xmi::loader::load_from_str;
 use emf_xmi::metamodel_saver::save_ecore_package;
 use emf_xmi::options::XmiOptions;
+use emf_xmi::saver::{save_to_string, EXTENDED_META_DATA_NS_URI};
 
 /// `buildSimplePackage`: name/nsURI/nsPrefix + one EClass Foo + one EAttribute
 /// label->EString.
@@ -286,4 +298,107 @@ fn save_etype_for_int_and_boolean_builtins() {
             .is_some(),
         "{out}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// 14) ExtendedMetaData kind=element: an EAttribute is emitted as a child
+//     element (and round-trips back as a value).
+// ---------------------------------------------------------------------------
+// C++ `XMISaver_ExtendedMetaData_ElementKind_EAttributeAsElement`: register a
+// one-class package whose `description` EAttribute carries an ExtendedMetaData
+// `kind=element` annotation, save a live instance, and assert the value is a
+// `<description>...</description>` child (never a `description="..."` attr).
+#[test]
+fn extended_metadata_element_kind_eattribute_as_element() {
+    let (registry, obj) = element_kind_object(
+        "extmd",
+        "http://example.com/extmd",
+        "extmd",
+        "Item",
+        "description",
+    );
+    obj.borrow_mut()
+        .e_set("description", Val::String("hello world".into()));
+
+    let opts = XmiOptions::default();
+    let out = save_to_string(std::slice::from_ref(&obj), &opts);
+
+    assert!(
+        out.find("<description>hello world</description>").is_some(),
+        "{out}"
+    );
+    assert!(out.find("description=\"").is_none(), "{out}");
+
+    // roundtrip: the element-styled attribute loads back as an attribute value
+    let loaded = load_from_str(&out, &registry).unwrap();
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded[0].borrow().e_class(), "Item");
+    assert_eq!(
+        loaded[0].borrow().e_get("description"),
+        Some(Val::String("hello world".into()))
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 15) useEncodedAttributeStyle=true forces attribute output, overriding the
+//     kind=element annotation.
+// ---------------------------------------------------------------------------
+#[test]
+fn use_encoded_attribute_style_forces_attribute_output() {
+    let (_registry, obj) = element_kind_object(
+        "encstyle",
+        "http://example.com/encstyle",
+        "enc",
+        "Doc",
+        "body",
+    );
+    obj.borrow_mut().e_set("body", Val::String("data".into()));
+
+    let mut opts = XmiOptions::default();
+    opts.use_encoded_attribute_style = true;
+    let out = save_to_string(std::slice::from_ref(&obj), &opts);
+
+    assert!(out.find("body=\"data\"").is_some(), "{out}");
+    assert!(out.find("<body>").is_none(), "{out}");
+}
+
+// ---------------------------------------------------------------------------
+// 16) Placeholder: the C++ suite's framework-registration smoke test
+//     (`EMF_TEST(Placeholder) { EXPECT_TRUE(true); }`), proving the harness
+//     runs end to end.
+// ---------------------------------------------------------------------------
+#[test]
+fn placeholder() {
+    let ok = true;
+    assert!(ok);
+}
+
+/// A one-class package whose single EString attribute carries an
+/// ExtendedMetaData `kind=element` annotation. Returns the registry (which
+/// resolves the class during deserialization) and a live instance of `class`.
+fn element_kind_object(
+    pkg_name: &str,
+    ns_uri: &str,
+    ns_prefix: &str,
+    class: &str,
+    attr: &str,
+) -> (PackageRegistry, ObjectRef) {
+    let mut pkg = EPackage::new(pkg_name);
+    pkg.set_ns_uri(ns_uri);
+    pkg.set_ns_prefix(ns_prefix);
+
+    let mut cls = EClass::new(class, EClassKind::Class);
+    let mut a = EStructuralFeature::new(attr, FeatureKind::Attribute, 0, 1);
+    a.set_type_name(E_STRING);
+    let mut ann = EAnnotation::new(EXTENDED_META_DATA_NS_URI);
+    ann.set_detail("kind", "element");
+    a.add_annotation(ann);
+    cls.add_feature(a);
+    pkg.add_class(cls);
+
+    let mut registry = PackageRegistry::new();
+    registry.register(make_package_ref(pkg));
+    let cls = registry.find_class(class).unwrap();
+    let obj: ObjectRef = Rc::new(RefCell::new(DynamicEObject::new_in(cls, registry.clone())));
+    (registry, obj)
 }

@@ -9,6 +9,9 @@
 //!   elements (tagged by feature name, `xsi:type` when the concrete class
 //!   differs from the declared type); non-containment references become
 //!   `href` attributes.
+//! - An `EAttribute` annotated with an ExtendedMetaData `kind=element` detail
+//!   is instead emitted as a `<feature>value</feature>` child element (unless
+//!   `use_encoded_attribute_style` forces attribute style).
 //! - Every object gets a synthetic `xmi:id`; cross-references resolve via
 //!   `//<id>`.
 //!
@@ -28,12 +31,42 @@ use emf_ecore::{
 };
 
 use super::options::XmiOptions;
-use super::xml_escape::escape_attr;
+use super::xml_escape::{escape_attr, escape_text};
 
 /// The XMI namespace URI.
 pub const XMI_NS: &str = "http://www.omg.org/XMI";
 /// The XSI (XMLSchema-instance) namespace URI.
 pub const XSI_NS: &str = "http://www.w3.org/2001/XMLSchema-instance";
+/// ExtendedMetaData annotation source URI (aligned to C++
+/// `ExtendedMetaData::ANNOTATION_URI` / Java
+/// `org.eclipse.emf.ecore.util.ExtendedMetaData.ANNOTATION_URI`). Its `kind`
+/// detail overrides the default feature serialization style.
+pub const EXTENDED_META_DATA_NS_URI: &str = "http:///org/eclipse/emf/ecore/util/ExtendedMetaData";
+
+/// Whether a feature is serialized as a child element (port of C++
+/// `InstanceSaver::shouldSaveAsElement`, aligned to Java
+/// `XMLSaveImpl.getFeatureKind`).
+///
+/// Decision order:
+/// 1. a containment reference is always an element (its tree cannot be an
+///    attribute);
+/// 2. `use_encoded_attribute_style` forces attribute style, overriding any
+///    `kind=element` annotation;
+/// 3. an ExtendedMetaData `kind` detail of `element` / `attribute` decides;
+/// 4. otherwise the default is attribute style.
+fn should_save_as_element(opts: &XmiOptions, f: &EStructuralFeature) -> bool {
+    if f.is_containment() {
+        return true;
+    }
+    if opts.use_encoded_attribute_style {
+        return false;
+    }
+    matches!(
+        f.annotation(EXTENDED_META_DATA_NS_URI)
+            .and_then(|a| a.detail("kind")),
+        Some("element")
+    )
+}
 
 /// Serialize a set of root objects to an XMI XML string.
 pub fn save_to_string(roots: &[ObjectRef], opts: &XmiOptions) -> String {
@@ -115,8 +148,19 @@ struct ObjSnap {
     ns_uri: String,
     attrs: Vec<(String, String)>,
     hrefs: Vec<(String, String)>,
-    /// (feature name, declared target class, child object).
-    containers: Vec<(String, Option<String>, ObjectRef)>,
+    /// Element children, in feature order.
+    children: Vec<Child>,
+}
+
+/// A node emitted inside an object element.
+enum Child {
+    /// An `EAttribute` serialized as a child element
+    /// (`<tag>text</tag>`), driven by an ExtendedMetaData `kind=element`
+    /// annotation.
+    Scalar(String, String),
+    /// A containment child object: `(feature name, declared target class,
+    /// child object)`.
+    Object(String, Option<String>, ObjectRef),
 }
 
 impl<'a> XmiSaver<'a> {
@@ -228,14 +272,24 @@ impl<'a> XmiSaver<'a> {
                 .push_str(&format!(" {}=\"{}\"", name, escape_attr(href)));
         }
 
-        if snap.containers.is_empty() {
+        if snap.children.is_empty() {
             self.out.push_str("/>\n");
             return;
         }
 
         self.out.push_str(">\n");
-        for (feat, declared_class, child) in &snap.containers {
-            self.write_object(child, depth + 1, Some(feat), declared_class.as_deref());
+        let child_ind = self.opts.indent.repeat(depth + 1);
+        for child in &snap.children {
+            match child {
+                Child::Scalar(tag, text) => {
+                    self.out.push_str(&child_ind);
+                    self.out
+                        .push_str(&format!("<{}>{}</{}>\n", tag, escape_text(text), tag));
+                }
+                Child::Object(feat, declared_class, obj) => {
+                    self.write_object(obj, depth + 1, Some(feat), declared_class.as_deref());
+                }
+            }
         }
         self.out.push_str(&self.opts.indent.repeat(depth));
         self.out.push_str(&format!("</{}>\n", tag));
@@ -253,7 +307,7 @@ impl<'a> XmiSaver<'a> {
 
         let mut attrs: Vec<(String, String)> = Vec::new();
         let mut hrefs: Vec<(String, String)> = Vec::new();
-        let mut containers: Vec<(String, Option<String>, ObjectRef)> = Vec::new();
+        let mut children: Vec<Child> = Vec::new();
 
         for f in &features {
             if f.is_derived() || f.is_transient() {
@@ -268,7 +322,7 @@ impl<'a> XmiSaver<'a> {
                 if f.is_containment() {
                     let declared_target = f.type_name().map(|s| s.to_string());
                     for o in object_refs(&val) {
-                        containers.push((name.clone(), declared_target.clone(), o));
+                        children.push(Child::Object(name.clone(), declared_target.clone(), o));
                     }
                 } else {
                     let hrs: Vec<String> = object_refs(&val)
@@ -293,7 +347,11 @@ impl<'a> XmiSaver<'a> {
                 let typ = f.type_name().unwrap_or("EString");
                 let s = datatype::to_string(typ, &val);
                 if !s.is_empty() {
-                    attrs.push((name, s));
+                    if should_save_as_element(self.opts, f) {
+                        children.push(Child::Scalar(name, s));
+                    } else {
+                        attrs.push((name, s));
+                    }
                 }
             }
         }
@@ -303,7 +361,7 @@ impl<'a> XmiSaver<'a> {
             ns_uri,
             attrs,
             hrefs,
-            containers,
+            children,
         }
     }
 
