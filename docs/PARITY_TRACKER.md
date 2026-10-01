@@ -1,7 +1,7 @@
 # EMF 底座 C++ 对照清单（PARITY TRACKER）
 
 > 目标：把 artop-cpp `cpp/emf-cpp/emf-*` 下每个模块的 C++ 测试用例逐条移植为 Rust 对照测试，用**同一份 sample 文件**对齐行为。
-> 状态图例：⬜ 未开始 · 🔶 进行中 · ✅ 已移植且跑绿 · ⛔ 无 C++ 对照 / 不移植（如 probe_arxml/probe_autosar448 属 artop 侧，按门线禁止处理）
+> 状态图例：⬜ 未开始 · 🔶 进行中 · ✅ 已移植且跑绿 · ⛔ 无 C++ 对照 / 不移植（如 `probe_arxml` / `probe_autosar448` 属探查程序，无断言）
 
 ## Hard Gate
 按 `docs/EMF_PARITY_GATE.md`：**EMF 底座已全部 ✅**（`emf-ecore` oracle 153 条经 `cases_ecore.tsv` 153/153 全映射并跑绿，`compare.py` 0 PENDING / 0 REGRESSION），**门线已解除，artop 允许开发与发布。**
@@ -77,7 +77,7 @@
 | E2E_GenModelXmiCxxProducesTests.cpp | ✅ cpp_parity_e2e_genmodel_xmi（10；gen-model 全链路：注入元模型→动态实例化 Library/Book/Writer→存属性(name·title·pages int)→设置 containment books/library↔book 关系→save→reload 后 Book 类名·title·pages(Int) 保持/重复 reload 幂等 save 一致/XML 头与 xmlns 声明/缺省 writer author 关联 全对齐。
    Rust 复用「load_ecore_package→registry→DynamicEObject 实例化→saver/loader」；C++ 用 Fjage 组件产出的静态类，契约等价） |
 | E2E_GenModelXmiMultiEcoreTypedTests.cpp | ✅ cpp_parity_e2e_multi_ecore_typed（12；base(Library:name+books / Book:title)+ext(AnnotatedLibrary extends base#//Library 增 note 属性 + highlighted containment of base#//Book) 跨包 typed：AnnotatedLibrary 继承 Library/supertype 解析到真实 base Library/自有 feature==2 {note,highlighted}/eAllStructuralFeatures≥4 含继承 {name,books}+自有 {note,highlighted}·全部按名可查/实例化 eClass()=="AnnotatedLibrary"/反射设继承 name 与自有 note·读回/add Book 到继承 books 列表与自有 highlighted 列表/跨包 containment highlighted.eType 解析 base#//Book+eAllContainments 含 books+highlighted/save 产出 `ext:AnnotatedLibrary`·name·note 字段/两包各自实例化基类对象 全对齐。
-   修复 Rust 跨包缺陷：`e_all_structural_features` 与 `DynamicEObject` 值/标志存储原按 feature_id（每包从 0 编号→跨包冲突）改为按 feature 名键控；e_all 去重改按名，存储改按名，修复继承的 `name` 与自有 `note` 同 id0 互相覆盖的 bug） |
+   修复 Rust 跨包缺陷：`e_all_structural_features` 与 `DynamicEObject` 值/标志存储原按 feature_id（每包从 0 编号→跨包冲突）改为按名/类内槽位键控（`by_name` 把 arxml 名与 `ecore.name` 别名解析到同一槽位；`dead4d4` 起存储进一步改为槽位索引以省掉逐特征 `String` 堆分配），修复继承的 `name` 与自有 `note` 同 id0 互相覆盖的 bug） |
 | E2E_GenModelXmiTypedMultiFileTests.cpp | ✅ cpp_parity_e2e_typed_multi_file（12；加载内联 ecore（6 classifier·nsURI `http://example.com/emfdemo/library`·含 Library 5 containment books/magazines/authors/publishers）并注册/library.xmi 单根 `<library:Library>`·name=="City Central Library"/books containment 2·首 title=="The Pragmatic Programmer"/authors containment 3·首 name=="Ada Lovelace"/publishers containment 2·首 name=="O'Reilly Media"/authors.xmi `<xmi:XMI>` 多根·3 个 Author 根·name·email(`ada@example.com`) 加载/publishers.xmi 多根·2 个 Publisher·嵌套单值 address containment·city=="Sebastopol"/多文件独立加载互不干扰/各文件实例 class 均经同一注册元模型包(nsURI)解析 全对齐。
    样本已随 crate 归置 tests/samples/multi-xmi-java/（Java 参考 library.xmi·authors.xmi·publishers.xmi）；Java 文件带元模型未声明属性(publishDate/category/...)由 loader record-and-skip。差异：C++ `getEPackage` 指针恒等，Rust 以「find_package_of_class→nsURI==emfdemo/library」等价）。emf-xmi GenModel*.cpp 全系列已移植完毕 |
 
@@ -192,6 +192,14 @@
 | ProxyHelperTests.cpp | ⛔ 空测试（同上） |
 
 > **emf-sphinx 差异说明**：C++ `emf-sphinx` 是显式 headless 骨架，多个方法在无 Eclipse 平台时返回空结果；Rust 逐条复刻这些分支（`getURI`/`getModelName`/`readRootElementComments`/`readSchemaLocationEntries` 等返回空），并在 `cpp_parity_sphinx` 中固定其行为。`getDescriptorForObject` / `createScopeFromObject` 依赖 EObject→EPackage→nsURI 回链，headless Rust 对象图无此回链，故仅定义 `None` 分支（与 C++ 空参数分支一致）。
+
+## emf-artop/artop-runtime（artop 专属层，门线解除后新增）
+> C++ oracle 共 **18** 条（`tools/conformance/build/artop_runtime_oracle.json`），已 **18/18 全映射跑绿**（`cases_artop_runtime.tsv`，`compare.py` 等价 18 / PENDING 0 / REGRESSION 0）。
+| C++ 测试 | Rust 状态 |
+|---|---|
+| `emf-artop-runtime/tests`（`test_main.cpp`） | ✅ `artop-runtime`（18）：版本数据 `test_version_data_basic` / `_parse` / `_canonical` / `test_schema_version_string`；发行描述符 `test_release_descriptor_basic` / `_schema_location` / `_matches` / `_compare` / `test_descriptor_instance`；资源层 `test_resource_basic` / `test_xml_resource_factory_methods` / `test_resource_factory_creator` / `test_init_resource_sets_xsi` / `test_schema_catalog`；`test_identifiable_util_null`；`test_metamodel_registration`；arxml 实例化 `test_arxml_instantiation_root` / `test_arxml_containment_arpackage` 全对齐 |
+
+> **artop-runtime 差异说明**：C++ `AutosarXMLResource` 走 pugixml DOM；Rust 以自研 `arxml::dom`（保留注释与混合内容）+ `arxml::store`（侧表）实现同一读写契约，真实样本 round-trip **逐字节相同**（`tools/conformance/interop_arxml.py`，含 Rust ↔ C++ 双向交接）。AUTOSAR 业务约束在 `artop-validation` 中实现（对齐 `org.artop.aal.*.constraints` 分层），C++ `AutosarConstraintsTests.cpp` 13 条已逐条对照。
 
 ## 迁移顺序（依赖驱动）
 emf-common → emf-ecore → emf-ecore-util → emf-xmi → emf-edit → emf-validation → emf-compare → emf-xsd → emf-ecore-codegen → emf-xcore → emf-acceleo → emf-sphinx

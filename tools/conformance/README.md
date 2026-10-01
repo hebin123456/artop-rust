@@ -14,12 +14,13 @@
 |---|---|
 | `build_oracle.sh` | 编译并运行 C++ 参考二进制（emf-common 单测），产出 `build/oracle.json` + `build/oracle.log` |
 | `build_ecore_oracle.sh` | 同上，C++ emf-ecore 单测 → `build/ecore_oracle.json` |
+| `build_xmi_oracle.sh` | 同上，C++ emf-xmi 单测（链接 emf-ecore-codegen / ecore / util / common）→ `build/xmi_oracle.json` |
 | `build_edit_oracle.sh` | 同上，C++ emf-edit 单测 → `build/edit_oracle.json` |
 | `build_acceleo_oracle.sh` | 同上，C++ emf-acceleo 单测 → `build/acceleo_oracle.json` |
 | `build_xcore_oracle.sh` | 同上，C++ emf-xcore 单测 → `build/xcore_oracle.json` |
 | `build_sphinx_oracle.sh` | 同上，C++ emf-sphinx 单测 → `build/sphinx_oracle.json` |
 | `build_artop_runtime_oracle.sh` | 同上，C++ emf-artop-runtime 单测 → `build/artop_runtime_oracle.json`（并产出 `build/libemf_artop_runtime_modules.a` 供 interop 复用） |
-| `cases.tsv` / `cases_ecore.tsv` / `cases_edit.tsv` / `cases_acceleo.tsv` / `cases_xcore.tsv` / `cases_sphinx.tsv` / `cases_artop_runtime.tsv` | 各模块 C++ 测试 ↔ Rust 测试 等价映射表（`group<TAB>cpp_test<TAB>rust_test<TAB>pkg`） |
+| `cases.tsv` / `cases_ecore.tsv` / `cases_xmi.tsv` / `cases_edit.tsv` / `cases_acceleo.tsv` / `cases_xcore.tsv` / `cases_sphinx.tsv` / `cases_artop_runtime.tsv` | 各模块 C++ 测试 ↔ Rust 测试 等价映射表（`group<TAB>cpp_test<TAB>rust_test<TAB>pkg`） |
 | `compare.py` | 跑 oracle + 逐条跑 Rust 测试，输出 `PASS/PENDING/REGRESSION` 汇总 |
 | `interop_xmi.py` | Rust ↔ C++ **双向 XMI** 文件交接（4 步：A Rust 写/C++ 读、B C++ 写/Rust 读、C/D 交叉回写） |
 | `build_xmi_interop.sh` | 构建 `interop_xmi.py` 的 C++ 半侧（`interop_xmi_main.cpp`）→ `build/interop_xmi` |
@@ -58,7 +59,8 @@ python3 tools/conformance/compare.py
 | 模块 | oracle（C++） | 映射/PASS | 命令 |
 |---|---|---|---|
 | `emf-common` | 193 | 188 PASS（5 条为 Rust 类型系统无法表达的空指针/重复身份语义，保留 PENDING） | `compare.py --oracle build/oracle.json --cases cases.tsv --pkg emf-common` |
-| `emf-ecore` | 153 | 62 PASS | `compare.py --oracle build/ecore_oracle.json --cases cases_ecore.tsv --pkg emf-ecore` |
+| `emf-ecore` | 153 | 153 PASS（0 PENDING） | `compare.py --oracle build/ecore_oracle.json --cases cases_ecore.tsv --pkg emf-ecore` |
+| `emf-xmi` | 187 | 183 映射 / 182 PASS（5 PENDING：4 条未映射 + 1 条 C++ 参考自身失败） | `compare.py --oracle build/xmi_oracle.json --cases cases_xmi.tsv --pkg emf-xmi` |
 | `emf-edit` | 26 | 26 PASS（0 PENDING） | `compare.py --oracle build/edit_oracle.json --cases cases_edit.tsv --pkg emf-edit` |
 | `emf-acceleo` | 26 | 26 PASS（0 PENDING） | `compare.py --oracle build/acceleo_oracle.json --cases cases_acceleo.tsv --pkg emf-acceleo` |
 | `emf-xcore` | 14 | 14 PASS（0 PENDING） | `compare.py --oracle build/xcore_oracle.json --cases cases_xcore.tsv --pkg emf-xcore` |

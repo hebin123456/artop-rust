@@ -8,7 +8,7 @@
 ## 1. 目标与底层思路
 
 - 目标：把每个 `emf-*` C++ 模块做成**行为等价**的 Rust crate；artop（AUTOSAR）专属层在此基础上叠加。
-- 反射与继承：用**元数据**（`eSuperTypes` 图 + FeatureID）表达继承，而非 Rust 类型继承。这样 1925 类的 AUTOSAR 元模型也能秒级编译。通用算法通过 `&dyn` / 枚举分派。
+- 反射与继承：用**元数据**（`eSuperTypes` 图 + FeatureID）表达继承，而非 Rust 类型继承。这样 2105 类的 AUTOSAR 元模型也能秒级编译。通用算法通过 `&dyn` / 枚举分派。
 - 行为等价：Rust 与 C++ 用同一套测试用例，产出可对比的结果（诊断、序列化、反射查询）。见 §5 的一致性测试框架。
 
 ### 分层与解耦原则（务必遵守）
@@ -44,11 +44,12 @@ crates/
     artop-codegen     <- emf-artop/emf-artop-codegen（.ecore → 静态模型）
     artop-validation  <- emf-artop/emf-artop-validation（AUTOSAR 业务约束，叠在 emf-validation 之上）
 examples/
-  arxml-roundtrip   <- examples/arxml_roundtrip
-  arxml-validate    <- examples/arxml_validate
+  arxml-roundtrip          <- examples/arxml_roundtrip
+  arxml-validate           <- examples/arxml_validate
+  arxml-validation-bench   <- 批量校验的性能 / 峰值内存（VmHWM）基准
 ```
 
-上次提交（`70ff898`）完成命名重构：EMF 基础库统一为 `emf-*`，artop 专属归入 `crates/emf-artop/`。
+命名重构（`70ff898`）已把 EMF 基础库统一为 `emf-*`、artop 专属归入 `crates/emf-artop/`；此后布局未再变动。
 
 ## 3. 模块状态总览
 
@@ -60,10 +61,10 @@ examples/
 | `emf-ecore-util` | ✅ 工作 | EcoreUtil / Copier / **EObjectValidator** / **FeatureMap** / **ECrossReferenceAdapter**；其余含 extended_metadata / EList 家族骨架 |
 | `emf-ecore-codegen` | ✅ 工作 | GenModel→代码生成：ecore loader（XMI→`EPackage`）+ TypeMapper + generator（struct / `match` 反射表 / `register_package`）+ 顶层 `GenModel` API 与 CLI（`.ecore` → 落盘可独立编译 crate），生成的 crate 可脱离 `.ecore` 编译运行 |
 | `emf-xmi` | ✅ 工作 | saver + loader + 真实 `XMIResource` + `ResourceSet` 按需加载集成（`ResourceHandle` / `ResourceFactory` / `XMIResourceFactory`）；**`XMLHelper`**（命名空间上下文栈 + feature kind 分类 + 按名查询）+ **`XMLLoadImpl`**（`XMLLoad` trait + 默认实现委托资源加载器）已实现并测试通过 |
-| `emf-xsd` | ✅ 工作 | XSD 元模型：`XSDSchema` / `complexType` / `simpleType` / `element` / `attribute` / `annotation` / compositor（sequence/choice/all）/ facets / import/include/redefine（普通 Rust 类型 + fluent builder）+ `xsd_parser`（基于 `emf-xmi` 的 XML 解析器，按 local name 忽略命名空间前缀，`maxOccurs="unbounded"`→`-1`） |
+| `emf-xsd` | ✅ 工作 | XSD 元模型：`XSDSchema` / `complexType` / `simpleType` / `element` / `attribute` / `annotation` / compositor（sequence/choice/all）/ facets / import/include/redefine（普通 Rust 类型 + fluent builder）+ `xsd_parser`（基于 `emf-xmi` 的 XML 解析器，按 local name 忽略命名空间前缀，`maxOccurs="unbounded"`→`-1`）+ **`XSDValidator`**（实例校验全诊断码；`pattern` 用 crate 内 Thompson NFA，不引入外部 regex）+ **`XSDSchemaCompositor`** / `XSDSchemaRegistry` / `XSDResource`（incorporation 追踪边 + targetNamespace 回退）；C++ 测试文件为空，按 `sample.xsd` 编写同类集成对照 |
 | `emf-edit` | ✅ 工作 | `EditingDomain` + `SetCommand` / `AddCommand`（单值+集合）/ `RemoveCommand` / `MoveCommand` / `ReplaceCommand`（经 `BasicCommandStack` undo/redo）；`ChangeDescription`；`AdapterFactoryEditingDomain` + `TransactionalEditingDomain`（通知延迟 + 嵌套事务 + 提交合并去重）；`ComposedAdapterFactory` / `TreeNode`+`TreeIterator` / `EditUtil` / `EMFEditPlugin` / provider 接口；C++ 三测试文件（Command/EditingDomain/Placeholder）已逐条对照全绿 |
 | `emf-compare` | ✅ 工作 | 两方/三方比较全管线：`MatchEngine`（ID / 就近匹配）+ `DiffEngine`（属性 / 引用 / MOVE 差分）+ `EquivalenceEngine` + `ConflictDetector`（真/伪冲突）+ `RequirementEngine`（依赖排序）+ `MergeEngine`（按依赖拓扑应用并标记 merged）+ `DiffFilter`；模型类型 `Diff` / `Match` / `Conflict` / `Equivalence` / `Dependency` / `Comparison` |
-| `emf-validation` | ✅ 工作 | `Constraint` / `EValidator` / `Diagnostician` / `ConstraintDescriptor`（批量+实时校验） |
+| `emf-validation` | ✅ 工作 | `Constraint` / `EValidator`（`validate_EveryDefaultConstraint` 等默认约束）/ `Diagnostician` / `ConstraintDescriptor`；`constraint_parser`（OCL 子集递归下降 + 集合/字符串/整数/对象操作库，113 例）/ `constraint_descriptor` / `annotation_constraint_loader`（依赖 `EClass.eAnnotations`）/ `live_validator`（attach/detach/listener）/ `validation_service`（validate / validate_all + include_root / include_live）；C++ 7 个测试文件（EValidator/ConstraintParser/ConstraintDescriptor/AnnotationConstraintLoader/LiveValidator/ValidationService/ValidationE2E）已逐条对照 |
 | `emf-xcore` | ✅ 工作 | Xcore DSL 解析器：`dsl`（Package/EClass/EDataType/EEnum/Feature/Annotation AST，Multiplicity 与 kind 判定）+ `parser`（递归下降：注解 `@key[.value]`、`package/class/interface/abstract`、`extends`、`#` containment 引用、`?*/` 多重性、`@DataType`/`@Enum`），23+ 用例覆盖 |
 | `emf-acceleo` | ✅ 工作 | Acceleo MTL/`M2T` 引擎（对 C++ `AcceleoAst.h`/`AcceleoParser.cpp`/`AcceleoEngine.cpp` 的 1:1 移植）：`ast`（Block：Text/Expr/For/If/Let/File/Protected；Expr：Var/String/Int/Bool/Nav/Call/CollectionLit/If/Lambda）+ `parser`（递归下降：`[module]`/`template`/`query`/`import`/`extends`、`[for]/[if]/[let]/[file]/[protected]`、`post(...)` 容错）+ `engine`（`AcceleoEngine`/`AcceleoService`：上下文/服务注册/模板·查询查找、表达式求值、`=`/`or`/`and`/比较/算术、lambda + `->collect/select/reject/forAll/exists/size` 集合操作、`[file]` 落盘与 `[protected]` 区域合并）；C++ `AcceleoTests.cpp`(18) + `AlignmentTests.cpp`(8) 已逐条对照，26 条全 PASS（`cpp_parity_acceleo`） |
 | `emf-sphinx` | ✅ 工作 | headless 核心：`Node`（attributes/children fluent builder）+ `Root`/`Model`（全路径索引 O(1) `resolve`）+ 深度遍历（`Continue`/`Prune`/`Stop` 控制）；Sphinx 扩展：`metamodel`（`MetaModelDescriptor`/`AbstractMetaModelDescriptor` + `MetaModelVersionData` + thread-local `MetaModelDescriptorRegistry`）、`resource`（`SchemaLocationUriHandler`/`ExtendedBasicExtendedMetaData`/`ModelConverterRegistry`）、`scoping`（`FileResourceScope`/`FileResourceScopeProvider`/`ResourceScopeProviderRegistry`）、`ecore`（`OrderedFeatureMap`）、`util`（`EcoreResourceUtil`）；C++ 5 个测试文件 68 条已逐条对照并全 PASS（`cpp_parity_sphinx`） |
@@ -79,7 +80,7 @@ examples/
 - **`Resource` / `ResourceSet`**：URI 编址的模型持久化单元，`e_resource()` 沿包容树向上解析。
 - **`EcorePackage`**：线程局部全局注册表（`thread_local!` + `RefCell`），内建 `EString`/`EInt`/… 数据类型 + 20 个 meta-类。提供 `datatype::from_string`/`to_string` 字面量互相转换。
 - **`EClass` 继承**：元数据式 `eSuperTypes` 名表 + 祖先优先遍历；`e_all_structural_features` 按 FeatureID 去重；`e_all_attributes` / `e_all_references` 拆分；`is_super_type_of` 为严格祖先语义。
-- **`DynamicEObject`**：按 FeatureID 存储的可反射对象；`eGet/eSet/eIsSet/eUnset`；支持绑定额外注册表（`new_in`/`bind_registry`）以解析继承特征。
+- **`DynamicEObject`**：按**类内特征槽位索引**存储的可反射对象（任意拼写经 `by_name` 解析到同一槽位：arxml 登记名与 `ecore.name` 别名都命中，既避免跨包 feature-id 冲突，也不再用 `String` 键做逐特征堆分配）；`eGet/eSet/eIsSet/eUnset`；支持绑定额外注册表（`new_in`/`bind_registry`）以解析继承特征。
 - **`EFactory`**：`create(EClass)` 实例化 `DynamicEObject`；`createFromString` / `convertToString` 处理内建数据类型与枚举。
 
 ### 本阶段亮点修复
@@ -98,12 +99,16 @@ oracle，跑参考结果；Rust 侧跑同名/对应测试，逐条比对。**一
   `compare.py`（跑 Rust 侧并输出 PASS/PENDING/REGRESSION）、`cases.tsv`（C++↔Rust 映射表）。
 - 当前基线：oracle 全量 193 条；已映射 **188** 条全部 `PASS`，剩余 5 条 `PENDING`(未映射)。尚未映射的 5 条均为 **Rust 类型系统无法如实表达**的语义：`ENotifier_AddAdapter_Duplicate_NotAdded`（Box 所有权无重复身份）、`ENotifier_AddAdapter_Null_Ignored` / `ENotifier_RemoveAdapter_Null_NoChange` / `Resource_AddToContents_NullPointer`（`Box<dyn Adapter>` / `ObjectRef` 无空指针）、`Placeholder`（C++ 空跑测试）。这些在 Rust 中无意义，保留为 PENDING 不失真。
 - 已接入 CI（`conformance` job）：CI 检出 artop-cpp、编译并跑 oracle、再与 Rust 比对。
-- 多 crate oracle：`build_ecore_oracle.sh`（emf-ecore，153 条）、`build_edit_oracle.sh`（emf-edit）、
-  `build_acceleo_oracle.sh`（emf-acceleo，26 条）、`build_sphinx_oracle.sh`（emf-sphinx，68 条）、
+- 多 crate oracle：`build_ecore_oracle.sh`（emf-ecore，153 条）、`build_xmi_oracle.sh`（emf-xmi，187 条）、
+  `build_edit_oracle.sh`（emf-edit，26 条）、`build_acceleo_oracle.sh`（emf-acceleo，26 条）、
+  `build_xcore_oracle.sh`（emf-xcore，14 条）、`build_sphinx_oracle.sh`（emf-sphinx，68 条）、
   `build_artop_runtime_oracle.sh`（artop-runtime，18 条）；映射表 `cases.tsv` /
-  `cases_ecore.tsv` / `cases_edit.tsv` / `cases_acceleo.tsv` / `cases_sphinx.tsv` / `cases_artop_runtime.tsv`。
-  其中 **`emf-ecore` 153 条**、`emf-edit` 26 条、`emf-acceleo` 26 条、`emf-sphinx` 68 条、
-  `artop-runtime` 18 条均为 **0 PENDING 全 PASS**。
+  `cases_ecore.tsv` / `cases_xmi.tsv` / `cases_edit.tsv` / `cases_acceleo.tsv` / `cases_xcore.tsv` /
+  `cases_sphinx.tsv` / `cases_artop_runtime.tsv`。
+  其中 **`emf-ecore` 153 条**、`emf-edit` 26 条、`emf-acceleo` 26 条、`emf-xcore` 14 条、
+  `emf-sphinx` 68 条、`artop-runtime` 18 条均为 **0 PENDING 全 PASS**；`emf-xmi` 187 条中
+  183 条已映射、182 PASS（5 PENDING：4 条未映射 + 1 条 C++ 参考自身失败）。
+  逐条数字与命令见 `tools/conformance/README.md`。
 
 复用路径：C++ oracle 单测 → `tools/conformance/build`，与 CI 的 `conformance` job 对齐。
 
@@ -120,13 +125,14 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 ## 7. 下一步（按优先级）
 
-已完成：emf-common/ecore 核心、EcoreUtil/Copier、XMI saver+loader、Resource/XMI 持久化集成；一致性框架已多 crate 化并建立全量 oracle——**`emf-ecore` 153 条已 153/153 全映射并全 PASS（0 PENDING / 0 REGRESSION）**，`emf-edit`(26) / `emf-acceleo`(26) / `emf-sphinx`(68) / `emf-xmi` / `artop-runtime`(18) 亦全 PASS（见 `docs/EMF_PARITY_GATE.md`）。**EMF 底座门线已解除，artop 允许开发与发布。**
+**当前状态**：EMF 通用底座与 artop 专属层均已可用，`v1.0.0` 已四平台发布（`3076149`；三份归档见 README）。一致性框架已多 crate 化并建立全量 oracle：`emf-ecore` 153/153、`emf-edit` 26、`emf-acceleo` 26、`emf-xcore` 14、`emf-sphinx` 68、`artop-runtime` 18 均 **0 PENDING 全 PASS**；`emf-common` 188/193（余 5 条为 Rust 类型系统无法表达的空指针 / 重复身份语义，保留 PENDING）；`emf-xmi` 亦已接入 oracle。逐条数字与命令见 `tools/conformance/README.md`，门线判定见 `docs/EMF_PARITY_GATE.md`。**EMF 底座门线已解除，artop 允许开发与发布。**
 
-1. `emf-xmi` 进一步落地：`XMILoadImpl` / `XMIHelper` 接口（`XMIResourceFactory` + `ResourceSet.getResource` 按需加载已完成）。`emf-ecore` 的容器/inverse-list 通知、指针身份类等原「未映射项」已全部补齐（153/153）。
-2. `emf-ecore-util` 剩余：Adapter / ECrossReferenceAdapter / containment 遍历到 `all_contents` 的流式实现。
-3. `emf-sphinx` 剩余：`ExtendedResource`/`ProxyHelper`/`ModelDescriptor`/`EcoreTraversalHelper` 等在 C++ 侧仍为骨架或空测试，随上层用例补齐再逐条对照。
-4. `artop-runtime`：AUTOSAR 序列化/反序列化（届时才引入 artop 相关内容）。
-5. `artop-codegen`：C++ `emf-artop-codegen` 已 1:1 移植完成（Milestone 26）。**已完成**：`artop_codegen::registry_gen` 递归 `eSubpackages` 并把 ARXML 元数据（`xml.name` / APRXML 标志 / `atp.Splitkey` / `ordered` / `xml.nsPrefix`）生成进静态 crate，取代了 `artop_codegen::registry_gen`（Python），实现「`.ecore` → 可直接读写 arxml 的全量静态模型」。生成器 CLI：`artop-codegen registry <gautosar.ecore> <autosar448.ecore> <out/registry.rs>`（产物经 `cargo fmt` 后与提交的 `registry.rs` 逐字节一致，由 `artop-codegen/tests/registry_model.rs` 钉住）。2100+ 类的重编译走 GitHub Actions（`.github/workflows/model-codegen.yml`），不在本地编译。
+仍只能部分对照的边角（C++ 侧本身即为骨架 / 空测试，无完整可对照行为）：
+
+1. `emf-ecore-codegen`：C++ 专属发射器（`emit*` C++ 文本 / `CppGenerator` / `Emitter`）不移植——Rust 侧生成的是 Rust 代码，非目标；语言无关部分（`TypeMapper` / `render_template` / JET 模板）已移植。
+2. `emf-xsd`：`xsd:redefine` 的组件重定义替换、`cloneConcreteComponent` 等 C++ 侧仅声明未实现的项目保持未实现（已覆盖 incorporation 的追踪边 + 命名空间回退协议）。
+3. `emf-sphinx`：`ExtendedResource` / `ProxyHelper` / `ModelDescriptor` 在 C++ 为空测试文件，无对照。
+4. artop：AUTOSAR 业务约束与 C++ 诊断逐条对齐（`dfa4d73`，本机样本 6992 / 27664 / 55176 与 C++ oracle 一致），并持续做大文件性能与内存优化（`dead4d4`）。
 
 ## 7.1 `AutosarXMLSaver`（arxml 写核心）—— 已完成
 
@@ -375,5 +381,30 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 | `70ff898` | 命名重构：EMF 基础库 `emf-*`，artop 专属入 `crates/emf-artop/` |
 | `df146ec` | 完成 `emf-common` + `emf-ecore` EMF 基础层（完整实现 + 集成测试） |
 | `c8a71f7` | 复用 artop-cpp 权威样本做 C++ 对照：静态建模 + XMI roundtrip 9 条对照测试（Milestone 15） |
+| `2e09c08` | `emf-edit` 对齐完成（commands / editing domains / plugin / conformance） |
+| `bde71c5` | `emf-acceleo` 1:1 移植（parser/engine）+ `emf-sphinx` 移植，二者接入 conformance |
+| `25de286` | conformance 增加 `emf-xmi` oracle 构建与 Rust 对照 |
+| `edb5962` | 证明 Rust ↔ C++ 双向 XMI 文件互操作 |
+| `17d2e8e` | `emf-xcore` 移植 DSL parser/generator/resource + C++ 对照测试 |
+| `fed2824` | `emf-common` 移植 `Resource.setResourceSet` 回链（C++ 对齐） |
+| `7a65c22` | `emf-xsd` 移植 `XSDValidator`（crate 内自研 regex 引擎） |
+| `7262c5b` | `emf-xsd` 移植 schema incorporation（`XSDSchemaCompositor` + `XSDResource`） |
+| `3ca2438` | artop 层起步：`autosar448` 静态模型 + `artop-runtime` 基座 |
+| `ab61f99` | 移植 AUTOSAR 资源层（`AutosarResource` / `AutosarResourceFactory` / `AutosarResourceSet`） |
+| `12cf9ed` | 把 ARXML 序列化元数据带到 bridged 元模型 |
+| `8c4b8b1` | 移植 `artop-runtime` C++ 测试并注册内建元模型 |
+| `459c1d5` | 移植 ARXML 反序列化器（`AutosarXMLLoader`） |
+| `cde367e` | 移植 ARXML 序列化器（`AutosarXMLSaver`） |
+| `f04e643` | 真实 AUTOSAR 样本 round-trip（`xml:space` / `BASE` 引用） |
+| `3fe1af6` | 保持 `eSuperTypes` 声明顺序以实现逐字节一致的 arxml |
+| `c029c33` | 证明 Rust ↔ C++ ARXML 双向互操作 |
+| `66586e0` | 无序 arxml 子元素按 `atp.Splitkey` 排序 |
+| `f1849e6` | 未映射 arxml 元素逐字回放 |
+| `b2fba15` | arxml 跳过元素的模型驱动兜底 |
 | `1af0de4` | 移植 C++ `emf-artop-codegen`（`ArtopCppGenerator`）为 Rust crate `artop-codegen`（Milestone 26） |
 | `d5541a3` | `artop_codegen::registry_gen` 取代 Python 生成全量静态模型；CLI `registry` 子命令 + `registry_model.rs` 对照测试 + `model-codegen.yml`（GitHub 编译 2100+ 类）（Milestone 27） |
+| `3076149` | `emf-ecore` 对齐收口（153/153，0 PENDING / 0 REGRESSION）并发布 1.0.0 四平台归档 |
+| `1c85f8d` `71f6c42` | release 工作流修复：sparse-checkout artop-cpp 样本、关闭 autocrlf |
+| `dfa4d73` | AUTOSAR 诊断与 C++ 逐条对齐；修复 arxml 侧表跨 load 泄漏（`clear_for_objects`） |
+| `2e68f3a` | `cargo fmt --all` 全仓格式化（修复 CI format check） |
+| `dead4d4` | 模型/解析树内存优化：`dynamic_settings` 改按特征槽位索引、`e_cross_references`/`contents` 去掉逐对象深拷贝、`PackageRegistry` 写时复制、DOM `Element` 去掉冗余 `local`/`prefix` |

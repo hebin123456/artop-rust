@@ -13,9 +13,9 @@ The goal is a 1:1 functional port of every `emf-*` C++ module:
 Inheritance and reflection are represented as **metadata** (`eSuperTypes` graph),
 not as Rust type inheritance. See `crates/emf-artop/autosar448-model` for the
 generated AUTOSAR 4.4.8 registry and its EMF reflection algorithms
-(`eAllFeatures`, `isSuperTypeOf`, `eGet`). This keeps a 1925-class metamodel
-compiling in seconds. General algorithms dispatch through `&dyn` / enumerated
-kinds instead of monomorphizing over every class.
+(`eAllFeatures`, `isSuperTypeOf`, `eGet`). This keeps the 2105-class AUTOSAR
+metamodel compiling in seconds. General algorithms dispatch through `&dyn` /
+enumerated kinds instead of monomorphizing over every class.
 
 ## Naming & workspace layout
 
@@ -46,6 +46,7 @@ Each directory mirrors one C++ module; module names map 1:1 to C++ translation u
 | `emf-artop/artop-validation` | `emf-artop/emf-artop-validation` (AUTOSAR business constraints over `emf-validation`) | **working** |
 | `examples/arxml-roundtrip` | `examples/arxml_roundtrip` | **working** |
 | `examples/arxml-validate` | `examples/arxml_validate` | **working** |
+| `examples/arxml-validation-bench` | — (Rust-only benchmark) | **working** |
 
 ## Read & write ARXML directly
 
@@ -103,6 +104,11 @@ regenerates and builds it on GitHub rather than locally.
 MIT (matching `artop-cpp`).
 
 ## Progress
+
+Status: **v1.0.0** (four-platform release). Every `emf-*` module and the artop
+layer (`autosar448-model` / `artop-runtime` / `artop-codegen` /
+`artop-validation`) are working; the two `arxml` CLIs read and write AUTOSAR
+4.4.8 byte-for-byte identically to the C++/Java serializers.
 
 Detailed, per-module port progress lives in [`docs/PROGRESS.md`](docs/PROGRESS.md).
 

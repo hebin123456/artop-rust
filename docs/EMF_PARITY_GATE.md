@@ -23,9 +23,11 @@
 - `emf-ecore`：C++ oracle 共 **153** 条（`tools/conformance/build/ecore_oracle.json`，153 pass），
   `tools/conformance/cases_ecore.tsv` 已 **153/153 全映射**，`compare.py` 结果为
   **等价(PASS) 153、待实现(PENDING) 0、REGRESSION 0**。
-- 其余底座模块 oracle 亦为 0 PENDING 全 PASS：`emf-common`（含 command / NotifyingList /
-  SegmentSequence / UniqueEList / ENotifier / EAdapter）、`emf-edit`(26)、`emf-acceleo`(26)、
-  `emf-sphinx`(68)；artop 侧 `artop-runtime`(18) 同步对齐（见 `docs/PARITY_TRACKER.md`）。
+- 其余底座模块 oracle：`emf-edit`(26) / `emf-acceleo`(26) / `emf-xcore`(14) / `emf-sphinx`(68)
+  均 **0 PENDING 全 PASS**；`emf-common` **188/193**（余 5 条为 Rust 类型系统无法如实表达的
+  空指针 / 重复身份语义，保留 PENDING）；`emf-xmi` 187 条 oracle 中 **183 条已映射、182 PASS**
+  （5 PENDING：4 条未映射 + 1 条 C++ 参考自身失败）。artop 侧 `artop-runtime`(18) 同步对齐为
+  **0 PENDING 全 PASS**（见 `docs/PARITY_TRACKER.md` 的 artop-runtime 章节）。
 - 曾记作“不可 1:1 移植”的 2 条 emf-ecore 用例已如实表达并转 PASS：
   `BasicEObject_EClass_DefaultNull`（裸 `EObject` 的 `e_class()` 返回空名表达“无分类器”）、
   `RemoveAdapter_DuringNotify_SafeIteration`（`remove_adapter` 已对齐 C++/Java
