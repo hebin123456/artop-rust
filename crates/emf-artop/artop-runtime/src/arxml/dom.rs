@@ -10,14 +10,23 @@
 //! and prefix (mirroring pugixml's non-namespace-aware node names).
 
 /// A node inside an element's content, in document order.
+///
+/// Every variant is boxed/sliced so that `Node` stays 24 bytes: an arxml parse
+/// tree holds one `Node` per element *plus* one per text run, and the
+/// document-order `Vec<Node>` slot is the single largest consumer of load-time
+/// memory. With `Element` stored inline, `Node` was 80 bytes and a 1.3M-element
+/// / 2.6M-text-run document spent ~314 MB on slots alone (plus doubling slack);
+/// boxing `Element` and using `Box<str>` for character data shrinks the slot to
+/// 24 bytes. `Element` is ~50x rarer than text, so the extra indirection per
+/// element is far cheaper than the inline layout it replaces.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Node {
     /// A child element.
-    Element(Element),
+    Element(Box<Element>),
     /// Character data (pcdata or CDATA), preserved with whitespace.
-    Text(String),
+    Text(Box<str>),
     /// An XML comment (`<!-- ... -->`); the stored text excludes the delimiters.
-    Comment(String),
+    Comment(Box<str>),
 }
 
 /// An XML element with its raw name, attributes and ordered content.
@@ -63,7 +72,7 @@ impl Element {
     /// Iterate the child elements (ignoring text and comments).
     pub fn element_children(&self) -> impl Iterator<Item = &Element> {
         self.children.iter().filter_map(|c| match c {
-            Node::Element(e) => Some(e),
+            Node::Element(e) => Some(&**e),
             _ => None,
         })
     }
@@ -212,7 +221,7 @@ impl<'a> Parser<'a> {
             } else if self.starts_with("<!--") {
                 if let Some(end) = find(self.s, self.pos, b"-->") {
                     let text = String::from_utf8_lossy(&self.s[self.pos + 4..end]).into_owned();
-                    children.push(Node::Comment(text));
+                    children.push(Node::Comment(text.into()));
                     self.pos = end + 3;
                 } else {
                     return Err("arxml: unterminated comment".to_string());
@@ -220,7 +229,7 @@ impl<'a> Parser<'a> {
             } else if self.starts_with("<![CDATA[") {
                 if let Some(end) = find(self.s, self.pos, b"]]>") {
                     let text = String::from_utf8_lossy(&self.s[self.pos + 9..end]).into_owned();
-                    children.push(Node::Text(text));
+                    children.push(Node::Text(text.into()));
                     self.pos = end + 3;
                 } else {
                     return Err("arxml: unterminated CDATA".to_string());
@@ -233,11 +242,11 @@ impl<'a> Parser<'a> {
                 }
             } else if self.peek() == Some(b'<') {
                 if let Some(child) = self.parse_element()? {
-                    children.push(Node::Element(child));
+                    children.push(Node::Element(Box::new(child)));
                 }
             } else {
                 let text = self.read_text();
-                children.push(Node::Text(text));
+                children.push(Node::Text(text.into()));
             }
         }
     }
@@ -384,11 +393,11 @@ mod tests {
         // The comment splits the surrounding whitespace, so the content is
         // text / comment / text / element / text — all five preserved.
         assert_eq!(root.children.len(), 5);
-        assert!(matches!(&root.children[0], Node::Text(t) if t == "\n  "));
-        assert!(matches!(&root.children[1], Node::Comment(c) if c == " c "));
-        assert!(matches!(&root.children[2], Node::Text(t) if t == "\n  "));
+        assert!(matches!(&root.children[0], Node::Text(t) if &**t == "\n  "));
+        assert!(matches!(&root.children[1], Node::Comment(c) if &**c == " c "));
+        assert!(matches!(&root.children[2], Node::Text(t) if &**t == "\n  "));
         assert!(matches!(&root.children[3], Node::Element(_)));
-        assert!(matches!(&root.children[4], Node::Text(t) if t == "\n"));
+        assert!(matches!(&root.children[4], Node::Text(t) if &**t == "\n"));
     }
 
     #[test]

@@ -12,3 +12,8 @@ path = "src/main.rs"
 artop-runtime = { workspace = true }
 emf-common = { workspace = true }
 emf-ecore = { workspace = true }
+
+# Large arxml loads allocate hundreds of millions of small, short-lived nodes.
+# glibc's malloc keeps those pages resident (a 320 MB document peaked at ~3.7 GB),
+# so the example links mimalloc, which purges free pages back to the OS.
+mimalloc = { version = "0.1", default-features = false }

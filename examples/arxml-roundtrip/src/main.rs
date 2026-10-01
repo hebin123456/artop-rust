@@ -13,8 +13,16 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use artop_runtime::{AutosarResourceFactory, AutosarXMLResource};
+
 use emf_common::uri::Uri;
 use emf_ecore::ecore_package;
+
+/// See [`Cargo.toml`](..): the parse tree and the model are built from many
+/// small allocations, and glibc keeps their pages resident long after the parse
+/// tree is dropped. mimalloc returns them to the OS, which keeps peak RSS close
+/// to the live set instead of the sum of everything ever allocated.
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 /// Load an arxml document into an AUTOSAR resource using the static model.
 fn load(path: &str) -> Result<AutosarXMLResource, String> {

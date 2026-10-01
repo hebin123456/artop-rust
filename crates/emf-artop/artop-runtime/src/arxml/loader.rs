@@ -153,7 +153,7 @@ impl XMLLoader for AutosarXMLLoader {
     fn load(&self, resource: &mut XMIResource, input: &str) -> Result<(), String> {
         let timing = std::env::var_os("ARXML_TIMING").is_some();
         let t_parse = std::time::Instant::now();
-        let root = dom::parse(input)?;
+        let mut root = dom::parse(input)?;
         if timing {
             eprintln!(
                 "[timing] dom_parse = {:?} rss={} MB (input string = {} MB)",
@@ -176,7 +176,7 @@ impl XMLLoader for AutosarXMLLoader {
 
         let mut loader = ArxmlLoader::new(reg);
         let t_build = std::time::Instant::now();
-        let root_obj = loader.build_object(&root, &autosar_class);
+        let root_obj = loader.build_object(&mut root, &autosar_class);
         if timing {
             eprintln!("[timing] build = {:?} rss={} MB", t_build.elapsed(), rss_mb());
             let objs = OBJ_COUNT.with(|c| c.get());
@@ -340,7 +340,13 @@ impl ArxmlLoader {
     // ---- phase 1: build ----
 
     /// Build an object of `class` from `el` (C++ `buildObject`).
-    fn build_object(&mut self, el: &Element, class: &EClass) -> Option<ObjectRef> {
+    ///
+    /// Takes `el` by unique borrow so that the child list can be *consumed*:
+    /// each subtree's DOM nodes are dropped as soon as the model objects they
+    /// produced have been built. The parse tree and the model would otherwise
+    /// stay resident side by side for the whole build, making peak load memory
+    /// the *sum* of both instead of their maximum.
+    fn build_object(&mut self, el: &mut Element, class: &EClass) -> Option<ObjectRef> {
         let t_new = std::time::Instant::now();
         let obj: ObjectRef = Rc::new(RefCell::new(DynamicEObject::new_in(
             class.clone(),
@@ -361,16 +367,16 @@ impl ArxmlLoader {
                 return Some(obj);
             }
             "mixed" => {
-                for child in &el.children {
+                for child in std::mem::take(&mut el.children) {
                     match child {
                         Node::Text(t) if !t.is_empty() => {
-                            store::push_mixed_content(&obj, MixedEntry::Text(t.clone()));
+                            store::push_mixed_content(&obj, MixedEntry::Text(t.to_string()));
                         }
                         Node::Comment(c) => {
-                            store::push_mixed_content(&obj, MixedEntry::Comment(c.clone()));
+                            store::push_mixed_content(&obj, MixedEntry::Comment(c.to_string()));
                         }
-                        Node::Element(e) => {
-                            let child_obj = self.dispatch_child(&obj, class, e);
+                        Node::Element(mut e) => {
+                            let child_obj = self.dispatch_child(&obj, class, &mut e);
                             if let Some(c) = child_obj {
                                 store::push_mixed_content(&obj, MixedEntry::Element(c));
                             }
@@ -388,15 +394,17 @@ impl ArxmlLoader {
         for child in &el.children {
             match child {
                 Node::Element(_) => break,
-                Node::Comment(c) => comments.push(c.clone()),
+                Node::Comment(c) => comments.push(c.to_string()),
                 Node::Text(_) => {}
             }
         }
         if !comments.is_empty() {
             store::set_comments(&obj, comments);
         }
-        for child in el.element_children() {
-            self.dispatch_child(&obj, class, child);
+        for child in std::mem::take(&mut el.children) {
+            if let Node::Element(mut e) = child {
+                self.dispatch_child(&obj, class, &mut e);
+            }
         }
         Some(obj)
     }
@@ -407,7 +415,7 @@ impl ArxmlLoader {
         &mut self,
         obj: &ObjectRef,
         class: &EClass,
-        el: &Element,
+        el: &mut Element,
     ) -> Option<ObjectRef> {
         let t_ff = std::time::Instant::now();
         let feature = self.find_feature(class, el.local());
@@ -503,7 +511,7 @@ impl ArxmlLoader {
         &mut self,
         obj: &ObjectRef,
         f: &EStructuralFeature,
-        el: &Element,
+        el: &mut Element,
     ) -> Option<ObjectRef> {
         let plural = explicit_plural(f);
         let is_wrapper = (f.is_role_wrapper() || f.is_type_wrapper())
@@ -513,14 +521,15 @@ impl ArxmlLoader {
         if is_wrapper {
             let mut last = None;
             let mut collected = Vec::new();
-            for child in el.element_children() {
-                match self.determine_child_class(child, f.type_name()) {
+            for child in std::mem::take(&mut el.children) {
+                let Node::Element(mut e) = child else { continue };
+                match self.determine_child_class(&e, f.type_name()) {
                     Some(class) => {
-                        if let Some(child_obj) = self.build_object(child, &class) {
+                        if let Some(child_obj) = self.build_object(&mut e, &class) {
                             collected.push(child_obj);
                         }
                     }
-                    None => store::push_unknown_content(obj, child.clone()),
+                    None => store::push_unknown_content(obj, *e),
                 }
             }
             for child_obj in collected {
@@ -544,7 +553,7 @@ impl ArxmlLoader {
         &mut self,
         obj: &ObjectRef,
         f: &EStructuralFeature,
-        el: &Element,
+        el: &mut Element,
     ) -> Option<ObjectRef> {
         let plural = explicit_plural(f);
         let is_wrapper = (f.is_role_wrapper() || f.is_type_wrapper())
@@ -772,7 +781,7 @@ impl ArxmlLoader {
     fn apply_wrapped_element(
         &mut self,
         obj: &ObjectRef,
-        el: &Element,
+        el: &mut Element,
         wrapped: &WrappedFeature,
     ) -> Option<ObjectRef> {
         let wrapper_type = wrapped
@@ -831,7 +840,7 @@ impl ArxmlLoader {
         &mut self,
         owner: &ObjectRef,
         owner_class: &EClass,
-        child: &Element,
+        child: &mut Element,
         depth: usize,
     ) -> bool {
         if depth > 8 {
@@ -899,8 +908,10 @@ impl ArxmlLoader {
                         self.reg.clone(),
                     )));
                     self.apply_attributes(&inline_obj, &e_class, child);
-                    for grandchild in child.element_children() {
-                        self.dispatch_child(&inline_obj, &e_class, grandchild);
+                    for grandchild in std::mem::take(&mut child.children) {
+                        if let Node::Element(mut g) = grandchild {
+                            self.dispatch_child(&inline_obj, &e_class, &mut g);
+                        }
                     }
                     if e_class.content_kind() == "mixed" {
                         let text = child.text();
