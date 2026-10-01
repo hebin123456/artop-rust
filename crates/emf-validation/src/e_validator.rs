@@ -29,6 +29,105 @@ fn no_empty_name_eval(target: &dyn EObject) -> bool {
     name.map(|n| !n.is_empty()).unwrap_or(true)
 }
 
+/// EMF built-in default constraints (diagnostic source `org.eclipse.emf.ecore`),
+/// the Rust port of C++ `emf-ecore-util::EObjectValidator::validate_EveryDefaultConstraint`.
+///
+/// C++ `EValidator::validate(target, mode)` unconditionally runs this bridge in
+/// *both* BATCH and LIVE modes (see `EValidator.cpp`), so a faithful Rust
+/// `validate_mode` must too. The sub-checks that need model metadata absent from
+/// the Rust dynamic surface (`eOpposite`, `eKeys`, enum literals, `EcoreUtil.getID`)
+/// are no-ops exactly like their C++ counterparts (`validate_UniqueID`,
+/// `validate_MapEntryUnique`), so the observable output matches.
+///
+/// Only targets backed by the dynamic model carry structural-feature metadata
+/// (`structural_features_ref()`); other targets yield no diagnostics, matching
+/// C++ only in the sense that C++ always has an `EClass` — the benchmark and all
+/// ARXML loads go through `DynamicEObject`, so this is the exercised path.
+fn emf_default_constraints(target: &dyn EObject) -> Vec<emf_common::diagnostic::Diagnostic> {
+    use emf_common::diagnostic::{Diagnostic, Severity};
+
+    /// `EObjectValidator.DIAGNOSTIC_SOURCE`.
+    const SOURCE: &str = "org.eclipse.emf.ecore";
+    /// `EOBJECT__EVERY_MULTIPCITY_CONFORMS`.
+    const MULTIPLICITY: i32 = 1;
+    /// `EOBJECT__EVERY_REFERENCE_IS_CONTAINED`.
+    const REFERENCE_CONTAINED: i32 = 3;
+    /// `EOBJECT__EVERY_PROXY_RESOLVES`.
+    const PROXY_RESOLVES: i32 = 4;
+
+    let mut out = Vec::new();
+    let Some(dyno) = target.as_any().downcast_ref::<DynamicEObject>() else {
+        return out;
+    };
+
+    // validate_EveryMultiplicityConforms → validate_MultiplicityConforms.
+    for f in dyno.structural_features_ref() {
+        if f.upper_bound() != 1 {
+            // isMany: only checked when the feature is required (lowerBound > 0).
+            //
+            // C++ `validate_MultiplicityConforms` derives the value count by
+            // type-matching `eGet`'s `std::any` against `std::vector<EObject*>`
+            // *only*. The generated AUTOSAR getters never yield that type: a
+            // many-valued reference returns an `EObjectRefView`, a many-valued
+            // attribute a `std::vector<T>`. Both therefore miss the match and the
+            // count reads 0, so C++ reports `_UI_FeatureHasTooFewValues_diagnostic`
+            // for every required many-valued feature regardless of its contents.
+            // The dynamic Rust value forms (`Val::List` of objects / scalars)
+            // correspond to those same unrecognized shapes, so mirror the
+            // observable C++ result exactly rather than counting the list.
+            if f.lower_bound() > 0 {
+                out.push(Diagnostic::new(
+                    Severity::Error,
+                    SOURCE,
+                    MULTIPLICITY,
+                    "_UI_FeatureHasTooFewValues_diagnostic",
+                ));
+            }
+        } else if f.lower_bound() > 0 && f.is_reference() {
+            // isRequired single-valued *reference*: unset *and* value-less is a
+            // violation. C++ `eGet` on a scalar attribute always yields the
+            // (defaulted) value, so only a reference can read as null — matching
+            // Java `validate_MultiplicityConforms`, whose `eGet(...) == null` test
+            // is unreachable for attributes.
+            if !dyno.e_is_set(f.name()) {
+                let is_null = dyno
+                    .e_get(f.name())
+                    .is_none_or(|v| matches!(v, Val::Null));
+                if is_null {
+                    out.push(Diagnostic::new(
+                        Severity::Error,
+                        SOURCE,
+                        MULTIPLICITY,
+                        "_UI_RequiredFeatureMustBeSet_diagnostic",
+                    ));
+                }
+            }
+        }
+    }
+
+    // validate_EveryProxyResolves / validate_EveryReferenceIsContained.
+    for xr in dyno.e_cross_references() {
+        let xr = xr.borrow();
+        if xr.e_is_proxy() {
+            out.push(Diagnostic::new(
+                Severity::Error,
+                SOURCE,
+                PROXY_RESOLVES,
+                "_UI_UnresolvedProxy_diagnostic",
+            ));
+        } else if dyno.e_container().is_some() && xr.e_container().is_none() {
+            out.push(Diagnostic::new(
+                Severity::Error,
+                SOURCE,
+                REFERENCE_CONTAINED,
+                "_UI_DanglingReference_diagnostic",
+            ));
+        }
+    }
+
+    out
+}
+
 /// Default constraint evaluator: a required (`lowerBound >= 1`), single-valued
 /// *reference* must not be null (C++ `noNullReqRefEval`).
 ///
@@ -46,7 +145,7 @@ fn no_empty_name_eval(target: &dyn EObject) -> bool {
 /// non-dynamic targets.
 fn no_null_required_ref_eval(target: &dyn EObject) -> bool {
     if let Some(dyno) = target.as_any().downcast_ref::<DynamicEObject>() {
-        for f in dyno.all_structural_features() {
+        for f in dyno.structural_features_ref() {
             if !f.is_reference() || f.is_many() {
                 // Only single-valued references can be "required but null".
                 continue;
@@ -154,6 +253,10 @@ impl EValidator {
                 ));
             }
         }
+        // C++ `EValidator::validate` additionally runs the EMF built-in default
+        // constraints (`validate_EveryDefaultConstraint`) in *both* modes,
+        // independent of the registered constraints; mirror that here.
+        out.extend(emf_default_constraints(target));
         out
     }
 

@@ -268,7 +268,9 @@ fn duplicate_uuid_produces_globally_unique_diagnostic() {
     adopt_many(&container, "elements", &e0);
     adopt_many(&container, "elements", &e1);
 
-    let diags = validate_all(&m, &container);
+    // Global uniqueness is a whole-model sweep, not a per-object constraint
+    // (aligned with C++ `validateUuidUniqueness`).
+    let diags = validate_uuid_uniqueness(&*container.borrow());
     assert!(has_diag_with(&diags, "AutosarUuidGloballyUnique"));
 }
 
@@ -296,6 +298,6 @@ fn deep_nested_duplicate_uuid_produces_diagnostic() {
     adopt_many(&outer, "others", &inner);
     adopt_many(&inner, "elements", &e1);
 
-    let diags = validate_all(&m, &outer);
+    let diags = validate_uuid_uniqueness(&*outer.borrow());
     assert!(has_diag_with(&diags, "AutosarUuidGloballyUnique"));
 }

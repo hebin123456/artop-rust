@@ -11,7 +11,7 @@
 //! that information across the load/save pair.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use emf_common::value::ObjectRef;
@@ -107,6 +107,44 @@ pub fn push_unknown_content(obj: &ObjectRef, el: dom::Element) {
 /// The unmapped XML elements recorded for `obj`, if any.
 pub fn unknown_content(obj: &ObjectRef) -> Option<Vec<dom::Element>> {
     UNKNOWN_CONTENT.with(|m| m.borrow().get(&object_key(obj)).cloned())
+}
+
+/// Remove every side-table entry belonging to the objects identified by `keys`,
+/// then shrink each table back to its live size.
+///
+/// Mirrors the C++ `clearAutosarStoresForObjects` + `rehash(0)` pair invoked
+/// from `~AutosarXMLResource`. The tables are keyed by object identity (raw
+/// pointer address), so without this they gain an entry for every object of
+/// every load and never release it: memory grows across loads and, because
+/// addresses are recycled, a later load can read a previous load's stale side
+/// data. The owner object performs the walk and passes its identity keys here.
+pub fn clear_for_objects(keys: &HashSet<usize>) {
+    if keys.is_empty() {
+        return;
+    }
+    fn prune<V>(cell: &'static std::thread::LocalKey<RefCell<HashMap<usize, V>>>, keys: &HashSet<usize>) {
+        cell.with(|m| {
+            let mut m = m.borrow_mut();
+            for k in keys {
+                m.remove(k);
+            }
+            // `remove` leaves the bucket array untouched; shrink so repeated
+            // load/drop cycles do not retain the high-water-mark capacity.
+            m.shrink_to_fit();
+        });
+    }
+    prune(&MIXED_TEXT, keys);
+    prune(&COMMENTS, keys);
+    prune(&MIXED_CONTENT, keys);
+    prune(&REF_IS_DEFAULT, keys);
+    prune(&UNKNOWN_CONTENT, keys);
+    // Ref DEST keys are `(owner, feature, target)`; drop the entry when either
+    // endpoint belongs to this resource.
+    REF_DEST.with(|m| {
+        let mut m = m.borrow_mut();
+        m.retain(|(owner, _, target), _| !keys.contains(owner) && !keys.contains(target));
+        m.shrink_to_fit();
+    });
 }
 
 /// Record the original `DEST` of the reference from `owner.feature` to `target`.

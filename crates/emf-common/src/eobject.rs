@@ -140,6 +140,22 @@ pub trait EObject: std::fmt::Debug {
         false
     }
 
+    /// Append a value to a multi-valued feature (C++ `addOrSet`'s many branch).
+    /// Returns `false` when the feature is unknown.
+    ///
+    /// The base implementation is a read-modify-write through [`Self::e_get`] /
+    /// [`Self::e_set`]. That copies the whole list on every append — quadratic
+    /// when a feature accumulates many children — so backends that own their
+    /// storage override this to append in place.
+    fn e_append(&mut self, feature_id: &str, value: Val) -> bool {
+        let mut list = match self.e_get(feature_id) {
+            Some(Val::List(l)) => l,
+            _ => Vec::new(),
+        };
+        list.push(value);
+        self.e_set(feature_id, Val::List(list))
+    }
+
     /// Whether a feature is set.
     fn e_is_set(&self, feature_id: &str) -> bool {
         let _ = feature_id;
@@ -150,6 +166,32 @@ pub trait EObject: std::fmt::Debug {
     fn e_unset(&mut self, feature_id: &str) -> bool {
         let _ = feature_id;
         false
+    }
+
+    /// Whether the metamodel declares a structural feature named `feature_id`
+    /// (C++ `EClass::getEStructuralFeature() != nullptr`, the guard the AUTOSAR
+    /// ECUC constraints use to decide applicability). Default `false` for
+    /// targets with no feature metadata.
+    fn e_has_feature(&self, feature_id: &str) -> bool {
+        let _ = feature_id;
+        false
+    }
+
+    /// Metamodel lower bound of the structural feature named `feature_id`
+    /// (C++ `EStructuralFeature::getLowerBound`). `0` — the EMF default — when
+    /// the feature is unknown, so multiplicity lower-bound checks stay
+    /// conservative off the dynamic model.
+    fn e_feature_lower_bound(&self, feature_id: &str) -> i32 {
+        let _ = feature_id;
+        0
+    }
+
+    /// Metamodel upper bound of the structural feature named `feature_id`
+    /// (C++ `EStructuralFeature::getUpperBound`). `-1` (unbounded) when the
+    /// feature is unknown.
+    fn e_feature_upper_bound(&self, feature_id: &str) -> i32 {
+        let _ = feature_id;
+        -1
     }
 
     /// Reflectively invoke an operation (C++ `EObject::eInvoke`). `operation_id`

@@ -18,6 +18,7 @@ pub mod diagnostic;
 pub mod elist;
 pub mod emap;
 pub mod eobject;
+pub mod fast_hash;
 pub mod feature_map;
 pub mod notification;
 pub mod resource;

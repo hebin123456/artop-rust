@@ -39,6 +39,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+use emf_common::fast_hash::FxHashMap;
 use emf_common::uri::Uri;
 use emf_common::value::{ObjectRef, Val};
 use emf_ecore::dynamic::DynamicEObject;
@@ -53,6 +54,17 @@ thread_local! {
     /// `base class name -> subtype ecore names` (the C++ `subtypeCache`): the
     /// model is static, so a subtype list is computed once and reused.
     static SUBTYPE_CACHE: RefCell<HashMap<String, Vec<String>>> = RefCell::new(HashMap::new());
+    /// Temporary profiling counters.
+    static OBJ_COUNT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static NEW_IN_NS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static FIND_FEATURE_NS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static UNKNOWN_COUNT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static COMMENT_COUNT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static DISPATCH_NS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static SET_NS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static ATTR_NS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static DCC_NS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static DCC_COUNT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 /// Whether a reference is a wrapper (0016/0013) or role+type (0012) reference
@@ -124,7 +136,12 @@ impl AutosarXMLLoader {
 
 impl XMLLoader for AutosarXMLLoader {
     fn load(&self, resource: &mut XMIResource, input: &str) -> Result<(), String> {
+        let timing = std::env::var_os("ARXML_TIMING").is_some();
+        let t_parse = std::time::Instant::now();
         let root = dom::parse(input)?;
+        if timing {
+            eprintln!("[timing] dom_parse = {:?}", t_parse.elapsed());
+        }
         if root.local != ROOT_ELEMENT {
             return Err(format!(
                 "AutosarXMLLoader: 期望根元素 <{ROOT_ELEMENT}>，实际为 <{}>",
@@ -138,7 +155,28 @@ impl XMLLoader for AutosarXMLLoader {
         })?;
 
         let mut loader = ArxmlLoader::new(reg);
+        let t_build = std::time::Instant::now();
         let root_obj = loader.build_object(&root, &autosar_class);
+        if timing {
+            eprintln!("[timing] build = {:?}", t_build.elapsed());
+            let objs = OBJ_COUNT.with(|c| c.get());
+            let new_in = NEW_IN_NS.with(|c| c.get());
+            eprintln!(
+                "[timing] objects = {objs}, new_in total = {:.0} ms (avg {:.0} ns/obj)",
+                new_in as f64 / 1e6,
+                new_in as f64 / objs.max(1) as f64
+            );
+            let ff = FIND_FEATURE_NS.with(|c| c.get()) as f64 / 1e6;
+            let at = ATTR_NS.with(|c| c.get()) as f64 / 1e6;
+            let st = SET_NS.with(|c| c.get()) as f64 / 1e6;
+            let dcc = DCC_NS.with(|c| c.get()) as f64 / 1e6;
+            let dcn = DCC_COUNT.with(|c| c.get());
+            let unk = UNKNOWN_COUNT.with(|c| c.get());
+            let cmt = COMMENT_COUNT.with(|c| c.get());
+            eprintln!(
+                "[timing] find_feature = {ff:.0} ms, apply_attrs = {at:.0} ms, set_attr = {st:.0} ms, determine_child_class = {dcc:.0} ms ({dcn} calls), unknown = {unk}, comments = {cmt}"
+            );
+        }
         if let Some(obj) = root_obj {
             let mut contents = resource.resource().contents().to_vec();
             contents.push(obj);
@@ -146,35 +184,122 @@ impl XMLLoader for AutosarXMLLoader {
         }
         resource.resource_mut().set_loaded(true);
 
+        let t_index = std::time::Instant::now();
         loader.build_short_name_path_index(resource);
+        if timing {
+            eprintln!(
+                "[timing] index = {:?} ({} entries)",
+                t_index.elapsed(),
+                loader.path_index.len()
+            );
+        }
+        let t_resolve = std::time::Instant::now();
         loader.resolve_pending_refs();
+        if timing {
+            eprintln!("[timing] resolve = {:?}", t_resolve.elapsed());
+            eprintln!("[timing] pending = {}", loader.pending.len());
+        }
         Ok(())
     }
+}
+
+/// The per-class reflection index the loader needs, built once per `EClass`
+/// and reused for every element dispatched against it.
+///
+/// Resolving a feature by arxml name previously scanned the whole
+/// `eAllStructuralFeatures` list and, for every candidate, read up to three
+/// annotations (`f.name()`, `xml.name`, `xml.namePlural`) — each annotation
+/// read being a linear search over the class's annotations and details. That
+/// dominated the build phase. The three-way match is order-preserving:
+/// `by_xml` maps every alias to the *first* feature that declares it, exactly
+/// like the original first-match scan.
+struct ClassFeatures {
+    /// `eAllStructuralFeatures` in order.
+    all: Vec<EStructuralFeature>,
+    /// arxml name (aliases: ecore name, `xml.name`, `xml.namePlural`) -> index.
+    by_xml: FxHashMap<String, usize>,
+    /// The `featureKind == "simple"` feature, if any (carries element text).
+    simple: Option<usize>,
+    /// The reference features among `all`, in order (`eAllReferences`).
+    refs: Vec<EStructuralFeature>,
 }
 
 /// The loading context (C++ `ArxmlLoader`).
 struct ArxmlLoader {
     reg: PackageRegistry,
-    /// `/PkgA/PkgB/Elem` -> object.
-    path_index: HashMap<String, ObjectRef>,
+    /// `/PkgA/PkgB/Elem` -> object. The keys are full short-name paths, which in
+    /// real documents are long strings, so this map uses the fast hasher: with
+    /// the default SipHash the index phase cost more than the whole build.
+    path_index: FxHashMap<String, ObjectRef>,
     pending: Vec<PendingRef>,
+    /// `class name -> reflection index`, so the flattened feature list and the
+    /// name lookup table are computed once per class instead of on every
+    /// element/attribute lookup.
+    feature_cache: RefCell<FxHashMap<String, Rc<ClassFeatures>>>,
+    /// `element local name + declared type -> resolved EClass` memo for
+    /// [`ArxmlLoader::determine_child_class`]. Resolving a child class runs
+    /// `is_super_type_of`, which walks the whole supertype graph allocating a
+    /// `HashSet` and cloning ancestor names; it was run once per containment
+    /// child (tens of thousands of times) even though the answer depends only on
+    /// the element name and the feature's declared type, of which a document has
+    /// only a few hundred distinct pairs.
+    dcc_cache: RefCell<FxHashMap<(String, String), Option<EClass>>>,
 }
 
 impl ArxmlLoader {
     fn new(reg: PackageRegistry) -> Self {
         Self {
             reg,
-            path_index: HashMap::new(),
+            path_index: FxHashMap::default(),
             pending: Vec::new(),
+            feature_cache: RefCell::new(FxHashMap::default()),
+            dcc_cache: RefCell::new(FxHashMap::default()),
         }
+    }
+
+    /// The cached reflection index of `class` (relative to this loader's
+    /// registry).
+    fn class_features(&self, class: &EClass) -> Rc<ClassFeatures> {
+        let key = class.name().to_string();
+        if let Some(v) = self.feature_cache.borrow().get(&key) {
+            return v.clone();
+        }
+        let all = class.e_all_structural_features(&self.reg);
+        let mut by_xml: FxHashMap<String, usize> =
+            FxHashMap::with_capacity_and_hasher(all.len() * 3, Default::default());
+        let mut simple = None;
+        let mut refs = Vec::new();
+        for (i, f) in all.iter().enumerate() {
+            by_xml.entry(f.name().to_string()).or_insert(i);
+            if let Some(x) = f.tagged_value("xml.name") {
+                by_xml.entry(x.to_string()).or_insert(i);
+            }
+            if let Some(p) = explicit_plural(f) {
+                by_xml.entry(p.to_string()).or_insert(i);
+            }
+            if simple.is_none() && f.tagged_feature_kind() == "simple" {
+                simple = Some(i);
+            }
+            if f.is_reference() {
+                refs.push(f.clone());
+            }
+        }
+        let v = Rc::new(ClassFeatures {
+            all,
+            by_xml,
+            simple,
+            refs,
+        });
+        self.feature_cache.borrow_mut().insert(key, v.clone());
+        v
     }
 
     // ---- metamodel lookups ----
 
     /// The `EClass` of `obj`.
     fn class_of(&self, obj: &ObjectRef) -> Option<EClass> {
-        let name = obj.borrow().e_class().to_string();
-        self.reg.find_class(&name)
+        let o = obj.borrow();
+        self.reg.find_class(o.e_class())
     }
 
     /// Find a structural feature by its arxml element name (C++
@@ -182,32 +307,27 @@ impl ArxmlLoader {
     /// their arxml name, so the feature name is tried first, then the explicit
     /// plural name (`xml.namePlural`).
     fn find_feature(&self, class: &EClass, xml_name: &str) -> Option<EStructuralFeature> {
-        class
-            .e_all_structural_features(&self.reg)
-            .into_iter()
-            .find(|f| {
-                f.name() == xml_name
-                    || f.tagged_value("xml.name") == Some(xml_name)
-                    || explicit_plural(f) == Some(xml_name)
-            })
+        let cf = self.class_features(class);
+        cf.by_xml.get(xml_name).map(|&i| cf.all[i].clone())
     }
 
     /// The `simple`-content feature of a class (carries the element's text).
     fn find_simple_feature(&self, class: &EClass) -> Option<EStructuralFeature> {
-        class
-            .e_all_structural_features(&self.reg)
-            .into_iter()
-            .find(|f| f.tagged_feature_kind() == "simple")
+        let cf = self.class_features(class);
+        cf.simple.map(|i| cf.all[i].clone())
     }
 
     // ---- phase 1: build ----
 
     /// Build an object of `class` from `el` (C++ `buildObject`).
     fn build_object(&mut self, el: &Element, class: &EClass) -> Option<ObjectRef> {
+        let t_new = std::time::Instant::now();
         let obj: ObjectRef = Rc::new(RefCell::new(DynamicEObject::new_in(
             class.clone(),
             self.reg.clone(),
         )));
+        NEW_IN_NS.with(|c| c.set(c.get() + t_new.elapsed().as_nanos() as u64));
+        OBJ_COUNT.with(|c| c.set(c.get() + 1));
         self.apply_attributes(&obj, class, el);
 
         match class.content_kind() {
@@ -269,7 +389,9 @@ impl ArxmlLoader {
         class: &EClass,
         el: &Element,
     ) -> Option<ObjectRef> {
+        let t_ff = std::time::Instant::now();
         let feature = self.find_feature(class, &el.local);
+        FIND_FEATURE_NS.with(|c| c.set(c.get() + t_ff.elapsed().as_nanos() as u64));
         let Some(feature) = feature else {
             // Model-driven fallbacks (C++ `applyChildElement`'s chain): the
             // element may name an inner feature of a wrapper (0016/0013) or
@@ -283,6 +405,7 @@ impl ArxmlLoader {
             if self.try_inline_match(obj, class, el, 0) {
                 return None;
             }
+            UNKNOWN_COUNT.with(|c| c.set(c.get() + 1));
             store::push_unknown_content(obj, el.clone());
             return None;
         };
@@ -300,6 +423,7 @@ impl ArxmlLoader {
 
     /// Apply the element's XML attributes (C++ `applyAttributes`).
     fn apply_attributes(&mut self, obj: &ObjectRef, class: &EClass, el: &Element) {
+        let t_attr = std::time::Instant::now();
         for (aname, aval) in &el.attrs {
             if aname.starts_with("xmlns") || aname.starts_with("xsi:") {
                 continue;
@@ -316,6 +440,7 @@ impl ArxmlLoader {
             }
             self.set_attribute_value(obj, &f, aval);
         }
+        ATTR_NS.with(|c| c.set(c.get() + t_attr.elapsed().as_nanos() as u64));
     }
 
     /// Handle a child element that maps to an attribute feature (C++
@@ -476,6 +601,27 @@ impl ArxmlLoader {
     /// `xsi:type` wins, then the element name (validated against the declared
     /// type), then the declared type.
     fn determine_child_class(&self, el: &Element, declared: Option<&str>) -> Option<EClass> {
+        let t = std::time::Instant::now();
+        DCC_COUNT.with(|c| c.set(c.get() + 1));
+        // An explicit `xsi:type` overrides everything and is rare, so it is
+        // resolved directly rather than folded into the memo key.
+        if el.attr("xsi:type").is_some() {
+            let r = self.determine_child_class_inner(el, declared);
+            DCC_NS.with(|c| c.set(c.get() + t.elapsed().as_nanos() as u64));
+            return r;
+        }
+        let key = (el.local.clone(), declared.unwrap_or("").to_string());
+        if let Some(v) = self.dcc_cache.borrow().get(&key) {
+            DCC_NS.with(|c| c.set(c.get() + t.elapsed().as_nanos() as u64));
+            return v.clone();
+        }
+        let r = self.determine_child_class_inner(el, declared);
+        self.dcc_cache.borrow_mut().insert(key, r.clone());
+        DCC_NS.with(|c| c.set(c.get() + t.elapsed().as_nanos() as u64));
+        r
+    }
+
+    fn determine_child_class_inner(&self, el: &Element, declared: Option<&str>) -> Option<EClass> {
         if let Some(t) = el.attr("xsi:type") {
             let local = t.rsplit(':').next().unwrap_or(t);
             if let Some(c) = self.reg.find_class_by_xml_name(local) {
@@ -574,7 +720,8 @@ impl ArxmlLoader {
         owner_class: &EClass,
         qname: &str,
     ) -> Option<WrappedFeature> {
-        for outer in owner_class.e_all_references(&self.reg).iter().rev() {
+        let class_features = self.class_features(owner_class);
+        for outer in class_features.refs.iter().rev() {
             if !is_wrapper_or_role_type_reference(outer) {
                 continue;
             }
@@ -670,8 +817,9 @@ impl ArxmlLoader {
         if depth > 8 {
             return false;
         }
-        for inline_ref in owner_class.e_all_structural_features(&self.reg) {
-            if !is_inline_containment(&inline_ref) {
+        let class_features = self.class_features(owner_class);
+        for inline_ref in &class_features.all {
+            if !is_inline_containment(inline_ref) {
                 continue;
             }
             let Some(inline_type) = inline_ref.type_name().and_then(|t| self.reg.find_class(t))
@@ -771,11 +919,13 @@ impl ArxmlLoader {
 
     /// Set a single-valued attribute from its literal.
     fn set_attribute_value(&self, obj: &ObjectRef, f: &EStructuralFeature, raw: &str) {
+        let t = std::time::Instant::now();
         let v = self.convert(f, raw);
         // A feature explicitly present is set even when the parsed value equals
         // the default (the saver relies on this to emit e.g.
         // `<IS-DEFAULT>false</IS-DEFAULT>`).
         obj.borrow_mut().e_set(f.name(), v);
+        SET_NS.with(|c| c.set(c.get() + t.elapsed().as_nanos() as u64));
     }
 
     // ---- phase 2: short-name path index ----
@@ -783,23 +933,43 @@ impl ArxmlLoader {
     /// Index every short-name path reachable from the resource roots (C++
     /// `buildShortNamePathIndex`).
     fn build_short_name_path_index(&mut self, resource: &XMIResource) {
-        for root in resource.resource().contents() {
-            self.index_object(root);
+        // The index exists only to resolve pending references (phase 3). When
+        // the document contains no non-containment references there is nothing
+        // to look up, so the whole walk — which stores one full short-name path
+        // per object — is dead work. Building the index is by far the most
+        // expensive part of loading a reference-free document, so skipping it
+        // is a large, behaviour-preserving win.
+        if self.pending.is_empty() {
+            return;
+        }
+        let roots: Vec<ObjectRef> = resource.resource().contents().to_vec();
+        let mut path = String::new();
+        for root in roots {
+            self.index_object(&root, &mut path);
         }
     }
 
-    fn index_object(&mut self, obj: &ObjectRef) {
+    /// Index `obj` and its descendants. `path` is a single scratch buffer holding
+    /// the enclosing object's short-name path, extended in place for the current
+    /// object and truncated on the way out. Threading one reusable buffer (rather
+    /// than formatting a fresh `String` per node) means each path is built with
+    /// one append instead of re-walking the container chain *and* re-allocating
+    /// the whole prefix at every level. An object without a short name passes its
+    /// incoming path through, so unnamed levels are skipped exactly like the
+    /// upward walk did.
+    fn index_object(&mut self, obj: &ObjectRef, path: &mut String) {
         let sn = short_name(obj);
+        let mark = path.len();
         if !sn.is_empty() {
-            let path = self.build_short_name_path(Some(obj));
-            if !path.is_empty() {
-                self.path_index.insert(path, obj.clone());
-            }
+            path.push('/');
+            path.push_str(&sn);
+            self.path_index.insert(path.clone(), obj.clone());
         }
         let contents = obj.borrow().e_contents();
         for child in &contents {
-            self.index_object(child);
+            self.index_object(child, path);
         }
+        path.truncate(mark);
     }
 
     /// Build the absolute `/sn1/sn2/.../snN` path of `obj` by walking up the
@@ -980,13 +1150,7 @@ fn replace_proxy(pr: &PendingRef, target: &ObjectRef) {
 
 /// Append a value to a multi-valued feature (C++ `addOrSet`'s many branch).
 fn append_value(obj: &ObjectRef, feature: &str, value: Val) {
-    let mut o = obj.borrow_mut();
-    let mut list = match o.e_get(feature) {
-        Some(Val::List(l)) => l,
-        _ => Vec::new(),
-    };
-    list.push(value);
-    o.e_set(feature, Val::List(list));
+    obj.borrow_mut().e_append(feature, value);
 }
 
 /// The explicit `xml.namePlural`, or `None` when absent (the C++ treats an

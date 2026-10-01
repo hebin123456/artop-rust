@@ -52,6 +52,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "arxml-validation-bench"
+version = "1.0.0"
+dependencies = [
+ "artop-runtime",
+ "artop-validation",
+ "emf-common",
+ "emf-ecore",
+ "emf-validation",
+]
+
+[[package]]
 name = "autosar448-model"
 version = "1.0.0"
 dependencies = [

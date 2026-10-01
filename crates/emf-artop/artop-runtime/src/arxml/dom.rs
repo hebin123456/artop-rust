@@ -304,48 +304,59 @@ fn find(hay: &[u8], from: usize, needle: &[u8]) -> Option<usize> {
         .map(|p| p + from)
 }
 
+/// Decode one entity body (the text between `&` and `;`) to its character.
+fn decode_entity(ent: &str) -> Option<char> {
+    Some(match ent {
+        "lt" => '<',
+        "gt" => '>',
+        "amp" => '&',
+        "quot" => '"',
+        "apos" => '\'',
+        _ => {
+            let code = if let Some(hex) = ent.strip_prefix("#x").or_else(|| ent.strip_prefix("#X")) {
+                u32::from_str_radix(hex, 16).ok()?
+            } else {
+                ent.strip_prefix('#')?.parse::<u32>().ok()?
+            };
+            char::from_u32(code)?
+        }
+    })
+}
+
 /// Decode the 5 predefined XML entities plus numeric character references.
+///
+/// Unknown entities (e.g. an undeclared `&foo;`) are left verbatim, exactly like
+/// the previous byte-at-a-time version. Decoded runs are copied as whole `&str`
+/// slices rather than byte-by-byte: the old loop pushed each raw byte as a
+/// `char`, which silently mangled any multi-byte UTF-8 character that shared a
+/// text node with an entity (e.g. `é&amp;x` decoded to `Ã©&x`). Copying the
+/// untouched spans keeps them valid UTF-8 and is also faster for entity-heavy
+/// content, since a run of plain text costs one `push_str` instead of one push
+/// per byte.
 fn decode_entities(s: &str) -> String {
     if !s.contains('&') {
         return s.to_string();
     }
-    let mut out = String::with_capacity(s.len());
     let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
     let mut i = 0;
+    let mut last = 0;
     while i < bytes.len() {
         if bytes[i] == b'&' {
-            if let Some(semi) = bytes[i..].iter().position(|&c| c == b';') {
-                let ent = &s[i + 1..i + semi];
-                let decoded = match ent {
-                    "lt" => Some('<'.to_string()),
-                    "gt" => Some('>'.to_string()),
-                    "amp" => Some('&'.to_string()),
-                    "quot" => Some('"'.to_string()),
-                    "apos" => Some('\''.to_string()),
-                    _ if ent.starts_with("#x") || ent.starts_with("#X") => {
-                        u32::from_str_radix(&ent[2..], 16)
-                            .ok()
-                            .and_then(char::from_u32)
-                            .map(|c| c.to_string())
-                    }
-                    _ if ent.starts_with('#') => ent[1..]
-                        .parse::<u32>()
-                        .ok()
-                        .and_then(char::from_u32)
-                        .map(|c| c.to_string()),
-                    _ => None,
-                };
-                if let Some(d) = decoded {
-                    out.push_str(&d);
-                    i += semi + 1;
+            if let Some(semi) = bytes[i + 1..].iter().position(|&c| c == b';') {
+                let semi = i + 1 + semi;
+                if let Some(c) = decode_entity(&s[i + 1..semi]) {
+                    out.push_str(&s[last..i]);
+                    out.push(c);
+                    i = semi + 1;
+                    last = i;
                     continue;
                 }
             }
         }
-        // Push the raw byte (safe: XML text is UTF-8 and '&' boundaries are ASCII).
-        out.push(bytes[i] as char);
         i += 1;
     }
+    out.push_str(&s[last..]);
     out
 }
 
@@ -381,6 +392,19 @@ mod tests {
         let root = parse("<A x=\"a&amp;b\"><![CDATA[<raw>]]></A>").unwrap();
         assert_eq!(root.attr("x"), Some("a&b"));
         assert_eq!(root.text(), "<raw>");
+    }
+
+    #[test]
+    fn entity_decode_preserves_multibyte_utf8() {
+        // A multi-byte character sharing a node with an entity must survive
+        // (the old byte-at-a-time decoder turned each byte into a `char`).
+        let root = parse("<A>caf\u{e9}&amp;bar</A>").unwrap();
+        assert_eq!(root.text(), "caf\u{e9}&bar");
+        let root = parse("<A x=\"\u{4e2d}&#x6587;\"/>").unwrap();
+        assert_eq!(root.attr("x"), Some("\u{4e2d}\u{6587}"));
+        // Unknown entities are preserved verbatim.
+        let root = parse("<A>a&amp;b&unknown;c</A>").unwrap();
+        assert_eq!(root.text(), "a&b&unknown;c");
     }
 
     #[test]

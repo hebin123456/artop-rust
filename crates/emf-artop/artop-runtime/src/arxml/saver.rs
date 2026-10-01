@@ -27,9 +27,10 @@
 //! (see `artop_codegen::registry_gen`), so inherited features — and hence XML
 //! attribute order — match the C++/Java serializers exactly.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::rc::Rc;
 
+use emf_common::fast_hash::FxHashMap;
 use emf_common::value::{ObjectRef, Val};
 use emf_ecore::datatype;
 use emf_ecore::{EClass, EStructuralFeature, PackageRegistry};
@@ -75,12 +76,22 @@ enum AprxmlRule {
 /// A streaming XML writer with delayed tag opening (C++ `PugiDomWriter`).
 struct DomWriter {
     indent: String,
+    /// `indent` repeated `d` times, grown on demand. Indentation is written once
+    /// per element and once per element close, at a depth that grows with the
+    /// document; repeating the indent unit with a `push_str` loop meant one call
+    /// per level (tens of millions of 2-byte copies on a 300 MB document).
+    /// Caching the expanded prefix turns that into a single slice copy.
+    indent_cache: Vec<String>,
     buf: String,
     depth: usize,
     stack: Vec<Frame>,
+    /// Frames released by [`DomWriter::end_element`], kept so their `tag` /
+    /// `attrs` allocations are reused instead of re-allocated per element.
+    frame_pool: Vec<Frame>,
 }
 
 /// A pending element frame (C++ `PugiDomWriter::Frame`).
+#[derive(Default)]
 struct Frame {
     tag: String,
     /// Accumulated ` name="value"` attribute text.
@@ -97,14 +108,19 @@ impl DomWriter {
     fn new() -> Self {
         Self {
             indent: "  ".to_string(),
+            indent_cache: vec![String::new()],
             buf: String::new(),
             depth: 0,
             stack: Vec::new(),
+            frame_pool: Vec::new(),
         }
     }
 
     fn set_indent(&mut self, indent: &str) {
         self.indent = indent.to_string();
+        // The cached prefixes were expanded from the old unit; rebuild lazily.
+        self.indent_cache.clear();
+        self.indent_cache.push(String::new());
     }
 
     /// Write the `<?xml ...?>` declaration (call before any element).
@@ -117,38 +133,62 @@ impl DomWriter {
     }
 
     /// Escape an element's text (C++ `encodeText`): `<`, `&`, `"`, `\r`.
+    ///
+    /// Scanned byte-wise and emitted as whole clean runs. The previous
+    /// `chars()` loop pushed one `char` per byte even for text containing no
+    /// escapable character — which is the overwhelmingly common case (short
+    /// names, numeric values, reference paths) — so a value cost one capacity
+    /// check and copy per character. Every escapable byte is ASCII, so a run
+    /// boundary is always a UTF-8 boundary and the slices stay valid.
     fn encode_text(s: &str, out: &mut String) {
-        for c in s.chars() {
-            match c {
-                '<' => out.push_str("&lt;"),
-                '&' => out.push_str("&amp;"),
-                '"' => out.push_str("&quot;"),
-                '\r' => out.push_str("&#xD;"),
-                _ => out.push(c),
-            }
+        let bytes = s.as_bytes();
+        let mut last = 0;
+        for (i, &b) in bytes.iter().enumerate() {
+            let rep = match b {
+                b'<' => "&lt;",
+                b'&' => "&amp;",
+                b'"' => "&quot;",
+                b'\r' => "&#xD;",
+                _ => continue,
+            };
+            out.push_str(&s[last..i]);
+            out.push_str(rep);
+            last = i + 1;
         }
+        out.push_str(&s[last..]);
     }
 
     /// Escape an attribute value (C++ `encodeAttributeValue`): `<`, `&`, `"`,
     /// `\r`, `\n`, `\t`.
     fn encode_attribute_value(s: &str, out: &mut String) {
-        for c in s.chars() {
-            match c {
-                '<' => out.push_str("&lt;"),
-                '&' => out.push_str("&amp;"),
-                '"' => out.push_str("&quot;"),
-                '\r' => out.push_str("&#13;"),
-                '\n' => out.push_str("&#10;"),
-                '\t' => out.push_str("&#9;"),
-                _ => out.push(c),
-            }
+        let bytes = s.as_bytes();
+        let mut last = 0;
+        for (i, &b) in bytes.iter().enumerate() {
+            let rep = match b {
+                b'<' => "&lt;",
+                b'&' => "&amp;",
+                b'"' => "&quot;",
+                b'\r' => "&#13;",
+                b'\n' => "&#10;",
+                b'\t' => "&#9;",
+                _ => continue,
+            };
+            out.push_str(&s[last..i]);
+            out.push_str(rep);
+            last = i + 1;
         }
+        out.push_str(&s[last..]);
     }
 
     fn write_indent(&mut self) {
-        for _ in 0..self.depth {
-            self.buf.push_str(&self.indent);
+        if self.depth >= self.indent_cache.len() {
+            let mut last = self.indent_cache.last().cloned().unwrap_or_default();
+            while self.indent_cache.len() <= self.depth {
+                last.push_str(&self.indent);
+                self.indent_cache.push(last.clone());
+            }
         }
+        self.buf.push_str(&self.indent_cache[self.depth]);
     }
 
     /// Emit the delayed opening tag of the current frame, if pending.
@@ -177,13 +217,14 @@ impl DomWriter {
                 self.write_indent();
             }
         }
-        self.stack.push(Frame {
-            tag: tag.to_string(),
-            attrs: String::new(),
-            opened: false,
-            has_elem_child: false,
-            has_text: false,
-        });
+        let mut frame = self.frame_pool.pop().unwrap_or_default();
+        frame.tag.clear();
+        frame.tag.push_str(tag);
+        frame.attrs.clear();
+        frame.opened = false;
+        frame.has_elem_child = false;
+        frame.has_text = false;
+        self.stack.push(frame);
         self.depth += 1;
     }
 
@@ -225,7 +266,7 @@ impl DomWriter {
             return;
         }
         self.depth = self.depth.saturating_sub(1);
-        let f = self.stack.pop().unwrap();
+        let mut f = self.stack.pop().unwrap();
         if !f.opened {
             self.buf.push('<');
             self.buf.push_str(&f.tag);
@@ -242,6 +283,11 @@ impl DomWriter {
             self.buf.push_str(&f.tag);
             self.buf.push('>');
         }
+        // Recycle the frame: keep its capacity for the next element instead of
+        // allocating a fresh `tag` / `attrs` pair every time.
+        f.tag.clear();
+        f.attrs.clear();
+        self.frame_pool.push(f);
     }
 
     /// Consume the accumulated output.
@@ -274,13 +320,16 @@ struct AutosarSaver<'a> {
     reg: PackageRegistry,
     writer: DomWriter,
     /// `ObjectRef` identity -> short-name path.
-    snp_cache: HashMap<usize, String>,
+    snp_cache: FxHashMap<usize, String>,
     /// `ObjectRef` identity -> short name.
-    short_name_cache: HashMap<usize, String>,
+    short_name_cache: FxHashMap<usize, String>,
     /// class name -> arxml type name.
-    type_name_cache: HashMap<String, String>,
-    /// class name -> sorted feature list.
-    sorted_cache: HashMap<String, Vec<EStructuralFeature>>,
+    type_name_cache: FxHashMap<String, String>,
+    /// `EClass::instance_id` -> sorted feature list (shared, so callers do not
+    /// deep-clone the feature vector on every object). Keyed by the class
+    /// identity rather than its name so the per-object lookup neither allocates
+    /// a key `String` nor hashes one.
+    sorted_cache: FxHashMap<u64, Rc<Vec<EStructuralFeature>>>,
 }
 
 impl<'a> AutosarSaver<'a> {
@@ -289,10 +338,10 @@ impl<'a> AutosarSaver<'a> {
             res,
             reg: res.registry().clone(),
             writer: DomWriter::new(),
-            snp_cache: HashMap::new(),
-            short_name_cache: HashMap::new(),
-            type_name_cache: HashMap::new(),
-            sorted_cache: HashMap::new(),
+            snp_cache: FxHashMap::default(),
+            short_name_cache: FxHashMap::default(),
+            type_name_cache: FxHashMap::default(),
+            sorted_cache: FxHashMap::default(),
         }
     }
 
@@ -340,8 +389,8 @@ impl<'a> AutosarSaver<'a> {
 
     /// The `EClass` of `obj`.
     fn class_of(&self, obj: &ObjectRef) -> Option<EClass> {
-        let name = obj.borrow().e_class().to_string();
-        self.reg.find_class(&name)
+        let b = obj.borrow();
+        self.reg.find_class(b.e_class())
     }
 
     /// The arxml type name of `obj`'s class (C++ `getTypeXmlName`).
@@ -362,12 +411,12 @@ impl<'a> AutosarSaver<'a> {
     /// The feature list of `class` in serialization order (C++
     /// `collectSortedFeatures`): ancestors first, each class's own features
     /// stably ordered by `internal-xml-sequenceOffset`.
-    fn sorted_features(&mut self, class: &EClass) -> Vec<EStructuralFeature> {
-        let key = class.name().to_string();
+    fn sorted_features(&mut self, class: &EClass) -> Rc<Vec<EStructuralFeature>> {
+        let key = class.instance_id();
         if let Some(v) = self.sorted_cache.get(&key) {
             return v.clone();
         }
-        let v = self.collect_sorted_features(class);
+        let v = Rc::new(self.collect_sorted_features(class));
         self.sorted_cache.insert(key, v.clone());
         v
     }
@@ -398,8 +447,9 @@ impl<'a> AutosarSaver<'a> {
     /// The `simple`-content feature of a class (carries the element's text).
     fn simple_feature(&mut self, class: &EClass) -> Option<EStructuralFeature> {
         self.sorted_features(class)
-            .into_iter()
+            .iter()
             .find(|f| f.tagged_feature_kind() == "simple")
+            .cloned()
     }
 
     /// The `SHORT-NAME` (or ecore `shortName`) value of `obj`.
@@ -458,11 +508,11 @@ impl<'a> AutosarSaver<'a> {
             return;
         };
         let features = self.sorted_features(&class);
-        let content_kind = class.content_kind().to_string();
+        let content_kind = class.content_kind();
 
         if content_kind == "simple" {
             if !elements_only {
-                for f in &features {
+                for f in features.iter() {
                     if f.is_reference() || !f.is_xml_attribute() || !is_set(obj, f) {
                         continue;
                     }
@@ -488,7 +538,7 @@ impl<'a> AutosarSaver<'a> {
 
         // Non-mixed: emit XML attributes first (must precede child elements),
         // then the remaining features.
-        for f in &features {
+        for f in features.iter() {
             if f.name() == "mixed" || !is_set(obj, f) || f.is_reference() {
                 continue;
             }
@@ -496,7 +546,7 @@ impl<'a> AutosarSaver<'a> {
                 self.save_attribute(obj, f);
             }
         }
-        for f in &features {
+        for f in features.iter() {
             if f.name() == "mixed" || !is_set(obj, f) {
                 continue;
             }
@@ -650,13 +700,14 @@ impl<'a> AutosarSaver<'a> {
         child: &ObjectRef,
     ) -> Option<EStructuralFeature> {
         let class = self.class_of(parent)?;
-        for f in self.sorted_features(&class) {
+        let features = self.sorted_features(&class);
+        for f in features.iter() {
             if !f.is_reference() {
                 continue;
             }
             let v = parent.borrow().e_get(f.name());
             if extract_objects(v).iter().any(|o| Rc::ptr_eq(o, child)) {
-                return Some(f);
+                return Some(f.clone());
             }
         }
         None

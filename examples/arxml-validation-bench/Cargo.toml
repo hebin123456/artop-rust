@@ -1,0 +1,16 @@
+[package]
+name = "arxml-validation-bench"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "arxml-validation-bench"
+path = "src/main.rs"
+
+[dependencies]
+artop-runtime = { workspace = true }
+artop-validation = { workspace = true }
+emf-common = { workspace = true }
+emf-ecore = { workspace = true }
+emf-validation = { workspace = true }

@@ -15,14 +15,17 @@
 //! and derefs to it; [`AutosarXMLResource`] wraps an [`AutosarResource`] and is
 //! the arxml-specific flavour (the C++ `AutosarXMLResource`).
 
+use std::collections::HashSet;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
+use emf_common::eobject::EObject;
 use emf_common::uri::Uri;
-use emf_ecore::PackageRegistry;
+use emf_common::value::{ObjectRef, Val};
+use emf_ecore::{DynamicEObject, PackageRegistry};
 use emf_xmi::{XMIResource, XMLHelper, XMLLoader, XMLSave};
 
-use crate::arxml::{AutosarXMLLoader, AutosarXMLSaver};
+use crate::arxml::{store, AutosarXMLLoader, AutosarXMLSaver};
 use crate::autosar_library_index::AutosarLibraryIndex;
 use crate::release_descriptor::AutosarReleaseDescriptor;
 
@@ -148,6 +151,55 @@ impl Deref for AutosarResource {
 impl DerefMut for AutosarResource {
     fn deref_mut(&mut self) -> &mut XMIResource {
         &mut self.inner
+    }
+}
+
+impl Drop for AutosarResource {
+    /// Prune this resource's objects from the process-wide ARXML side tables
+    /// (C++ `~AutosarXMLResource` → `clearAutosarStoresForObjects`). Those
+    /// tables are keyed by object identity, so a resource that does not clean
+    /// up after itself leaks an entry per object per load — and, since object
+    /// addresses are recycled, a later load may read a previous load's stale
+    /// entry. The containment tree is walked depth-first; an unresolved proxy
+    /// lives only inside a reference feature (C++ `proxyStore`) and is picked
+    /// up when scanning reference values.
+    fn drop(&mut self) {
+        let mut keys: HashSet<usize> = HashSet::new();
+        let mut stack: Vec<ObjectRef> = self.inner.resource().contents().to_vec();
+        while let Some(o) = stack.pop() {
+            if !keys.insert(store::object_key(&o)) {
+                continue;
+            }
+            let mut proxies: Vec<ObjectRef> = Vec::new();
+            {
+                let b = o.borrow();
+                for c in b.e_contents() {
+                    stack.push(c);
+                }
+                if let Some(dyno) = b.as_any().downcast_ref::<DynamicEObject>() {
+                    for f in dyno.structural_features_ref() {
+                        if !f.is_reference() {
+                            continue;
+                        }
+                        match dyno.e_get(f.name()) {
+                            Some(Val::Object(t)) => proxies.push(t),
+                            Some(Val::List(items)) => {
+                                proxies.extend(items.iter().filter_map(|v| v.as_object().cloned()))
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            for t in proxies {
+                // Only this resource's unresolved proxies are collected; a
+                // resolved target may belong to another resource.
+                if t.try_borrow().map(|x| x.e_is_proxy()).unwrap_or(false) {
+                    stack.push(t);
+                }
+            }
+        }
+        store::clear_for_objects(&keys);
     }
 }
 

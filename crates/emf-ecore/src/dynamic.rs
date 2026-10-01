@@ -7,12 +7,44 @@
 
 use crate::{EClass, Val};
 use emf_common::eobject::{EObject, InverseList};
+use emf_common::fast_hash::FxHashMap;
 use emf_common::notification::{emit, Adapter, EventType, Notification, Notifier, NotifierHandle};
 use emf_common::uri::Uri;
 use emf_common::value::ObjectRef;
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
+
+/// A lazily-built index over `eAllStructuralFeatures`.
+///
+/// The reflective accessors (`e_get` / `e_is_set` / `e_set`) are called many
+/// times per object during load and save. Recomputing the inheritance-flattened
+/// feature list on every call — which scanned the whole metamodel and cloned
+/// every feature — dominated runtime. This cache keeps the resolved list plus a
+/// `name -> index` map so each access is a hash probe.
+///
+/// It is shared by *class* (keyed by [`EClass::instance_id`]) rather than held
+/// per object: a feature carries its annotations, so a per-object copy would
+/// cost tens of KB each and blow up memory on large documents.
+#[derive(Debug, Default)]
+struct FeatureCache {
+    all: Vec<crate::structural::EStructuralFeature>,
+    by_name: FxHashMap<String, usize>,
+    /// Indices into `all` of the containment features, in order. Cached so
+    /// `eContents` (walked once per object by the loader's index phase and by
+    /// the saver) does not re-scan the whole feature list and re-test
+    /// `isContainment` for every feature of every object.
+    containments: Vec<usize>,
+}
+
+thread_local! {
+    /// `EClass::instance_id` -> resolved [`FeatureCache`], shared by every
+    /// object of that class. `EClass` clones preserve `instance_id`, and
+    /// distinct metamodel instances get distinct ids, so this is a stable
+    /// class identity for the lifetime of a load/save.
+    static CLASS_FEATURE_CACHE: RefCell<HashMap<u64, Rc<FeatureCache>>> =
+        RefCell::new(HashMap::new());
+}
 
 /// A back-link from a contained object to its container: a weak handle to the
 /// parent plus the name of the containment feature that owns this object.
@@ -67,9 +99,13 @@ pub struct DynamicEObject {
     /// lives in another package that reboots the 0-based numbering) would
     /// otherwise collide — e.g. base's inherited `name` and ext's own `note`
     /// can share id 0, so an id-keyed map would clobber one with the other.
-    pub dynamic_settings: HashMap<String, Val>,
-    /// Whether each feature (by name) has been set (for `eIsSet`).
-    pub set_flags: std::collections::HashSet<String>,
+    ///
+    /// Presence in this map *is* the EMF "is set" state: a feature whose value
+    /// was written — even when equal to its class default — is stored here, and
+    /// reading it back yields that value. This replaces a second
+    /// `HashSet<String>` of set flags, which duplicated every key (an extra
+    /// allocation and hash lookup per set/query) for no extra information.
+    pub dynamic_settings: FxHashMap<String, Val>,
     /// The container (weak parent + containment feature name), if this object is
     /// owned by another object through a containment reference.
     container: Option<ContainerBackref>,
@@ -83,6 +119,9 @@ pub struct DynamicEObject {
     /// The notification sink for this object (EMF `Notifier`). Adapters
     /// attached here receive SET/UNSET notifications when features change.
     notifier: NotifierHandle,
+    /// Lazily resolved, class-shared `eAllStructuralFeatures` + name index
+    /// (see [`FeatureCache`]). Invalidated when the registry binding changes.
+    feature_cache: OnceCell<Rc<FeatureCache>>,
 }
 
 impl DynamicEObject {
@@ -91,13 +130,13 @@ impl DynamicEObject {
     pub fn new(class: EClass) -> Self {
         Self {
             e_class: class,
-            dynamic_settings: HashMap::new(),
-            set_flags: std::collections::HashSet::new(),
+            dynamic_settings: FxHashMap::default(),
             container: None,
             inverse_lists: InverseLists::default(),
             registry: None,
             proxy_uri: None,
             notifier: new_notifier_handle(),
+            feature_cache: OnceCell::new(),
         }
     }
 
@@ -106,19 +145,20 @@ impl DynamicEObject {
     pub fn new_in(class: EClass, registry: crate::package::PackageRegistry) -> Self {
         Self {
             e_class: class,
-            dynamic_settings: HashMap::new(),
-            set_flags: std::collections::HashSet::new(),
+            dynamic_settings: FxHashMap::default(),
             container: None,
             inverse_lists: InverseLists::default(),
             registry: Some(registry),
             proxy_uri: None,
             notifier: new_notifier_handle(),
+            feature_cache: OnceCell::new(),
         }
     }
 
     /// Bind (or rebind) the registry used for inheritance resolution.
     pub fn bind_registry(&mut self, registry: crate::package::PackageRegistry) {
         self.registry = Some(registry);
+        self.feature_cache = OnceCell::new();
     }
 
     /// The class descriptor.
@@ -183,8 +223,9 @@ impl DynamicEObject {
         if feature_id < 0 {
             return None;
         }
-        self.e_all()
-            .into_iter()
+        self.features()
+            .all
+            .iter()
             .find(|f| f.feature_id() == feature_id)
             .map(|f| f.name().to_string())
     }
@@ -193,8 +234,9 @@ impl DynamicEObject {
     /// part of `eAllStructuralFeatures`; otherwise returns the stored value or,
     /// failing that, the class default.
     pub fn e_get_by_name(&self, name: &str) -> Option<Val> {
-        let feature = self.e_all().into_iter().find(|f| f.name() == name)?;
-        Some(self.e_get_feature(&feature))
+        let fc = self.features();
+        let i = *fc.by_name.get(name)?;
+        Some(self.e_get_feature(&fc.all[i]))
     }
 
     /// Read a feature's value (stored or default).
@@ -212,13 +254,21 @@ impl DynamicEObject {
 
     /// Set a feature by name. Returns false if the feature name is unknown.
     pub fn e_set_by_name(&mut self, name: &str, value: Val) -> bool {
-        let feature = match self.e_all().into_iter().find(|f| f.name() == name) {
-            Some(f) => f,
-            None => return false,
+        // Resolve the feature's kind from the (cached) feature index without
+        // holding a borrow across the mutation below.
+        let (is_reference, upper_bound) = {
+            let fc = self.features();
+            match fc.by_name.get(name) {
+                Some(&i) => {
+                    let f = &fc.all[i];
+                    (f.is_reference(), f.upper_bound())
+                }
+                None => return false,
+            }
         };
         // Reference features store object refs / object lists; attributes store
         // atomic values.
-        let stored = if feature.is_reference() {
+        let stored = if is_reference {
             normalize_reference_value(&value)
         } else {
             value
@@ -227,19 +277,16 @@ impl DynamicEObject {
         // C++ `DynamicEObject::eSet` (multi-valued writes go through the list and
         // return before notifying). Old value is the raw stored value (Null when
         // previously unset), matching C++.
-        let notify = feature.upper_bound() != -1;
-        let old_value = if notify {
-            self.dynamic_settings
-                .get(name)
-                .cloned()
-                .unwrap_or(Val::Null)
-        } else {
-            Val::Null
-        };
-        self.dynamic_settings
-            .insert(name.to_string(), stored.clone());
-        self.set_flags.insert(name.to_string());
+        // Only build a notification when an adapter can actually receive it;
+        // [`emit`] is a no-op otherwise, so materializing the feature name, the
+        // old value and a clone of the new value would be pure overhead — which
+        // dominated bulk loads where every leaf object sets a few features.
+        let notify = upper_bound != -1 && self.e_notification_required();
         if notify {
+            let old_value = self
+                .dynamic_settings
+                .insert(name.to_string(), stored.clone())
+                .unwrap_or(Val::Null);
             let n = Notification::new(
                 EventType::Set,
                 Some(name.to_string()),
@@ -249,34 +296,68 @@ impl DynamicEObject {
                 false,
             );
             emit(&self.notifier, &n);
+        } else {
+            self.dynamic_settings.insert(name.to_string(), stored);
+        }
+        true
+    }
+
+    /// Append to a multi-valued feature in place. Returns false if the feature
+    /// name is unknown. Unlike a read-modify-write through [`Self::e_set_by_name`]
+    /// this never copies the existing list, so building a feature with many
+    /// children stays linear instead of quadratic.
+    pub fn e_append_by_name(&mut self, name: &str, value: Val) -> bool {
+        let is_reference = {
+            let fc = self.features();
+            match fc.by_name.get(name) {
+                Some(&i) => fc.all[i].is_reference(),
+                None => return false,
+            }
+        };
+        let stored = if is_reference {
+            normalize_reference_value(&value)
+        } else {
+            value
+        };
+        match self.dynamic_settings.get_mut(name) {
+            Some(Val::List(l)) => l.push(stored),
+            _ => {
+                self.dynamic_settings
+                    .insert(name.to_string(), Val::List(vec![stored]));
+            }
         }
         true
     }
 
     /// Whether a feature (by name) is set.
     pub fn e_is_set_by_name(&self, name: &str) -> Option<bool> {
-        let feature = self.e_all().into_iter().find(|f| f.name() == name)?;
-        // A multi-valued feature is "set" if it has been touched (flag) and is
-        // non-empty; a single-valued feature follows the flag alone.
-        let flag = self.set_flags.contains(name);
+        let fc = self.features();
+        let feature = &fc.all[*fc.by_name.get(name)?];
+        // Presence in `dynamic_settings` is the "set" state. A multi-valued
+        // feature additionally requires a non-empty list (an explicitly set but
+        // empty list reports unset, matching EMF); a single-valued feature
+        // follows presence alone, so a value written even when equal to the
+        // class default still reports set.
+        let stored = self.dynamic_settings.get(name);
         if feature.upper_bound() == -1 {
-            let non_empty =
-                matches!(self.dynamic_settings.get(name), Some(Val::List(l)) if !l.is_empty());
-            Some(flag && non_empty)
+            Some(matches!(stored, Some(Val::List(l)) if !l.is_empty()))
         } else {
-            Some(flag)
+            Some(stored.is_some())
         }
     }
 
     /// Unset a feature by name, restoring the class default. Returns false if
     /// the name is unknown or the feature is unsettable-only.
     pub fn e_unset_by_name(&mut self, name: &str) -> bool {
-        let feature = match self.e_all().into_iter().find(|f| f.name() == name) {
-            Some(f) => f,
-            None => return false,
+        let is_containment = {
+            let fc = self.features();
+            match fc.by_name.get(name) {
+                Some(&i) => fc.all[i].is_containment(),
+                None => return false,
+            }
         };
         // Detach contained children before clearing.
-        if feature.is_containment() {
+        if is_containment {
             clear_container_children(self, name);
         }
         // Capture the raw old value before clearing for the UNSET notification
@@ -287,7 +368,6 @@ impl DynamicEObject {
             .cloned()
             .unwrap_or(Val::Null);
         self.dynamic_settings.remove(name);
-        self.set_flags.remove(name);
         let n = Notification::new(
             EventType::Unset,
             Some(name.to_string()),
@@ -356,9 +436,10 @@ impl DynamicEObject {
     /// The containment children held by single and multi containment features,
     /// in feature-id order (mirrors C++ `eContents`).
     pub fn contents(&self) -> Vec<ObjectRef> {
+        let fc = self.features();
         let mut out = Vec::new();
-        for f in self.all_containments() {
-            let name = f.name();
+        for &i in &fc.containments {
+            let name = fc.all[i].name();
             match self.dynamic_settings.get(name) {
                 Some(Val::Object(o)) => out.push(o.clone()),
                 Some(Val::List(l)) => {
@@ -377,7 +458,7 @@ impl DynamicEObject {
     /// The multi-valued list for a feature, expanding an unset default to an
     /// empty list so callers can populate it (mirrors C++ lazy list creation).
     pub fn e_list_mut(&mut self, name: &str) -> Vec<ObjectRef> {
-        if !self.e_all().into_iter().any(|f| f.name() == name) {
+        if !self.features().by_name.contains_key(name) {
             return Vec::new();
         }
         let cur = self
@@ -385,12 +466,9 @@ impl DynamicEObject {
             .get(name)
             .cloned()
             .unwrap_or(Val::Null);
-        let objs = cur
-            .as_list()
+        cur.as_list()
             .map(|l| l.iter().filter_map(|v| v.as_object().cloned()).collect())
-            .unwrap_or_default();
-        self.set_flags.insert(name.to_string());
-        objs
+            .unwrap_or_default()
     }
 
     /// All structural features (own + inherited), using the bound registry or
@@ -399,19 +477,31 @@ impl DynamicEObject {
         self.e_all()
     }
 
+    /// All structural features (own + inherited) borrowed from the per-class
+    /// cache — no clone. Reflective hot paths (e.g. the per-object validation
+    /// constraints) should prefer this over [`Self::all_structural_features`],
+    /// whose `Vec` clone dominates for classes with deep inheritance.
+    pub fn structural_features_ref(&self) -> &[crate::structural::EStructuralFeature] {
+        &self.features().all
+    }
+
     /// All reference features (own + inherited), for cross-reference / serialization.
     pub fn all_references(&self) -> Vec<crate::structural::EStructuralFeature> {
-        self.e_all()
-            .into_iter()
+        self.features()
+            .all
+            .iter()
             .filter(|f| f.is_reference())
+            .cloned()
             .collect()
     }
 
     /// All containment reference features (own + inherited), for serialization.
     pub fn all_containments(&self) -> Vec<crate::structural::EStructuralFeature> {
-        self.e_all()
-            .into_iter()
+        self.features()
+            .all
+            .iter()
             .filter(|f| f.is_containment())
+            .cloned()
             .collect()
     }
 
@@ -423,11 +513,56 @@ impl DynamicEObject {
     /// All structural features (own + inherited), using the bound registry or
     /// the global registry as fallback.
     fn e_all(&self) -> Vec<crate::structural::EStructuralFeature> {
-        let registry = self
-            .registry
-            .clone()
-            .unwrap_or_else(crate::ecore_package::global);
-        self.e_class.e_all_structural_features(&registry)
+        self.features().all.clone()
+    }
+
+    /// The cached `eAllStructuralFeatures` + name index for this object,
+    /// resolved once (see [`FeatureCache`]). Binding a registry via
+    /// [`Self::bind_registry`] clears it.
+    fn features(&self) -> &FeatureCache {
+        self.feature_cache.get_or_init(|| {
+            let id = self.e_class.instance_id();
+            CLASS_FEATURE_CACHE.with(|cell| {
+                if let Some(cached) = cell.borrow().get(&id) {
+                    return cached.clone();
+                }
+                // Borrow the bound registry directly instead of cloning it (the
+                // fallback global snapshot is only taken for unbound objects).
+                let all = match &self.registry {
+                    Some(registry) => self.e_class.e_all_structural_features(registry),
+                    None => {
+                        let registry = crate::ecore_package::global();
+                        self.e_class.e_all_structural_features(&registry)
+                    }
+                };
+                // Index each feature under its registration name (the arxml
+                // element name) plus its `ecore.name` alias, so reflective
+                // lookups resolve both the arxml spelling (`SHORT-NAME`) and the
+                // ecore spelling (`shortName`) the constraints use — matching
+                // the C++ generated model, whose features are ecore-named.
+                let mut by_name: FxHashMap<String, usize> =
+                    FxHashMap::with_capacity_and_hasher(all.len() * 2, Default::default());
+                for (i, f) in all.iter().enumerate() {
+                    by_name.entry(f.name().to_string()).or_insert(i);
+                    if let Some(alias) = f.tagged_value("ecore.name") {
+                        by_name.entry(alias.to_string()).or_insert(i);
+                    }
+                }
+                let containments = all
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, f)| f.is_containment())
+                    .map(|(i, _)| i)
+                    .collect();
+                let cache = Rc::new(FeatureCache {
+                    all,
+                    by_name,
+                    containments,
+                });
+                cell.borrow_mut().insert(id, cache.clone());
+                cache
+            })
+        })
     }
 }
 
@@ -547,8 +682,32 @@ impl EObject for DynamicEObject {
         self.e_get_by_name(feature_id)
     }
 
+    fn e_has_feature(&self, feature_id: &str) -> bool {
+        self.features().by_name.contains_key(feature_id)
+    }
+
+    fn e_feature_lower_bound(&self, feature_id: &str) -> i32 {
+        let fc = self.features();
+        match fc.by_name.get(feature_id) {
+            Some(&i) => fc.all[i].lower_bound(),
+            None => 0,
+        }
+    }
+
+    fn e_feature_upper_bound(&self, feature_id: &str) -> i32 {
+        let fc = self.features();
+        match fc.by_name.get(feature_id) {
+            Some(&i) => fc.all[i].upper_bound(),
+            None => -1,
+        }
+    }
+
     fn e_set(&mut self, feature_id: &str, value: Val) -> bool {
         self.e_set_by_name(feature_id, value)
+    }
+
+    fn e_append(&mut self, feature_id: &str, value: Val) -> bool {
+        self.e_append_by_name(feature_id, value)
     }
 
     fn e_is_set(&self, feature_id: &str) -> bool {

@@ -8,6 +8,7 @@ use crate::annotation::EAnnotation;
 use crate::structural::{EOperation, EStructuralFeature, ETypeParameter};
 use crate::Val;
 use std::collections::HashSet;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Monotonic counter assigning each freshly constructed `EClass` a unique
@@ -215,15 +216,20 @@ pub struct EClass {
     /// Java/instance class name (EClassifier.instanceClassName).
     instance_class_name: String,
     /// Parent class names (EMF `eSuperTypes`, may be several).
-    super_types: Vec<String>,
+    ///
+    /// The vectors below are shared through `Rc` so cloning an `EClass` — which
+    /// the loader does for every object it builds, and for each metamodel
+    /// lookup — is O(1) instead of deep-copying the feature/annotation tree.
+    /// Mutators use `Rc::make_mut`, so copy-on-write keeps the value semantics.
+    super_types: Rc<Vec<String>>,
     /// Locally declared structural features (own features).
-    features: Vec<EStructuralFeature>,
+    features: Rc<Vec<EStructuralFeature>>,
     /// Locally declared operations.
     operations: Vec<EOperation>,
     /// Generic type parameters (EMF `EClassifier.eTypeParameters`).
     type_parameters: Vec<ETypeParameter>,
     /// Annotations attached to this class (EMF `EClass.eAnnotations`).
-    annotations: Vec<EAnnotation>,
+    annotations: Rc<Vec<EAnnotation>>,
     /// Compiled fallback: default feature values keyed by feature id.
     default_values: Vec<(i32, Val)>,
     /// The FeatureID of the ID attribute, if the class has one.
@@ -310,7 +316,7 @@ impl EClass {
 
     /// `eSuperTypes`: parent class names.
     pub fn e_super_types(&self) -> &[String] {
-        &self.super_types
+        self.super_types.as_slice()
     }
     /// Append a super-type *name*; returns a cycle-guard error if it would
     /// create a direct self-loop.
@@ -320,7 +326,7 @@ impl EClass {
             return Err(format!("{} cannot inherit from itself", self.name));
         }
         if !self.super_types.contains(&name) {
-            self.super_types.push(name);
+            Rc::make_mut(&mut self.super_types).push(name);
         }
         Ok(())
     }
@@ -334,20 +340,20 @@ impl EClass {
                 true
             }
         });
-        self.super_types = supers;
+        self.super_types = Rc::new(supers);
     }
 
     /// `eStructuralFeatures`: own features.
     pub fn e_structural_features(&self) -> &[EStructuralFeature] {
-        &self.features
+        self.features.as_slice()
     }
     /// Mutable own features.
     pub fn e_structural_features_mut(&mut self) -> &mut Vec<EStructuralFeature> {
-        &mut self.features
+        Rc::make_mut(&mut self.features)
     }
     /// Append an own feature.
     pub fn add_feature(&mut self, feature: EStructuralFeature) {
-        self.features.push(feature);
+        Rc::make_mut(&mut self.features).push(feature);
     }
 
     /// `eOperations`: own operations.
@@ -395,15 +401,15 @@ impl EClass {
 
     /// `eAnnotations`: annotations attached to this class.
     pub fn e_annotations(&self) -> &[EAnnotation] {
-        &self.annotations
+        self.annotations.as_slice()
     }
     /// Mutable `eAnnotations`.
     pub fn e_annotations_mut(&mut self) -> &mut Vec<EAnnotation> {
-        &mut self.annotations
+        Rc::make_mut(&mut self.annotations)
     }
     /// Append an annotation (EMF `eAnnotations().add`).
     pub fn add_annotation(&mut self, ann: EAnnotation) {
-        self.annotations.push(ann);
+        Rc::make_mut(&mut self.annotations).push(ann);
     }
 
     /// Look up an annotation by its source URI (EMF `getEAnnotation(String)`).
@@ -463,8 +469,37 @@ impl EClass {
 
     /// Is `sup` (by name) a *proper* ancestor of this class? A class is never
     /// considered its own super-type (EMF `isSuperTypeOf` is strict).
+    ///
+    /// This walks the ancestry with an early exit instead of building the whole
+    /// transitive list first: the loader calls it once per containment child, so
+    /// materializing (and allocating) every ancestor name each time dominated
+    /// the arxml build phase.
     pub fn is_super_type_of(&self, sup: &str, package: &crate::package::PackageRegistry) -> bool {
-        self.all_super_type_names(package).iter().any(|s| s == sup)
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut stack: Vec<EClass> = Vec::new();
+        for s in self.e_super_types() {
+            if s == sup {
+                return true;
+            }
+            if seen.insert(s.clone()) {
+                if let Some(parent) = package.find_class(s) {
+                    stack.push(parent);
+                }
+            }
+        }
+        while let Some(cls) = stack.pop() {
+            for s in cls.e_super_types() {
+                if s == sup {
+                    return true;
+                }
+                if seen.insert(s.clone()) {
+                    if let Some(parent) = package.find_class(s) {
+                        stack.push(parent);
+                    }
+                }
+            }
+        }
+        false
     }
 
     /// `eAllStructuralFeatures`: inherited features (ancestors-first) followed

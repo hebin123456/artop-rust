@@ -19,6 +19,7 @@ members = [
     "crates/emf-artop/artop-codegen",
     "examples/arxml-roundtrip",
     "examples/arxml-validate",
+    "examples/arxml-validation-bench",
 ]
 
 [workspace.dependencies]
@@ -40,4 +41,7 @@ artop-runtime = { path = "crates/emf-artop/artop-runtime" }
 artop-codegen = { path = "crates/emf-artop/artop-codegen" }
 
 [profile.release]
-opt-level = 2
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"

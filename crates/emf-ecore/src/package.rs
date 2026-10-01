@@ -4,6 +4,7 @@
 //! `EPackageRegistry` global registry.
 
 use crate::{DynamicEObject, EClass, EDataType, EEnum, Val};
+use emf_common::fast_hash::FxHashMap;
 use emf_common::uri::Uri;
 use std::collections::HashMap;
 
@@ -27,6 +28,13 @@ pub struct EPackage {
     sub_packages: Vec<PackageRef>,
     /// Whether the package's classifiers were fully registered.
     sealed: bool,
+    /// `class name` -> index into `classifiers`, maintained by
+    /// [`EPackage::add_class`]. Turns the reflective class lookup from a linear
+    /// scan over every classifier (thousands in the AUTOSAR metamodel) into a
+    /// single hash probe, which dominates load/save throughput.
+    class_index: FxHashMap<String, usize>,
+    /// `xml.name` -> index into `classifiers` (the arxml element name lookup).
+    xml_class_index: FxHashMap<String, usize>,
 }
 
 impl Default for EPackage {
@@ -40,6 +48,8 @@ impl Default for EPackage {
             enums: Vec::new(),
             sub_packages: Vec::new(),
             sealed: false,
+            class_index: FxHashMap::default(),
+            xml_class_index: FxHashMap::default(),
         }
     }
 }
@@ -102,6 +112,16 @@ impl EPackage {
     /// Register a class. Assigns each feature a FeatureID if not already set.
     pub fn add_class(&mut self, mut class: EClass) {
         self.assign_feature_ids(class.e_structural_features_mut());
+        let idx = self.classifiers.len();
+        // Index under the ecore class name and, separately, the arxml
+        // `xml.name`, so both lookups are O(1). First registration wins,
+        // matching the previous linear `find` (first matching classifier).
+        self.class_index
+            .entry(class.name().to_string())
+            .or_insert(idx);
+        self.xml_class_index
+            .entry(class.xml_name().to_string())
+            .or_insert(idx);
         self.classifiers.push(class);
     }
 
@@ -123,17 +143,18 @@ impl EPackage {
         }
     }
 
-    /// A classifier by class name.
+    /// A classifier by class name (O(1) via the name index).
     pub fn find_class(&self, name: &str) -> Option<&EClass> {
-        self.classifiers.iter().find(|c| c.name() == name)
+        self.classifiers.get(*self.class_index.get(name)?)
     }
 
     /// A classifier by its arxml element name: the ecore class name or the
     /// class's `xml.name` tagged value (mirrors the C++ `findEClassByXmlName`).
     pub fn find_class_by_xml_name(&self, xml_name: &str) -> Option<&EClass> {
-        self.classifiers
-            .iter()
-            .find(|c| c.name() == xml_name || c.xml_name() == xml_name)
+        if let Some(c) = self.class_index.get(xml_name) {
+            return self.classifiers.get(*c);
+        }
+        self.classifiers.get(*self.xml_class_index.get(xml_name)?)
     }
 
     /// An enum by name.

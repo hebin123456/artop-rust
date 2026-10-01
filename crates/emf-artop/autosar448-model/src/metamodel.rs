@@ -76,6 +76,15 @@ fn tag_feature(f: &mut EStructuralFeature, fm: &crate::registry::FeatureMeta) {
     if !fm.xml_name.is_empty() {
         ann.set_detail("xml.name", fm.xml_name);
     }
+    // The feature is registered under its arxml element name (so the loader can
+    // match an XML tag directly), but the reflective constraints look features
+    // up by their *ecore* name (C++ `getEStructuralFeature("uuid")`, whose
+    // generated model is ecore-named). Record the ecore name as an alias so
+    // `DynamicEObject::e_get`/`e_has_feature` resolve both spellings.
+    let fname = xml_feature_name(fm);
+    if fm.name != fname {
+        ann.set_detail("ecore.name", fm.name);
+    }
     if !fm.xml_name_plural.is_empty() && fm.xml_name_plural != fm.xml_name {
         ann.set_detail("xml.namePlural", fm.xml_name_plural);
     }
