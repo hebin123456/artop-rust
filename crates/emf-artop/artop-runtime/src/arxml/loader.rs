@@ -153,7 +153,7 @@ impl XMLLoader for AutosarXMLLoader {
     fn load(&self, resource: &mut XMIResource, input: &str) -> Result<(), String> {
         let timing = std::env::var_os("ARXML_TIMING").is_some();
         let t_parse = std::time::Instant::now();
-        let mut root = dom::parse(input)?;
+        let root = dom::parse(input)?;
         if timing {
             eprintln!(
                 "[timing] dom_parse = {:?} rss={} MB (input string = {} MB)",
@@ -162,6 +162,40 @@ impl XMLLoader for AutosarXMLLoader {
                 input.len() / 1048576
             );
         }
+        self.build_into(resource, root, timing)
+    }
+
+    /// Same as [`Self::load`], but *owns* the document text so it can release
+    /// it before the model is built. The parse tree owns every string it
+    /// needs, so the source is dead weight from here on; at 400 MB it is 10%
+    /// of the whole memory budget. The C++ loader does the same thing with
+    /// `malloc_trim` right after `pugixml load_buffer`.
+    fn load_owned(&self, resource: &mut XMIResource, input: String) -> Result<(), String> {
+        let timing = std::env::var_os("ARXML_TIMING").is_some();
+        let t_parse = std::time::Instant::now();
+        let root = dom::parse(&input)?;
+        let src_mb = input.len() / 1048576;
+        drop(input);
+        if timing {
+            eprintln!(
+                "[timing] dom_parse = {:?} rss={} MB (source {} MB released)",
+                t_parse.elapsed(),
+                rss_mb(),
+                src_mb
+            );
+        }
+        self.build_into(resource, root, timing)
+    }
+}
+
+impl AutosarXMLLoader {
+    /// Build the model from an already-parsed tree and install it in `resource`.
+    fn build_into(
+        &self,
+        resource: &mut XMIResource,
+        mut root: Element,
+        timing: bool,
+    ) -> Result<(), String> {
         if root.local() != ROOT_ELEMENT {
             return Err(format!(
                 "AutosarXMLLoader: 期望根元素 <{ROOT_ELEMENT}>，实际为 <{}>",

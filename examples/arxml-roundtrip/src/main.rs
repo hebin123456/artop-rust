@@ -32,7 +32,7 @@ fn load(path: &str) -> Result<AutosarXMLResource, String> {
         Uri::parse(&format!("file:///{}", path)),
         ecore_package::global(),
     );
-    res.load_from_string(&src)
+    res.load_from_owned_string(src)
         .map_err(|e| format!("loading `{path}`: {e}"))?;
     Ok(res)
 }
@@ -85,20 +85,20 @@ fn rss_bytes() -> u64 {
 /// the C++ `ArxmlBenchmark`. Writes nothing to disk (save goes to a String).
 fn bench(in_path: &str, iterations: usize) -> Result<(), String> {
     AutosarResourceFactory::register_default_autosar40_metamodel();
-    let src = std::fs::read_to_string(in_path).map_err(|e| format!("reading `{in_path}`: {e}"))?;
-    let file_size = src.len() as f64;
+    let file_bytes = std::fs::metadata(in_path).map(|m| m.len()).unwrap_or(0);
+    let file_size = file_bytes as f64;
     println!("=== Rust artop-runtime Arxml Benchmark ===");
     println!("File: {in_path}");
-    println!(
-        "Size: {:.1} MB ({} bytes)",
-        file_size / 1048576.0,
-        src.len()
-    );
+    println!("Size: {:.1} MB ({} bytes)", file_size / 1048576.0, file_bytes);
     println!("Iterations: {iterations}\n");
 
     let mut load_ms = Vec::new();
     let mut save_ms = Vec::new();
     for i in 0..iterations {
+        // Read per iteration and hand ownership to the loader, so the document
+        // text is released as soon as it has been parsed instead of staying
+        // resident for the whole run (see `AutosarXMLLoader::load_owned`).
+        let src = std::fs::read_to_string(in_path).map_err(|e| format!("reading `{in_path}`: {e}"))?;
         let rss_before = rss_bytes();
 
         let t0 = Instant::now();
@@ -106,7 +106,7 @@ fn bench(in_path: &str, iterations: usize) -> Result<(), String> {
             Uri::parse(&format!("file:///{}", in_path)),
             ecore_package::global(),
         );
-        res.load_from_string(&src)
+        res.load_from_owned_string(src)
             .map_err(|e| format!("loading `{in_path}`: {e}"))?;
         let load = t0.elapsed().as_secs_f64() * 1000.0;
         let roots = res.resource().contents().len();

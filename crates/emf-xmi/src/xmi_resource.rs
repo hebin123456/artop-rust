@@ -135,6 +135,16 @@ impl XMIResource {
         loader.load(self, src)
     }
 
+    /// Like [`Self::load_from_string`], but takes ownership of `src` so the
+    /// loader can free the document text as soon as it has parsed it. Prefer
+    /// this when the source is read from a file: keeping the raw text resident
+    /// alongside the parse tree (and then the model) is the single largest
+    /// avoidable allocation during a large load.
+    pub fn load_from_owned_string(&mut self, src: String) -> Result<(), String> {
+        let loader = self.xml_load.clone();
+        loader.load_owned(self, src)
+    }
+
     /// The real XMI parser into this resource (used by the default
     /// [`XMLoaderImpl`]); replaces roots, marks it loaded, adopts `xmi:id`s.
     pub(crate) fn load_inner(&mut self, src: &str) -> Result<(), String> {

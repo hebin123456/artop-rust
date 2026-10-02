@@ -47,6 +47,15 @@ impl XMLSave for XMLSaveImpl {
 pub trait XMLLoader {
     /// Parse `input` into `resource`, reporting any error.
     fn load(&self, resource: &mut XMIResource, input: &str) -> Result<(), String>;
+
+    /// Parse `input` into `resource`, taking ownership of the document text so
+    /// an implementation may release it before building the model. The default
+    /// borrows, which is correct for any loader that keeps its own copies of
+    /// what it needs — an implementation that can drop the source early
+    /// overrides this to actually save the memory.
+    fn load_owned(&self, resource: &mut XMIResource, input: String) -> Result<(), String> {
+        self.load(resource, input.as_str())
+    }
 }
 
 /// Default [`XMLLoader`] implementation: real XMI parse into the resource
