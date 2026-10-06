@@ -9,7 +9,10 @@
 //!     opening tag is emitted when the first child/text/comment arrives, and
 //!     `end_element` decides between `<TAG/>`, an indented `</TAG>` and an
 //!     inline `</TAG>`. Its text/attribute escaping mirrors the C++ byte for
-//!     byte, which is what makes a load → save round-trip stable.
+//!     byte, which is what makes a load → save round-trip stable. It is generic
+//!     over a [`std::io::Write`] sink and drains a bounded scratch buffer into
+//!     it, so a streaming save never holds the whole document (see
+//!     `AutosarXMLSaver::save_to_writer`).
 //!   * [`AutosarSaver`] — the feature walk: attributes vs child elements,
 //!     APRXML rules 0012/0015/0016/default for containment wrapping,
 //!     `<FEATURE DEST="Type">short-name-path</FEATURE>` for references, and the
@@ -73,8 +76,20 @@ enum AprxmlRule {
     Default,
 }
 
+/// Scratch-buffer size above which a streaming [`DomWriter`] drains its buffer
+/// into the sink. Bounds the writer's extra memory to this many bytes regardless
+/// of document size; string mode (`bounded == false`) never flushes early and
+/// keeps the whole document in `buf`.
+const FLUSH_THRESHOLD: usize = 1 << 16;
+
 /// A streaming XML writer with delayed tag opening (C++ `PugiDomWriter`).
-struct DomWriter {
+///
+/// Generic over its sink `W: Write`. In *string mode* (`bounded == false`) the
+/// whole document accumulates in `buf` and is handed back by `finish_string`;
+/// in *streaming mode* `buf` is a bounded scratch buffer drained into `out`
+/// whenever it reaches [`FLUSH_THRESHOLD`], so the document is never resident as
+/// a whole.
+struct DomWriter<W: std::io::Write> {
     indent: String,
     /// `indent` repeated `d` times, grown on demand. Indentation is written once
     /// per element and once per element close, at a depth that grows with the
@@ -82,7 +97,16 @@ struct DomWriter {
     /// per level (tens of millions of 2-byte copies on a 300 MB document).
     /// Caching the expanded prefix turns that into a single slice copy.
     indent_cache: Vec<String>,
+    /// Accumulation buffer: the whole document in string mode, a bounded scratch
+    /// buffer in streaming mode.
     buf: String,
+    /// The sink the scratch buffer is drained into (unused in string mode).
+    out: W,
+    /// Whether `buf` is drained into `out` at [`FLUSH_THRESHOLD`].
+    bounded: bool,
+    /// The first I/O error seen. The feature walk has no error channel, so it is
+    /// stashed here and surfaced by `finish`.
+    err: Option<std::io::Error>,
     depth: usize,
     stack: Vec<Frame>,
     /// Frames released by [`DomWriter::end_element`], kept so their `tag` /
@@ -104,12 +128,25 @@ struct Frame {
     has_text: bool,
 }
 
-impl DomWriter {
-    fn new() -> Self {
+impl<W: std::io::Write> DomWriter<W> {
+    /// String mode: the document accumulates in `buf`; `out` is untouched.
+    fn new_string(out: W) -> Self {
+        Self::with_sink(out, false)
+    }
+
+    /// Streaming mode: `buf` is drained into `out` at [`FLUSH_THRESHOLD`].
+    fn new_streaming(out: W) -> Self {
+        Self::with_sink(out, true)
+    }
+
+    fn with_sink(out: W, bounded: bool) -> Self {
         Self {
             indent: "  ".to_string(),
             indent_cache: vec![String::new()],
             buf: String::new(),
+            out,
+            bounded,
+            err: None,
             depth: 0,
             stack: Vec::new(),
             frame_pool: Vec::new(),
@@ -123,13 +160,41 @@ impl DomWriter {
         self.indent_cache.push(String::new());
     }
 
+    /// Drain the scratch buffer into the sink (a no-op once an error is held).
+    fn flush_buf(&mut self) {
+        if self.buf.is_empty() {
+            return;
+        }
+        if self.err.is_none() {
+            if let Err(e) = self.out.write_all(self.buf.as_bytes()) {
+                self.err = Some(e);
+            }
+        }
+        self.buf.clear();
+    }
+
+    /// Drain the scratch buffer once it has reached [`FLUSH_THRESHOLD`]. Only
+    /// streaming mode flushes early; string mode keeps everything in `buf`.
+    fn maybe_flush(&mut self) {
+        if self.bounded && self.buf.len() >= FLUSH_THRESHOLD {
+            self.flush_buf();
+        }
+    }
+
     /// Write the `<?xml ...?>` declaration (call before any element).
     fn set_output(&mut self, write_decl: bool, encoding: &str) {
         if write_decl {
             self.buf.push_str("<?xml version=\"1.0\" encoding=\"");
             self.buf.push_str(encoding);
             self.buf.push_str("\"?>\n");
+            self.maybe_flush();
         }
+    }
+
+    /// Append `s` verbatim (no escaping), e.g. the trailing document newline.
+    fn write_raw(&mut self, s: &str) {
+        self.buf.push_str(s);
+        self.maybe_flush();
     }
 
     /// Escape an element's text (C++ `encodeText`): `<`, `&`, `"`, `\r`.
@@ -226,6 +291,7 @@ impl DomWriter {
         frame.has_text = false;
         self.stack.push(frame);
         self.depth += 1;
+        self.maybe_flush();
     }
 
     fn write_attribute(&mut self, name: &str, value: &str) {
@@ -249,6 +315,7 @@ impl DomWriter {
         if !text.is_empty() {
             Self::encode_text(text, &mut self.buf);
         }
+        self.maybe_flush();
     }
 
     fn write_comment(&mut self, text: &str) {
@@ -259,6 +326,7 @@ impl DomWriter {
         self.buf.push_str("<!--");
         self.buf.push_str(text);
         self.buf.push_str("-->");
+        self.maybe_flush();
     }
 
     fn end_element(&mut self) {
@@ -288,11 +356,23 @@ impl DomWriter {
         f.tag.clear();
         f.attrs.clear();
         self.frame_pool.push(f);
+        self.maybe_flush();
     }
 
-    /// Consume the accumulated output.
-    fn finish(&mut self) -> String {
+    /// Consume the writer, returning the whole accumulated document (string mode
+    /// only: in streaming mode the bytes have already gone to the sink).
+    fn finish_string(mut self) -> String {
         std::mem::take(&mut self.buf)
+    }
+
+    /// Drain the remaining scratch buffer and hand back the sink (streaming
+    /// mode), surfacing the first I/O error if the walk hit one.
+    fn finish(mut self) -> std::io::Result<W> {
+        self.flush_buf();
+        match self.err.take() {
+            Some(e) => Err(e),
+            None => Ok(self.out),
+        }
     }
 }
 
@@ -310,15 +390,28 @@ impl AutosarXMLSaver {
 
 impl XMLSave for AutosarXMLSaver {
     fn save(&self, resource: &XMIResource) -> String {
-        AutosarSaver::new(resource).run()
+        AutosarSaver::new(resource).into_string()
+    }
+
+    /// Stream the arxml document into `out`. Unlike [`XMLSave::save`], the
+    /// document text is never held in full: [`DomWriter`] drains a bounded
+    /// scratch buffer into the sink, so a save is bounded by the live model plus
+    /// a constant, and can complete when materialising the whole output would
+    /// exhaust memory.
+    fn save_to_writer(
+        &self,
+        resource: &XMIResource,
+        out: &mut dyn std::io::Write,
+    ) -> std::io::Result<()> {
+        AutosarSaver::new_streaming(resource, out).into_writer()
     }
 }
 
 /// The serialization context (C++ `AutosarSaver`).
-struct AutosarSaver<'a> {
+struct AutosarSaver<'a, W: std::io::Write> {
     res: &'a XMIResource,
     reg: PackageRegistry,
-    writer: DomWriter,
+    writer: DomWriter<W>,
     /// `ObjectRef` identity -> short-name path.
     snp_cache: FxHashMap<usize, String>,
     /// `ObjectRef` identity -> short name.
@@ -332,12 +425,12 @@ struct AutosarSaver<'a> {
     sorted_cache: FxHashMap<u64, Rc<Vec<EStructuralFeature>>>,
 }
 
-impl<'a> AutosarSaver<'a> {
-    fn new(res: &'a XMIResource) -> Self {
+impl<'a, W: std::io::Write> AutosarSaver<'a, W> {
+    fn with_writer(res: &'a XMIResource, writer: DomWriter<W>) -> Self {
         Self {
             res,
             reg: res.registry().clone(),
-            writer: DomWriter::new(),
+            writer,
             snp_cache: FxHashMap::default(),
             short_name_cache: FxHashMap::default(),
             type_name_cache: FxHashMap::default(),
@@ -345,8 +438,10 @@ impl<'a> AutosarSaver<'a> {
         }
     }
 
-    /// The top-level entry (C++ `AutosarSaver::save`).
-    fn run(&mut self) -> String {
+    /// Emit the whole document (C++ `AutosarSaver::save`), including the
+    /// trailing newline after the root element. The caller then either recovers
+    /// the accumulated string or flushes the sink.
+    fn write_document(&mut self) {
         let indent = {
             let i = self.res.options().indent.clone();
             if i.is_empty() {
@@ -380,9 +475,7 @@ impl<'a> AutosarSaver<'a> {
         }
 
         self.writer.end_element();
-        let mut out = self.writer.finish();
-        out.push('\n');
-        out
+        self.writer.write_raw("\n");
     }
 
     // ---- metamodel helpers ----
@@ -1119,6 +1212,34 @@ impl<'a> AutosarSaver<'a> {
     }
 }
 
+impl<'a> AutosarSaver<'a, Vec<u8>> {
+    /// A saver whose document accumulates into a `String` (the sink is an unused
+    /// in-memory `Vec`, since string mode never flushes early).
+    fn new(res: &'a XMIResource) -> Self {
+        Self::with_writer(res, DomWriter::new_string(Vec::new()))
+    }
+
+    /// Serialize and return the whole document as a `String` (C++ `save` with a
+    /// string stream). Peak memory is the model plus the full output text.
+    fn into_string(mut self) -> String {
+        self.write_document();
+        self.writer.finish_string()
+    }
+}
+
+impl<'a, 'w> AutosarSaver<'a, &'w mut dyn std::io::Write> {
+    /// A saver that streams its document into `out`.
+    fn new_streaming(res: &'a XMIResource, out: &'w mut dyn std::io::Write) -> Self {
+        Self::with_writer(res, DomWriter::new_streaming(out))
+    }
+
+    /// Serialize into the sink, draining the bounded scratch buffer as it goes.
+    fn into_writer(mut self) -> std::io::Result<()> {
+        self.write_document();
+        self.writer.finish().map(|_| ())
+    }
+}
+
 /// A resolved `BASE`-relative reference (C++ `BaseRelative`).
 #[derive(Default)]
 struct BaseRelative {
@@ -1316,6 +1437,39 @@ mod tests {
         );
         assert!(out.contains("<SHORT-NAME>pkg1</SHORT-NAME>"), "{out}");
         assert!(out.ends_with("</AUTOSAR>\n"), "{out}");
+    }
+
+    /// The streaming save (`save_to_writer`) must emit exactly the bytes of the
+    /// string save, including when the document exceeds the writer's flush
+    /// threshold so the bounded scratch buffer is drained mid-document.
+    #[test]
+    fn streaming_save_matches_string_save() {
+        // Enough AR-PACKAGEs that the serialized document crosses
+        // `FLUSH_THRESHOLD` (64 KiB), forcing at least one mid-document drain.
+        let mut arxml =
+            String::from("<AUTOSAR xmlns=\"http://autosar.org/schema/r4.0\"><AR-PACKAGES>");
+        for i in 0..4000 {
+            arxml.push_str(&format!(
+                "<AR-PACKAGE><SHORT-NAME>pkg{i:05}</SHORT-NAME></AR-PACKAGE>"
+            ));
+        }
+        arxml.push_str("</AR-PACKAGES></AUTOSAR>");
+        let res = load(&arxml);
+
+        let expected = res.save_to_string();
+        assert!(
+            expected.len() > FLUSH_THRESHOLD,
+            "fixture must cross the flush threshold, got {} bytes",
+            expected.len()
+        );
+
+        let mut streamed = Vec::new();
+        res.save_to_writer(&mut streamed).expect("stream save");
+        assert_eq!(
+            String::from_utf8(streamed).expect("utf-8"),
+            expected,
+            "streamed bytes must match the string save"
+        );
     }
 
     #[test]

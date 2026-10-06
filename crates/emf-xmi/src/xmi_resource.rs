@@ -118,6 +118,19 @@ impl XMIResource {
         self.xml_save.save(self)
     }
 
+    /// Stream the current contents into `out`, routed through the active
+    /// [`XMLSave`]. Unlike [`Self::save_to_string`], the document text is never
+    /// materialised as a whole, so a resource whose serialization dwarfs the
+    /// live model can be written under a tight memory bound (the C++
+    /// `save(resource, output, options)` stream signature).
+    ///
+    /// The bytes are identical to [`Self::save_to_string`] for a serializer that
+    /// overrides [`XMLSave::save_to_writer`]; the default trait body simply
+    /// forwards the string form.
+    pub fn save_to_writer(&self, out: &mut dyn std::io::Write) -> std::io::Result<()> {
+        self.xml_save.save_to_writer(self, out)
+    }
+
     /// The real XMI serializer (used by the default [`XMLSaveImpl`]).
     pub(crate) fn save_inner(&self) -> String {
         save_to_string(self.resource.contents(), &self.opts)
@@ -331,8 +344,16 @@ impl XMIResource {
         if path.is_empty() {
             return Err("cannot save to empty file path".to_string());
         }
-        let text = self.to_xmi_string();
-        std::fs::write(&path, text).map_err(|e| format!("Cannot write file: {} ({e})", path))?;
+        // Stream to the file instead of building the whole document in memory
+        // first: a large resource is bounded by the model, not the model plus a
+        // full copy of the output text.
+        let file = std::fs::File::create(&path)
+            .map_err(|e| format!("Cannot write file: {} ({e})", path))?;
+        let mut out = std::io::BufWriter::new(file);
+        self.save_to_writer(&mut out)
+            .map_err(|e| format!("Cannot write file: {} ({e})", path))?;
+        std::io::Write::flush(&mut out)
+            .map_err(|e| format!("Cannot write file: {} ({e})", path))?;
         self.resource.set_modified(false);
         Ok(())
     }

@@ -212,7 +212,11 @@ impl AutosarXMLLoader {
         let t_build = std::time::Instant::now();
         let root_obj = loader.build_object(&mut root, &autosar_class);
         if timing {
-            eprintln!("[timing] build = {:?} rss={} MB", t_build.elapsed(), rss_mb());
+            eprintln!(
+                "[timing] build = {:?} rss={} MB",
+                t_build.elapsed(),
+                rss_mb()
+            );
             let objs = OBJ_COUNT.with(|c| c.get());
             let new_in = NEW_IN_NS.with(|c| c.get());
             eprintln!(
@@ -556,7 +560,9 @@ impl ArxmlLoader {
             let mut last = None;
             let mut collected = Vec::new();
             for child in std::mem::take(&mut el.children) {
-                let Node::Element(mut e) = child else { continue };
+                let Node::Element(mut e) = child else {
+                    continue;
+                };
                 match self.determine_child_class(&e, f.type_name()) {
                     Some(class) => {
                         if let Some(child_obj) = self.build_object(&mut e, &class) {

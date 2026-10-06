@@ -11,6 +11,15 @@
 //! and the load surface consumes text into the resource; the injected mock
 //! implementations in the parity suite confirm a custom token is dispatched
 //! exactly as in the C++ tests.
+//!
+//! The C++ `save(resource, output, options)` writes into a stream; the Rust
+//! side offers the same capability as [`XMLSave::save_to_writer`], whose default
+//! body materialises the text and forwards it, so any custom serializer keeps
+//! working. A serializer that can emit incrementally (e.g. the artop arxml
+//! `AutosarXMLSaver`) overrides it to avoid holding the whole document in
+//! memory.
+
+use std::io::{self, Write};
 
 use super::xmi_resource::XMIResource;
 
@@ -18,6 +27,16 @@ use super::xmi_resource::XMIResource;
 pub trait XMLSave {
     /// Serialize `resource`'s contents, returning the XMI/XML text.
     fn save(&self, resource: &XMIResource) -> String;
+
+    /// Stream `resource`'s serialization into `out`.
+    ///
+    /// The default materialises the document via [`XMLSave::save`] and writes it
+    /// in one go, which is correct for any serializer. Implementations that can
+    /// write incrementally override this so peak memory stays at the model size
+    /// rather than the model plus a full copy of the output text.
+    fn save_to_writer(&self, resource: &XMIResource, out: &mut dyn Write) -> io::Result<()> {
+        out.write_all(self.save(resource).as_bytes())
+    }
 }
 
 /// Default [`XMLSave`] implementation (C++ `XMLSaveImpl`): real XMI output.

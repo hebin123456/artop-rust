@@ -38,15 +38,21 @@ fn load(path: &str) -> Result<AutosarXMLResource, String> {
 }
 
 /// Load then save — the round-trip the C++/Java serializers are compared against.
+///
+/// The save streams straight into the output file (a bounded scratch buffer at
+/// a time) instead of materialising the whole document as a `String` first, so
+/// the peak memory is the live model, not the model plus a full copy of the
+/// output text.
 fn roundtrip(in_path: &str, out_path: &str) -> Result<(), String> {
     let res = load(in_path)?;
-    let out = res.save_to_string();
-    std::fs::write(out_path, &out).map_err(|e| format!("writing `{out_path}`: {e}"))?;
+    let file = std::fs::File::create(out_path).map_err(|e| format!("writing `{out_path}`: {e}"))?;
+    let mut out = std::io::BufWriter::new(file);
+    res.save_to_writer(&mut out)
+        .map_err(|e| format!("writing `{out_path}`: {e}"))?;
+    std::io::Write::flush(&mut out).map_err(|e| format!("writing `{out_path}`: {e}"))?;
     let in_len = std::fs::metadata(in_path).map(|m| m.len()).unwrap_or(0);
-    println!(
-        "ROUNDTRIP-OK {out_path} ({in_len} bytes in, {} bytes out)",
-        out.len()
-    );
+    let out_len = std::fs::metadata(out_path).map(|m| m.len()).unwrap_or(0);
+    println!("ROUNDTRIP-OK {out_path} ({in_len} bytes in, {out_len} bytes out)");
     Ok(())
 }
 
@@ -81,15 +87,37 @@ fn rss_bytes() -> u64 {
     0
 }
 
+/// A sink that only counts the bytes written to it — a null device with a
+/// length. Lets the benchmark exercise the streaming save (whose peak memory is
+/// the live model, not the model plus the whole output text) while still
+/// reporting the serialized size.
+#[derive(Default)]
+struct CountWriter(usize);
+
+impl std::io::Write for CountWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0 += buf.len();
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 /// Benchmark: time load (deserialize) and save (serialize) separately, mirroring
-/// the C++ `ArxmlBenchmark`. Writes nothing to disk (save goes to a String).
+/// the C++ `ArxmlBenchmark`. Writes no document to disk: the save streams into a
+/// counting sink, so the measured RSS reflects the saver's own footprint.
 fn bench(in_path: &str, iterations: usize) -> Result<(), String> {
     AutosarResourceFactory::register_default_autosar40_metamodel();
     let file_bytes = std::fs::metadata(in_path).map(|m| m.len()).unwrap_or(0);
     let file_size = file_bytes as f64;
     println!("=== Rust artop-runtime Arxml Benchmark ===");
     println!("File: {in_path}");
-    println!("Size: {:.1} MB ({} bytes)", file_size / 1048576.0, file_bytes);
+    println!(
+        "Size: {:.1} MB ({} bytes)",
+        file_size / 1048576.0,
+        file_bytes
+    );
     println!("Iterations: {iterations}\n");
 
     let mut load_ms = Vec::new();
@@ -98,7 +126,8 @@ fn bench(in_path: &str, iterations: usize) -> Result<(), String> {
         // Read per iteration and hand ownership to the loader, so the document
         // text is released as soon as it has been parsed instead of staying
         // resident for the whole run (see `AutosarXMLLoader::load_owned`).
-        let src = std::fs::read_to_string(in_path).map_err(|e| format!("reading `{in_path}`: {e}"))?;
+        let src =
+            std::fs::read_to_string(in_path).map_err(|e| format!("reading `{in_path}`: {e}"))?;
         let rss_before = rss_bytes();
 
         let t0 = Instant::now();
@@ -111,13 +140,26 @@ fn bench(in_path: &str, iterations: usize) -> Result<(), String> {
         let load = t0.elapsed().as_secs_f64() * 1000.0;
         let roots = res.resource().contents().len();
         let rss_after_load = rss_bytes();
+        // Print to stderr (unbuffered) so the phase boundary survives an OOM kill.
+        eprintln!(
+            "[bench] iter {} after load: rss={:.1} MB",
+            i + 1,
+            rss_after_load as f64 / 1048576.0
+        );
 
         let t1 = Instant::now();
-        let out = res.save_to_string();
+        let mut sink = CountWriter::default();
+        res.save_to_writer(&mut sink)
+            .map_err(|e| format!("saving `{in_path}`: {e}"))?;
         let save = t1.elapsed().as_secs_f64() * 1000.0;
-        let out_len = out.len();
+        let out_len = sink.0;
         let rss_after = rss_bytes();
-        drop(out);
+        eprintln!(
+            "[bench] iter {} after save: rss={:.1} MB (out={} bytes)",
+            i + 1,
+            rss_after as f64 / 1048576.0,
+            out_len
+        );
         drop(res);
 
         load_ms.push(load);

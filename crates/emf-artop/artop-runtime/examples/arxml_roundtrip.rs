@@ -22,12 +22,18 @@ fn load(path: &str) -> Result<AutosarXMLResource, String> {
 
 fn roundtrip(in_path: &str, out_path: &str) -> Result<(), String> {
     let res = load(in_path)?;
-    let out = res.save_to_string();
-    std::fs::write(out_path, &out).map_err(|e| format!("writing `{out_path}`: {e}"))?;
+    // Stream straight to the file: the whole document is never materialised as a
+    // String, so the peak memory is the live model, not the model plus a full
+    // copy of the output text.
+    let file = std::fs::File::create(out_path).map_err(|e| format!("writing `{out_path}`: {e}"))?;
+    let mut out = std::io::BufWriter::new(file);
+    res.save_to_writer(&mut out)
+        .map_err(|e| format!("writing `{out_path}`: {e}"))?;
+    std::io::Write::flush(&mut out).map_err(|e| format!("writing `{out_path}`: {e}"))?;
     println!(
         "ROUNDTRIP-OK {out_path} ({} bytes in, {} bytes out)",
         std::fs::metadata(in_path).map(|m| m.len()).unwrap_or(0),
-        out.len()
+        std::fs::metadata(out_path).map(|m| m.len()).unwrap_or(0)
     );
     Ok(())
 }
