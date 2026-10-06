@@ -25,8 +25,9 @@
   **等价(PASS) 153、待实现(PENDING) 0、REGRESSION 0**。
 - 其余底座模块 oracle：`emf-edit`(26) / `emf-acceleo`(26) / `emf-xcore`(14) / `emf-sphinx`(68)
   均 **0 PENDING 全 PASS**；`emf-common` **188/193**（余 5 条为 Rust 类型系统无法如实表达的
-  空指针 / 重复身份语义，保留 PENDING）；`emf-xmi` 187 条 oracle 中 **183 条已映射、182 PASS**
-  （5 PENDING：4 条未映射 + 1 条 C++ 参考自身失败）。artop 侧 `artop-runtime`(18) 同步对齐为
+  空指针 / 重复身份语义，保留 PENDING）；`emf-xmi` 187 条 oracle **187/187 全映射、186 PASS**
+  （唯一 PENDING 为 `StaticDynamic_StaticXmi_EqualsDynamicXmi`，C++ 参考自身失败，非 Rust 缺口）。
+  artop 侧 `artop-runtime`(18) 同步对齐为
   **0 PENDING 全 PASS**（见 `docs/PARITY_TRACKER.md` 的 artop-runtime 章节）。
 - 曾记作“不可 1:1 移植”的 2 条 emf-ecore 用例已如实表达并转 PASS：
   `BasicEObject_EClass_DefaultNull`（裸 `EObject` 的 `e_class()` 返回空名表达“无分类器”）、

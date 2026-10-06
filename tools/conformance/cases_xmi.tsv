@@ -13,7 +13,7 @@
 #   - 已映射但 Rust 测试失败 => REGRESSION(必须修复)
 # 以 # 开头的行为注释, 忽略。
 #
-# 未映射(PENDING): 仅 StaticDynamic_StaticXmi_EqualsDynamicXmi(C++ 侧即失败)等少数 Rust 侧无独立对照项者。
+# 未映射(PENDING): 无（187/187 全映射）。唯一 PENDING 为 StaticDynamic_StaticXmi_EqualsDynamicXmi（C++ 参考自身失败, 非 Rust 缺口）。
 # 注: Placeholder 是 C++ 的测试框架注册冒烟测试, Rust 侧以同名 placeholder 对照。
 
 group	cpp_test	rust_test	pkg

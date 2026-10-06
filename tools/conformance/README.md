@@ -60,7 +60,7 @@ python3 tools/conformance/compare.py
 |---|---|---|---|
 | `emf-common` | 193 | 188 PASS（5 条为 Rust 类型系统无法表达的空指针/重复身份语义，保留 PENDING） | `compare.py --oracle build/oracle.json --cases cases.tsv --pkg emf-common` |
 | `emf-ecore` | 153 | 153 PASS（0 PENDING） | `compare.py --oracle build/ecore_oracle.json --cases cases_ecore.tsv --pkg emf-ecore` |
-| `emf-xmi` | 187 | 183 映射 / 182 PASS（5 PENDING：4 条未映射 + 1 条 C++ 参考自身失败） | `compare.py --oracle build/xmi_oracle.json --cases cases_xmi.tsv --pkg emf-xmi` |
+| `emf-xmi` | 187 | 187 映射 / 186 PASS（1 PENDING：`StaticDynamic_StaticXmi_EqualsDynamicXmi`，C++ 参考自身失败，非 Rust 缺口） | `compare.py --oracle build/xmi_oracle.json --cases cases_xmi.tsv --pkg emf-xmi` |
 | `emf-edit` | 26 | 26 PASS（0 PENDING） | `compare.py --oracle build/edit_oracle.json --cases cases_edit.tsv --pkg emf-edit` |
 | `emf-acceleo` | 26 | 26 PASS（0 PENDING） | `compare.py --oracle build/acceleo_oracle.json --cases cases_acceleo.tsv --pkg emf-acceleo` |
 | `emf-xcore` | 14 | 14 PASS（0 PENDING） | `compare.py --oracle build/xcore_oracle.json --cases cases_xcore.tsv --pkg emf-xcore` |

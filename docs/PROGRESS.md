@@ -106,8 +106,9 @@ oracle，跑参考结果；Rust 侧跑同名/对应测试，逐条比对。**一
   `cases_ecore.tsv` / `cases_xmi.tsv` / `cases_edit.tsv` / `cases_acceleo.tsv` / `cases_xcore.tsv` /
   `cases_sphinx.tsv` / `cases_artop_runtime.tsv`。
   其中 **`emf-ecore` 153 条**、`emf-edit` 26 条、`emf-acceleo` 26 条、`emf-xcore` 14 条、
-  `emf-sphinx` 68 条、`artop-runtime` 18 条均为 **0 PENDING 全 PASS**；`emf-xmi` 187 条中
-  183 条已映射、182 PASS（5 PENDING：4 条未映射 + 1 条 C++ 参考自身失败）。
+  `emf-sphinx` 68 条、`artop-runtime` 18 条均为 **0 PENDING 全 PASS**；`emf-xmi` 187 条
+  **187/187 全映射、186 PASS**（唯一 PENDING 为 `StaticDynamic_StaticXmi_EqualsDynamicXmi`，
+  C++ 参考自身失败，非 Rust 缺口）。
   逐条数字与命令见 `tools/conformance/README.md`。
 
 复用路径：C++ oracle 单测 → `tools/conformance/build`，与 CI 的 `conformance` job 对齐。
