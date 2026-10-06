@@ -3,7 +3,7 @@ name = "artop-codegen"
 version = "1.0.0"
 edition = "2021"
 license = "MIT"
-description = "ARTOP static-model generator (port of C++ emf-artop-codegen / ArtopCppGenerator)."
+description = "ARTOP static-model generator emitting Rust source; Rust counterpart of C++ emf-artop-codegen (ArtopCppGenerator)."
 
 [dependencies]
 emf-common = { workspace = true }

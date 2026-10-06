@@ -1,8 +1,10 @@
 //! ARTOP static-model generator (port of C++ `emf-artop/emf-artop-codegen`).
 //!
-//! This is the Rust counterpart of the C++ `ArtopCppGenerator`: it builds on the
-//! generic [`emf_ecore_codegen`] generator (the C++ `CppGenerator` base) and adds
-//! the ARTOP-specific steps on top:
+//! This is the Rust counterpart of the C++ `ArtopCppGenerator` (a **C++**
+//! counterpart name — the Rust type is [`ArtopGenerator`], which emits Rust
+//! source): it builds on the
+//! generic [`emf_ecore_codegen`] generator (its C++ base being `CppGenerator`)
+//! and adds the ARTOP-specific steps on top:
 //!
 //! 1. [`ArtopGenerator::generate_from_package`] writes the base model crate, then
 //! 2. emits the `<Pkg>Resource` / `<Pkg>ResourceFactory` glue (the Rust analogue

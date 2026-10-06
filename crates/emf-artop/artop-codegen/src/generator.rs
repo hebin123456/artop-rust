@@ -1,7 +1,8 @@
 //! ARTOP static-model generator (port of C++ `ArtopCppGenerator`).
 //!
-//! `ArtopGenerator` inherits the generic [`emf_ecore_codegen`] pipeline (the C++
-//! `CppGenerator` base) and appends the ARTOP-specific steps in the same order as
+//! `ArtopGenerator` inherits the generic [`emf_ecore_codegen`] pipeline (its C++
+//! base is `CppGenerator` — a **C++** counterpart name, not a Rust type) and
+//! appends the ARTOP-specific steps in the same order as
 //! the C++ implementation:
 //!
 //!   * `generate_from_file` — C++ `generateFromFile`: load the `.ecore`, then run
@@ -75,7 +76,8 @@ impl Default for ArtopGenConfig {
     }
 }
 
-/// The ARTOP static-model generator (C++ `ArtopCppGenerator`).
+/// The ARTOP static-model generator — Rust counterpart of the C++
+/// `ArtopCppGenerator`; it emits Rust source.
 #[derive(Debug, Default)]
 pub struct ArtopGenerator {
     config: ArtopGenConfig,
@@ -311,7 +313,7 @@ fn class_prefix(package_name: &str) -> String {
 }
 
 /// Write `content` to `path`, creating parent directories as needed (C++
-/// `ArtopCppGenerator::writeFile`).
+/// counterpart `ArtopCppGenerator::writeFile`).
 fn write_file(path: &Path, content: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
