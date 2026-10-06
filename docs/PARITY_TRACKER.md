@@ -148,10 +148,10 @@
 |---|---|
 | GenModelLoaderTests.cpp | ✅ 已移植（cpp_parity_static_modeling） |
 | RuntimeBehaviorTests.cpp | ✅ 已移植（metadata + 动态反射部分） |
-| GenModelGeneratorTests.cpp | 🔶 能力已实现（generator::generate_source 生成 Rust 代码）；C++ GenModelGenerator 生成 C++ 文本（emit*），未逐字移植 |
-| CppGeneratorTests.cpp | 🔶 同上：C++ 端到端生成 C++ 已非目标 |
-| CppTemplatesTests.cpp | 🔶 语言无关部分已移植（render_template 占位符替换 basicSubstitution/unknownKeptAsIs）；emit* C++ 模板未移植 |
-| EmitterTests.cpp | 🔶 语言无关部分已移植（TypeMapper 语义：EString→String、整型/浮点映射、default_value_literal）；C++ 发射器未移植 |
+| GenModelGeneratorTests.cpp | 🔶 能力等价已实现（`generator::generate_source` 产 **Rust** 源码）；C++ 同名生成器产 C++ 文本，故不逐字移植——注意 Rust crate 内**没有** C++ 发射器 |
+| CppGeneratorTests.cpp | 🔶 同上：C++ 端到端产 **C++** 文本，已非目标；Rust 侧对应能力为 `GenModel` + CLI 落盘自包含 crate（`Cpp*` 仅为 C++ 对照物名） |
+| CppTemplatesTests.cpp | 🔶 语言无关部分已移植（`render_template` 占位符替换 basicSubstitution/unknownKeptAsIs）；`CppTemplates.cpp` 的 `emit*`（C++ 对照物，产 C++ 文本）不移植 |
+| EmitterTests.cpp | 🔶 语言无关部分已移植（`typing` 的 TypeMapper 语义：EString→String、整型/浮点映射、`default_value_literal`）；C++ `Emitter`（对照物）本身不移植 |
 | P4_JetTemplateTests.cpp | ✅ 全移植（jet_template_tests：render_jet_template each/if/unless，12 测试，含 NestedEach/IfInsideEach） |
 | TestEAnnotationReader.cpp / TestEAnnotationDebug.cpp | 🔶 C++ 特定调试；EAnnotation 语义已由 emf-ecore annotation.rs 覆盖 |
 

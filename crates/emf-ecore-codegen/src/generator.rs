@@ -1,7 +1,9 @@
 //! Rust source generator: walk an [`EPackage`] and emit statically-typed code.
 //!
-//! Port target: the emitting half of C++ `emf-ecore-codegen` (`CppGenerator` /
-//! `EClassEmitter` / `PackageEmitter`), adapted to emit Rust instead of C++.
+//! Port source (parity reference): the emitting half of C++ `emf-ecore-codegen`.
+//! The names `CppGenerator` / `EClassEmitter` / `PackageEmitter` are the **C++
+//! counterparts** being referenced, not Rust types — this crate contains no
+//! C++ emitter. The adaptation here emits **Rust** source instead of C++ text.
 //!
 //! Each generated package is self-contained (a thin crate): `lib.rs` declares
 //! one `pub struct` per `EClass` backed by concrete typed fields, a `match`

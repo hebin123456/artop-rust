@@ -130,7 +130,7 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 
 仍只能部分对照的边角（C++ 侧本身即为骨架 / 空测试，无完整可对照行为）：
 
-1. `emf-ecore-codegen`：C++ 专属发射器（`emit*` C++ 文本 / `CppGenerator` / `Emitter`）不移植——Rust 侧生成的是 Rust 代码，非目标；语言无关部分（`TypeMapper` / `render_template` / JET 模板）已移植。
+1. `emf-ecore-codegen`：C++ 侧那些**生成 C++ 文本**的发射器（`CppTemplates.cpp` 的 `emit*` / `CppGenerator` / `Emitter`）不在移植目标内——Rust crate 内**没有任何 C++ 发射器**，生成的是 **Rust** 代码（`generator::generate_source` / `GenModel::generate_crate`）；`Cpp*` / `Jet` 只是移植注释里的 C++ 对照物名；语言无关部分（`TypeMapper`→`typing` / `render_template` / JET 模板渲染）已移植。
 2. `emf-xsd`：`xsd:redefine` 的组件重定义替换、`cloneConcreteComponent` 等 C++ 侧仅声明未实现的项目保持未实现（已覆盖 incorporation 的追踪边 + 命名空间回退协议）。
 3. `emf-sphinx`：`ExtendedResource` / `ProxyHelper` / `ModelDescriptor` 在 C++ 为空测试文件，无对照。
 4. artop：AUTOSAR 业务约束与 C++ 诊断逐条对齐（`dfa4d73`，本机样本 6992 / 27664 / 55176 与 C++ oracle 一致），并持续做大文件性能与内存优化（`dead4d4`）。

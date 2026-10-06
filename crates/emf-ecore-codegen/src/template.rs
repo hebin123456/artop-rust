@@ -2,9 +2,10 @@
 //!
 //! A faithful port of the *pure rendering* half of C++ `emf-ecore-codegen`'s
 //! `CppTemplates.cpp` — the `renderTemplate` / `renderJetTemplate` functions.
-//! The C++ `emit*` family (which renders C++ source text for classes,
-//! factories, packages, ...) is intentionally **not** ported: the Rust crate
-//! already has its own generator emitting Rust source instead.
+//! The `Cpp` / `Jet` names (and the C++ `emit*` family, which renders C++
+//! source text for classes, factories, packages, ...) are the **C++
+//! counterparts** and are intentionally **not** ported: this Rust crate has no
+//! C++ emitter and already emits Rust source via its own generator.
 //!
 //! This module only implements the string/template semantics, which are
 //! language independent:

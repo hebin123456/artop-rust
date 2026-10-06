@@ -1,8 +1,9 @@
 //! Type mapping and identifier shaping for generated Rust code.
 //!
-//! Port target: C++ `emf-ecore-codegen`'s `TypeMapper` + the naming helpers in
-//! `GenModel` (`getClassPackageName`, `getCppType`, `capitalize`, ...), adapted
-//! to Rust identifiers and types.
+//! Port source (parity reference): C++ `emf-ecore-codegen`'s `TypeMapper` + the
+//! naming helpers in `GenModel`. `getClassPackageName` / `getCppType` /
+//! `capitalize` are the **C++ counterparts** being referenced, not Rust
+//! identifiers — everything below is adapted to **Rust** types and naming.
 //!
 //! The mapping here is deliberately *concrete-field*: every Ecore feature type
 //! maps to a fixed Rust type (attribute -> scalar/string/bool, reference ->
@@ -32,8 +33,8 @@ pub fn attr_rust_type(type_name: &str, many: bool) -> String {
 /// Build the Rust default-value expression for an attribute, given its Ecore
 /// data type name and `defaultValueLiteral` (if any).
 ///
-/// Equivalent to C++ `TypeMapper::defaultValueLiteral` / `defaultLitByCppType`,
-/// adapted to Rust. An empty `literal` means "no explicit default" and yields
+/// Equivalent to the C++ counterparts `TypeMapper::defaultValueLiteral` /
+/// `defaultLitByCppType`, adapted to Rust. An empty `literal` means "no explicit default" and yields
 /// an empty string; otherwise:
 /// - `String`-typed attributes become `String::from("...")`;
 /// - `bool` attributes become `true` / `false`;
@@ -52,7 +53,8 @@ pub fn default_value_literal(e_type: &str, literal: &str) -> String {
             "false".to_string()
         }
     } else {
-        // Numeric types use the literal as-is (mirrors C++ `defaultLitByCppType`).
+        // Numeric types use the literal as-is (mirrors the C++ counterpart
+        // `defaultLitByCppType`).
         literal.to_string()
     }
 }

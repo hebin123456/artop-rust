@@ -3,7 +3,7 @@ name = "emf-ecore-codegen"
 version = "1.0.0"
 edition = "2021"
 license = "MIT"
-description = "Static modeling (code generation) from .ecore files. Port of C++ emf-ecore-codegen."
+description = "Static modeling (code generation) from .ecore files into a self-contained Rust crate. Rust counterpart of C++ emf-ecore-codegen (which emits C++ text)."
 
 [dependencies]
 emf-common = { workspace = true }

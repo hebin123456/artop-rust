@@ -1,8 +1,9 @@
 //! Top-level static-modeling entry point: [`GenModel`].
 //!
-//! This is the public face of the crate — the Rust analog of C++
-//! `emf-ecore-codegen`'s `GenModelLoader` + `GenModel` combo. It chains the
-//! two phases of the pipeline behind one object:
+//! This is the public face of the crate — the Rust analog of the C++
+//! `emf-ecore-codegen`'s `GenModelLoader` + `GenModel` combo (those are the
+//! C++ counterparts). It emits **Rust** source, not C++, and chains the two
+//! phases of the pipeline behind one object:
 //!
 //! 1. loading an `.ecore` document into an [`emf_ecore::EPackage`]
 //!    ([`loader::load_ecore_package`]), and

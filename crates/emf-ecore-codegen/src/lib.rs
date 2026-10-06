@@ -12,7 +12,8 @@
 //! # Ok::<(), String>(())
 //! ```
 //!
-//! The pipeline (mirrors `emf-ecore-codegen`'s `GenModel` / `CppGenerator`)
+//! The pipeline mirrors the C++ `emf-ecore-codegen`'s `GenModel` /
+//! `CppGenerator` (those are the C++ counterparts; this port emits Rust), and
 //! is exposed one layer lower for programmatic use:
 //!
 //! 1. [`loader::load_ecore_package`] parses an `.ecore` document — which is
