@@ -170,6 +170,20 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 - **新 API**：`emf_xmi::XMLSave::save_to_writer(&self, resource, out: &mut dyn Write)`（默认实现「materialise 后整体写出」，自定义 saver 不受影响）；`XMIResource::save_to_writer`（`AutosarXMLSaver` 覆写为流式）；`XMIResource::save()`（落 `file:` URI）改为 `BufWriter` 流式写盘，不再先构造整篇 `String`。示例 CLI `arxml-roundtrip` 的 `roundtrip`/`bench` 与互操作 harness `artop-runtime/examples/arxml_roundtrip.rs` 均改走流式。
 - **效果（4 GB cgroup，生成型 ARXML）**：写出不再抬高 RSS——101.6 MB 文档 save 后 RSS 由旧版 +123 MB 变为 **−26 MB**（`907.5 → 881.0 MB`，输出 101.6 MB 不再驻留）；**447.3 MB 文档现在可完整 load → save 并逐字节一致**（旧版此规模死在 save），写出耗时基本不变；而 457 MB 已在 **load** 阶段 OOM（`EXIT=137`）——**瓶颈从 save 移回了 load/模型**。4 份真实样本仍逐字节一致（`tools/conformance/interop_arxml.py` 全 PASS）。
 
+**性能 —— 模型瘦身（本轮新增，`DynamicEObject` 单对象内存）**：
+
+流式写出把 save 的峰值拉平后，瓶颈回到 **load / 模型**（457 MB 文档已在 load 阶段 OOM）。本轮针对每个 `DynamicEObject` 的固定开销做三处瘦身，都是「共享 / 惰性 / 紧凑」，语义不变：
+
+1. **共享 `EClass`**：元模型查询每次返回一个 owned `EClass` 克隆，大文档下等于**每个对象各持一份完整类描述符**（含两个 `String`）。新增 thread-local `SHARED_CLASSES`（按克隆稳定的 `EClass::instance_id` 键），`e_class` 改为 `Rc<EClass>`，同类对象的克隆塌缩为一份分配。
+2. **惰性 `Notifier`**：原先每个对象急切分配 `Rc<RefCell<Notifier>>`（Rc 头 + `Vec` + flag ≈ 56 B），而大文档里绝大多数对象从不挂适配器。字段改为 `OnceCell<NotifierHandle>`，仅在 `notifier()` / `add_adapter()` 时实体化；`e_notification_required()` / `adapter_count()` / `remove_adapter()` 在空单元上零分配，`e_set_by_name` / `e_unset_by_name` 也补上了「无适配器就不构造通知」的早退。
+3. **紧凑 `FeatureMap`**：`dynamic_settings` 由 `FxHashMap<u32, Val>` 改为按特征索引有序、**精确尺寸**的 `Option<Box<[(u32, Val)]>>`。哈希表最小一张表是控制组 + 4 个 40 B 桶（≈192 B）而载荷仅 40 B，且空表头在每个对象里仍占 32 B；精确 box 只为已存条目付费（1 条目 = 一块 40 B，0 条目 = 不分配），字段本身由 32 B 表头缩到 16 B 胖指针。查表用二分（条目很少），热路径仍在几次比较内。
+
+**效果**（合成 ARXML 44.1 MB / 60 万个 `AR-PACKAGE`，`arxml-roundtrip bench`，mimalloc）：
+
+- 峰值 RSS **620.1 MB → 409.4 MB（−34.0%）**；load `1090 → ~950 ms`、save `1569 → ~1363 ms`（二分查表在本规模下比哈希更快）。
+- 逐级：共享 `EClass` 后 ≈529 MB，惰性 `Notifier` 后 ≈490 MB，`FeatureMap` 后 **409 MB**。
+- 质量门禁：`cargo test --workspace` 全绿；改动 crate `emf-ecore` fmt/clippy 干净；`settings()` 仅 `emf-compare::merge_engine` 使用且顺序无关（现为特征索引序）。
+
 **下一棒 —— arxml 互读互写收敛**（剩余工作）：
 
 1. `tools/conformance/interop_arxml.py` 已覆盖**写**路径（load→save、写路径幂等、与原文**逐字节相同**）并接入 CI conformance job；给出 `--cpp` 时追加 **Rust ↔ C++ 双向交接**（A/B/C/D 四步，见 Milestone 25），C++ 半侧 harness 为 `tools/conformance/interop_arxml_main.cpp`（构建脚本 `tools/conformance/build_arxml_interop.sh`）。
