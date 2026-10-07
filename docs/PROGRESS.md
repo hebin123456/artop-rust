@@ -200,6 +200,21 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 - load-only 峰值 **381.6 MB → 354.6 MB**（模型原本把峰值顶到 DOM 之上，现在压在 DOM 之下）；save 不再增加峰值。
 - 结论：继续压模型对「峰值」收益递减（DOM 是地板），下一步的大杠杆是 **load 期的解析树**（名字 interning / 空 `attrs` 装箱，或直接流式建模型跳过 DOM）。
 
+**性能 —— 流式建模型（本轮新增，load 跳过 DOM 解析树）**：
+
+上轮的结论是峰值被 **348 MB 的 DOM 解析树**顶着（模型只有 ~200 MB），所以这轮直接把解析树去掉：**从 XML 事件流直接建 `DynamicEObject`**，整篇文档树不再存在。
+
+- **新读取器** `arxml/dom.rs::XmlReader`：无依赖的 pull 解析器，`next_event()` 逐个吐出 `Ev::Start(StartTag)` / `Ev::End` / `Ev::Text` / `Ev::Comment`，prolog（`<?…?>`、DOCTYPE、根前注释）一次跳过。复用与 DOM 相同的词法/实体解码（`decode_entities`），保证文本与 DOM 路径逐字符一致。
+- **新构建器** `loader.rs::build_from_reader`（`build_object` 的流式孪生）：`simple` / `mixed` / 一般容器三种内容类各自消费到匹配 `Ev::End`；子元素经 `dispatch_child_stream` 分派到 `handle_containment_stream` / `handle_reference_stream` / `handle_attribute_element_stream`，都是「拉一个、建一个、丢一个」，只需保持当前元素路径，因此不再有任何子节点列表常驻。
+- **DOM 仅保留在稀有回退路径**：`unknown` / `createFeatureFromSkippedElement` 包装 / `tryInlineMatch` 内联这些「需要把整个元素当值看」的分支，才用 `materialize` 就地把该子树拼回一个 `Element` 再走原模型驱动链。这类元素在真实文档里极少（示例文档 `unknown = 0`），峰值仍由模型决定。
+- `load` / `load_owned` 入口切到 `build_streaming`；`ARXML_TIMING=1` 打点由 `dom_parse`+`build` 合并为 `stream_build`。
+
+**效果**（同一合成 ARXML 44.1 MB / 60 万对象，`arxml-roundtrip`，mimalloc）：
+
+- load-only 峰值 RSS **354.6 MB → 230.1 MB（−35.1%）**——正好把 348 MB 的解析树换成「源文本 44 MB + 模型 ~200 MB」，峰值首次落到「模型本身」附近。
+- load 耗时 **1051 → 855 ms（−19%）**（少建一整棵树）；save 不变（~1340 ms）；build 后 RSS 224 → 230 MB（模型本体几乎不变）。
+- **正确性**：44.1 MB / 12 MB 两份大文档 `load → save` 与旧 DOM 路径输出 **`cmp` 逐字节相同**；另造含**注释 / 包装引用（`PACKAGE-REF` DEST）/ 内联 containment（`COMPU-SCALES`）/ 未知元素 / CDATA / 实体 / 多字节**的文档，用「改动前二进制 vs 改动后」对拍，输出**逐字节相同**；`cargo test --workspace` 全绿。
+
 **下一棒 —— arxml 互读互写收敛**（剩余工作）：
 
 1. `tools/conformance/interop_arxml.py` 已覆盖**写**路径（load→save、写路径幂等、与原文**逐字节相同**）并接入 CI conformance job；给出 `--cpp` 时追加 **Rust ↔ C++ 双向交接**（A/B/C/D 四步，见 Milestone 25），C++ 半侧 harness 为 `tools/conformance/interop_arxml_main.cpp`（构建脚本 `tools/conformance/build_arxml_interop.sh`）。

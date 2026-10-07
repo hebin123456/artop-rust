@@ -373,6 +373,224 @@ fn decode_entities(s: &str) -> String {
     out
 }
 
+// ---------------------------------------------------------------------------
+// Streaming event reader
+// ---------------------------------------------------------------------------
+
+/// A start tag as it appears in the document, before any child content is read.
+///
+/// The event reader hands this out as soon as the opening tag has been
+/// consumed, so the arxml builder can decide how to treat the element (feature
+/// lookup, `xsi:type`, `DEST`, …) and *then* pull the events that follow,
+/// without ever materialising a whole parse tree.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StartTag {
+    /// Raw qualified name (e.g. `AUTOSAR`).
+    pub name: String,
+    /// Attributes as `(raw_name, decoded_value)`, in document order.
+    pub attrs: Vec<(String, String)>,
+    /// `true` for `<TAG/>`: the element has no content and no matching end tag.
+    pub self_closing: bool,
+}
+
+impl StartTag {
+    /// Local part of the name (`"type"` for `"xsi:type"`).
+    pub fn local(&self) -> &str {
+        match self.name.split_once(':') {
+            Some((_, l)) => l,
+            None => &self.name,
+        }
+    }
+
+    /// Look up an attribute by its raw qname.
+    pub fn attr(&self, name: &str) -> Option<&str> {
+        self.attrs
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| v.as_str())
+    }
+}
+
+/// One XML event (the streaming counterpart of [`Node`] plus tags).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Ev {
+    /// An opening tag (self-closing tags yield no following [`Ev::End`]).
+    Start(StartTag),
+    /// A closing tag.
+    End,
+    /// Character data (pcdata or CDATA), preserved with whitespace.
+    Text(String),
+    /// An XML comment; the text excludes the delimiters.
+    Comment(String),
+}
+
+/// A dependency-free, allocation-light XML pull reader.
+///
+/// Unlike [`parse`], which materialises the entire document as a [`Node`] tree,
+/// the reader walks the source once and yields events on demand. The arxml
+/// loader consumes those events into [`DynamicEObject`](emf_ecore::dynamic)
+/// instances directly, so the document tree never has to exist in full — the
+/// single largest consumer of load-time memory on big arxml files.
+pub struct XmlReader<'a> {
+    s: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> XmlReader<'a> {
+    /// A reader positioned at the document's root element (prolog skipped).
+    pub fn new(src: &'a str) -> Self {
+        let mut p = Parser {
+            s: src.as_bytes(),
+            pos: 0,
+        };
+        p.skip_prologue();
+        Self { s: p.s, pos: p.pos }
+    }
+
+    fn starts_with(&self, lit: &str) -> bool {
+        self.s[self.pos..].starts_with(lit.as_bytes())
+    }
+
+    fn peek(&self) -> Option<u8> {
+        self.s.get(self.pos).copied()
+    }
+
+    /// The next event, or `None` at end of input.
+    pub fn next_event(&mut self) -> Result<Option<Ev>, String> {
+        loop {
+            if self.pos >= self.s.len() {
+                return Ok(None);
+            }
+            if self.starts_with("<!--") {
+                let end = find(self.s, self.pos, b"-->")
+                    .ok_or_else(|| "arxml: unterminated comment".to_string())?;
+                let text = String::from_utf8_lossy(&self.s[self.pos + 4..end]).into_owned();
+                self.pos = end + 3;
+                return Ok(Some(Ev::Comment(text)));
+            }
+            if self.starts_with("<![CDATA[") {
+                let end = find(self.s, self.pos, b"]]>")
+                    .ok_or_else(|| "arxml: unterminated CDATA".to_string())?;
+                let text = String::from_utf8_lossy(&self.s[self.pos + 9..end]).into_owned();
+                self.pos = end + 3;
+                return Ok(Some(Ev::Text(text)));
+            }
+            if self.starts_with("<?") {
+                // Processing instruction: not part of the model.
+                let end = find(self.s, self.pos, b"?>")
+                    .ok_or_else(|| "arxml: unterminated processing instruction".to_string())?;
+                self.pos = end + 2;
+                continue;
+            }
+            if self.starts_with("</") {
+                self.pos += 2;
+                let _name = read_name_bytes(self.s, &mut self.pos)?;
+                skip_ws_bytes(self.s, &mut self.pos);
+                expect_byte(self.s, &mut self.pos, b'>')?;
+                return Ok(Some(Ev::End));
+            }
+            if self.peek() == Some(b'<') {
+                return Ok(Some(Ev::Start(self.read_start_tag()?)));
+            }
+            // Character data up to the next '<'.
+            let start = self.pos;
+            while let Some(c) = self.peek() {
+                if c == b'<' {
+                    break;
+                }
+                self.pos += 1;
+            }
+            let raw = String::from_utf8_lossy(&self.s[start..self.pos]);
+            return Ok(Some(Ev::Text(decode_entities(&raw))));
+        }
+    }
+
+    fn read_start_tag(&mut self) -> Result<StartTag, String> {
+        self.pos += 1; // consume '<'
+        let name = read_name_bytes(self.s, &mut self.pos)?;
+        let mut attrs = Vec::new();
+        loop {
+            skip_ws_bytes(self.s, &mut self.pos);
+            match self.peek() {
+                Some(b'/') => {
+                    self.pos += 1;
+                    expect_byte(self.s, &mut self.pos, b'>')?;
+                    return Ok(StartTag {
+                        name,
+                        attrs,
+                        self_closing: true,
+                    });
+                }
+                Some(b'>') => {
+                    self.pos += 1;
+                    return Ok(StartTag {
+                        name,
+                        attrs,
+                        self_closing: false,
+                    });
+                }
+                Some(_) => {
+                    let aname = read_name_bytes(self.s, &mut self.pos)?;
+                    skip_ws_bytes(self.s, &mut self.pos);
+                    expect_byte(self.s, &mut self.pos, b'=')?;
+                    skip_ws_bytes(self.s, &mut self.pos);
+                    let aval = read_quoted_bytes(self.s, &mut self.pos)?;
+                    attrs.push((aname, aval));
+                }
+                None => return Err("arxml: unexpected end of input inside tag".to_string()),
+            }
+        }
+    }
+}
+
+/// Read a name into an owned `String`.
+fn read_name_bytes(s: &[u8], pos: &mut usize) -> Result<String, String> {
+    let start = *pos;
+    while let Some(c) = s.get(*pos).copied() {
+        if c.is_ascii_whitespace() || c == b'>' || c == b'/' || c == b'=' {
+            break;
+        }
+        *pos += 1;
+    }
+    if *pos == start {
+        return Err("arxml: expected a name".to_string());
+    }
+    Ok(String::from_utf8_lossy(&s[start..*pos]).into_owned())
+}
+
+fn read_quoted_bytes(s: &[u8], pos: &mut usize) -> Result<String, String> {
+    let quote = match s.get(*pos).copied() {
+        Some(q @ (b'"' | b'\'')) => q,
+        _ => return Err("arxml: expected a quoted attribute value".to_string()),
+    };
+    *pos += 1;
+    let start = *pos;
+    while let Some(c) = s.get(*pos).copied() {
+        if c == quote {
+            let raw = String::from_utf8_lossy(&s[start..*pos]);
+            *pos += 1;
+            return Ok(decode_entities(&raw));
+        }
+        *pos += 1;
+    }
+    Err("arxml: unterminated attribute value".to_string())
+}
+
+fn skip_ws_bytes(s: &[u8], pos: &mut usize) {
+    while matches!(s.get(*pos), Some(c) if c.is_ascii_whitespace()) {
+        *pos += 1;
+    }
+}
+
+fn expect_byte(s: &[u8], pos: &mut usize, c: u8) -> Result<(), String> {
+    if s.get(*pos) == Some(&c) {
+        *pos += 1;
+        Ok(())
+    } else {
+        Err(format!("arxml: expected '{}'", c as char))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

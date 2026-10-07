@@ -5,10 +5,14 @@
 //! Loads an arxml document (R4.0) into a resource's `DynamicEObject` tree in
 //! three phases, mirroring the C++ implementation:
 //!
-//!   1. **build** — recursively descend the XML DOM, matching element names to
+//!   1. **build** — stream the XML *events* (no DOM), matching element names to
 //!      `EStructuralFeature`s (by arxml name), dispatching to attributes,
 //!      containment or non-containment references; non-containment references
-//!      become proxy objects carrying their short-name path.
+//!      become proxy objects carrying their short-name path. Elements that the
+//!      model has to see as a whole (unknown / wrapper / inline content) are
+//!      materialised into a small [`Element`] subtree on demand and handled by
+//!      the model-driven fallback chain — those cases are rare, so the document
+//!      tree never exists in full.
 //!   2. **index** — walk the built tree and record every `SHORT-NAME` path in a
 //!      resource-local map (cross-document lookups fall back to the global
 //!      [`AutosarLibraryIndex`]).
@@ -46,7 +50,7 @@ use emf_ecore::dynamic::DynamicEObject;
 use emf_ecore::{EClass, EStructuralFeature, PackageRef, PackageRegistry};
 use emf_xmi::{XMIResource, XMLLoader};
 
-use crate::arxml::dom::{self, Element, Node};
+use crate::arxml::dom::{Element, Ev, Node, StartTag, XmlReader};
 use crate::arxml::store::{self, MixedEntry};
 use crate::autosar_library_index::AutosarLibraryIndex;
 
@@ -152,56 +156,37 @@ impl AutosarXMLLoader {
 impl XMLLoader for AutosarXMLLoader {
     fn load(&self, resource: &mut XMIResource, input: &str) -> Result<(), String> {
         let timing = std::env::var_os("ARXML_TIMING").is_some();
-        let t_parse = std::time::Instant::now();
-        let root = dom::parse(input)?;
-        if timing {
-            eprintln!(
-                "[timing] dom_parse = {:?} rss={} MB (input string = {} MB)",
-                t_parse.elapsed(),
-                rss_mb(),
-                input.len() / 1048576
-            );
-        }
-        self.build_into(resource, root, timing)
+        self.build_streaming(resource, input, timing)
     }
 
     /// Same as [`Self::load`], but *owns* the document text so it can release
-    /// it before the model is built. The parse tree owns every string it
-    /// needs, so the source is dead weight from here on; at 400 MB it is 10%
-    /// of the whole memory budget. The C++ loader does the same thing with
-    /// `malloc_trim` right after `pugixml load_buffer`.
+    /// it as soon as the model is built. The streaming builder never holds a
+    /// parse tree, so the source text plus the in-progress model is the whole
+    /// load-time footprint; dropping the source right after the build trims it
+    /// back to the model alone.
     fn load_owned(&self, resource: &mut XMIResource, input: String) -> Result<(), String> {
         let timing = std::env::var_os("ARXML_TIMING").is_some();
-        let t_parse = std::time::Instant::now();
-        let root = dom::parse(&input)?;
-        let src_mb = input.len() / 1048576;
+        let result = self.build_streaming(resource, &input, timing);
         drop(input);
-        if timing {
-            eprintln!(
-                "[timing] dom_parse = {:?} rss={} MB (source {} MB released)",
-                t_parse.elapsed(),
-                rss_mb(),
-                src_mb
-            );
-        }
-        self.build_into(resource, root, timing)
+        result
     }
 }
 
 impl AutosarXMLLoader {
-    /// Build the model from an already-parsed tree and install it in `resource`.
-    fn build_into(
+    /// Build the model by consuming XML events straight from the source,
+    /// without ever materialising the document's parse tree.
+    ///
+    /// The DOM-based loader used to spend most of a big file's load memory on
+    /// the intermediate tree (348 MB for a 44 MB / 600k-object document) while
+    /// the model it produced was only ~200 MB. The event builder keeps just the
+    /// current element path alive: each subtree's events are consumed (and
+    /// dropped) as soon as the model objects they describe have been built.
+    fn build_streaming(
         &self,
         resource: &mut XMIResource,
-        mut root: Element,
+        input: &str,
         timing: bool,
     ) -> Result<(), String> {
-        if root.local() != ROOT_ELEMENT {
-            return Err(format!(
-                "AutosarXMLLoader: 期望根元素 <{ROOT_ELEMENT}>，实际为 <{}>",
-                root.local()
-            ));
-        }
         let reg = emf_ecore::ecore_package::global();
         let autosar_class = reg.find_class_by_xml_name(ROOT_ELEMENT).ok_or_else(|| {
             "AutosarXMLLoader: 元模型中找不到 EClass \"AUTOSAR\"（请先注册 AUTOSAR 元模型）"
@@ -210,12 +195,24 @@ impl AutosarXMLLoader {
 
         let mut loader = ArxmlLoader::new(reg);
         let t_build = std::time::Instant::now();
-        let root_obj = loader.build_object(&mut root, &autosar_class);
+        let mut reader = XmlReader::new(input);
+        let root_start = match reader.next_event()? {
+            Some(Ev::Start(s)) => s,
+            _ => return Err("arxml: no root element".to_string()),
+        };
+        if root_start.local() != ROOT_ELEMENT {
+            return Err(format!(
+                "AutosarXMLLoader: 期望根元素 <{ROOT_ELEMENT}>，实际为 <{}>",
+                root_start.local()
+            ));
+        }
+        let root_obj = loader.build_from_reader(&mut reader, root_start, &autosar_class)?;
         if timing {
             eprintln!(
-                "[timing] build = {:?} rss={} MB",
+                "[timing] stream_build = {:?} rss={} MB (source {} MB)",
                 t_build.elapsed(),
-                rss_mb()
+                rss_mb(),
+                input.len() / 1048576
             );
             let objs = OBJ_COUNT.with(|c| c.get());
             let new_in = NEW_IN_NS.with(|c| c.get());
@@ -664,6 +661,485 @@ impl ArxmlLoader {
         if f.is_containment() {
             child.borrow_mut().set_e_container(Some(owner.clone()));
         }
+    }
+
+    // ---- phase 1 (streaming): build from events ----
+
+    /// Build an object from the events of one element whose start tag `start`
+    /// has just been consumed (C++ `buildObject`). Consumes events up to and
+    /// including the matching end tag unless the element is self-closing.
+    ///
+    /// This is the streaming twin of [`Self::build_object`]: identical
+    /// semantics, but it never holds a child list — each child's events are
+    /// pulled, turned into model objects and dropped one at a time, so the
+    /// document's parse tree never exists in full.
+    fn build_from_reader(
+        &mut self,
+        r: &mut XmlReader,
+        start: StartTag,
+        class: &EClass,
+    ) -> Result<Option<ObjectRef>, String> {
+        let t_new = std::time::Instant::now();
+        let obj: ObjectRef = Rc::new(RefCell::new(DynamicEObject::new_in(
+            class.clone(),
+            self.reg.clone(),
+        )));
+        NEW_IN_NS.with(|c| c.set(c.get() + t_new.elapsed().as_nanos() as u64));
+        OBJ_COUNT.with(|c| c.set(c.get() + 1));
+        self.apply_attributes_tag(&obj, class, &start);
+
+        match class.content_kind() {
+            "simple" => {
+                if let Some(simple) = self.find_simple_feature(class) {
+                    let text = self.read_text_until_end(r, &start)?;
+                    if !text.is_empty() {
+                        self.set_attribute_value(&obj, &simple, &text);
+                    }
+                } else {
+                    self.skip_element(r, &start)?;
+                }
+                return Ok(Some(obj));
+            }
+            "mixed" => {
+                if !start.self_closing {
+                    loop {
+                        match r.next_event()? {
+                            Some(Ev::Text(t)) => {
+                                if !t.is_empty() {
+                                    store::push_mixed_content(&obj, MixedEntry::Text(t));
+                                }
+                            }
+                            Some(Ev::Comment(c)) => {
+                                store::push_mixed_content(&obj, MixedEntry::Comment(c))
+                            }
+                            Some(Ev::Start(tag)) => {
+                                if let Some(c) = self.dispatch_child_stream(r, &obj, class, tag)? {
+                                    store::push_mixed_content(&obj, MixedEntry::Element(c));
+                                }
+                            }
+                            Some(Ev::End) => break,
+                            None => return Err(unclosed(&start.name)),
+                        }
+                    }
+                }
+                return Ok(Some(obj));
+            }
+            _ => {}
+        }
+
+        // Non-mixed: capture the leading comments, then dispatch child elements.
+        if !start.self_closing {
+            let mut comments = Vec::new();
+            let mut leading = true;
+            loop {
+                match r.next_event()? {
+                    Some(Ev::Text(_)) => {}
+                    Some(Ev::Comment(c)) => {
+                        if leading {
+                            comments.push(c);
+                        }
+                    }
+                    Some(Ev::Start(tag)) => {
+                        leading = false;
+                        self.dispatch_child_stream(r, &obj, class, tag)?;
+                    }
+                    Some(Ev::End) => break,
+                    None => return Err(unclosed(&start.name)),
+                }
+            }
+            if !comments.is_empty() {
+                store::set_comments(&obj, comments);
+            }
+        }
+        Ok(Some(obj))
+    }
+
+    /// Dispatch one child element (whose start tag has been consumed) and
+    /// return the object it created, if any — the streaming twin of
+    /// [`Self::dispatch_child`].
+    fn dispatch_child_stream(
+        &mut self,
+        r: &mut XmlReader,
+        obj: &ObjectRef,
+        class: &EClass,
+        start: StartTag,
+    ) -> Result<Option<ObjectRef>, String> {
+        let t_ff = std::time::Instant::now();
+        let feature = self.find_feature(class, start.local());
+        FIND_FEATURE_NS.with(|c| c.set(c.get() + t_ff.elapsed().as_nanos() as u64));
+        let Some(feature) = feature else {
+            // The model-driven fallbacks reason about the element as a whole,
+            // so materialise just this subtree (rare: unknown / wrapper / inline
+            // elements) and reuse the DOM-based chain.
+            let mut el = self.materialize(r, start)?;
+            if let Some(wrapped) = self.create_feature_from_skipped_element(class, el.local()) {
+                return Ok(self.apply_wrapped_element(obj, &mut el, &wrapped));
+            }
+            if self.try_inline_match(obj, class, &mut el, 0) {
+                return Ok(None);
+            }
+            UNKNOWN_COUNT.with(|c| c.set(c.get() + 1));
+            store::push_unknown_content(obj, el);
+            return Ok(None);
+        };
+        if feature.is_reference() {
+            if feature.is_containment() {
+                self.handle_containment_stream(r, obj, &feature, start)
+            } else {
+                self.handle_reference_stream(r, obj, &feature, start)
+            }
+        } else {
+            self.handle_attribute_element_stream(r, obj, &feature, start)?;
+            Ok(None)
+        }
+    }
+
+    /// Apply the start tag's XML attributes (streaming twin of
+    /// [`Self::apply_attributes`]).
+    fn apply_attributes_tag(&mut self, obj: &ObjectRef, class: &EClass, start: &StartTag) {
+        let t_attr = std::time::Instant::now();
+        for (aname, aval) in &start.attrs {
+            if aname.starts_with("xmlns") || aname.starts_with("xsi:") {
+                continue;
+            }
+            if aname == DEST_ATTR || aname == "BASE" {
+                continue;
+            }
+            let local = aname.rsplit(':').next().unwrap_or(aname.as_str());
+            let Some(f) = self.find_feature(class, local) else {
+                continue;
+            };
+            if f.is_reference() || !f.is_xml_attribute() {
+                continue;
+            }
+            self.set_attribute_value(obj, &f, aval);
+        }
+        ATTR_NS.with(|c| c.set(c.get() + t_attr.elapsed().as_nanos() as u64));
+    }
+
+    /// Consume events to the matching end tag, returning the element's direct
+    /// character data (nested elements are skipped, mirroring
+    /// [`Element::text`]).
+    fn read_text_until_end(
+        &mut self,
+        r: &mut XmlReader,
+        start: &StartTag,
+    ) -> Result<String, String> {
+        let mut out = String::new();
+        if start.self_closing {
+            return Ok(out);
+        }
+        loop {
+            match r.next_event()? {
+                Some(Ev::Text(t)) => out.push_str(&t),
+                Some(Ev::Comment(_)) => {}
+                Some(Ev::Start(tag)) => self.skip_element(r, &tag)?,
+                Some(Ev::End) => break,
+                None => return Err(unclosed(&start.name)),
+            }
+        }
+        Ok(out)
+    }
+
+    /// Consume and discard an element's whole subtree.
+    fn skip_element(&mut self, r: &mut XmlReader, start: &StartTag) -> Result<(), String> {
+        if start.self_closing {
+            return Ok(());
+        }
+        let mut depth = 1usize;
+        while depth > 0 {
+            match r.next_event()? {
+                Some(Ev::Start(tag)) => {
+                    if !tag.self_closing {
+                        depth += 1;
+                    }
+                }
+                Some(Ev::End) => depth -= 1,
+                Some(_) => {}
+                None => return Err(unclosed(&start.name)),
+            }
+        }
+        Ok(())
+    }
+
+    /// Rebuild a DOM [`Element`] (with its whole subtree) from the reader. Used
+    /// only on the rare fallback path, where the builder needs the element as a
+    /// single value (wrapper / inline / unknown content).
+    fn materialize(&mut self, r: &mut XmlReader, start: StartTag) -> Result<Element, String> {
+        let mut children = Vec::new();
+        if !start.self_closing {
+            loop {
+                match r.next_event()? {
+                    Some(Ev::Text(t)) => children.push(Node::Text(t.into())),
+                    Some(Ev::Comment(c)) => children.push(Node::Comment(c.into())),
+                    Some(Ev::Start(tag)) => {
+                        let child = self.materialize(r, tag)?;
+                        children.push(Node::Element(Box::new(child)));
+                    }
+                    Some(Ev::End) => break,
+                    None => return Err(unclosed(&start.name)),
+                }
+            }
+        }
+        Ok(Element {
+            name: start.name,
+            attrs: start.attrs,
+            children,
+        })
+    }
+
+    /// Handle a containment reference (streaming twin of
+    /// [`Self::handle_containment`]).
+    fn handle_containment_stream(
+        &mut self,
+        r: &mut XmlReader,
+        obj: &ObjectRef,
+        f: &EStructuralFeature,
+        start: StartTag,
+    ) -> Result<Option<ObjectRef>, String> {
+        let plural = explicit_plural(f);
+        let is_wrapper = (f.is_role_wrapper() || f.is_type_wrapper())
+            && f.is_many()
+            && plural == Some(start.local())
+            && plural != Some(f.name());
+        if is_wrapper {
+            let mut collected = Vec::new();
+            if !start.self_closing {
+                loop {
+                    match r.next_event()? {
+                        Some(Ev::Start(tag)) => {
+                            match self.determine_child_class_tag(&tag, f.type_name()) {
+                                Some(class) => {
+                                    if let Some(child_obj) =
+                                        self.build_from_reader(r, tag, &class)?
+                                    {
+                                        collected.push(child_obj);
+                                    }
+                                }
+                                None => {
+                                    let el = self.materialize(r, tag)?;
+                                    store::push_unknown_content(obj, el);
+                                }
+                            }
+                        }
+                        Some(Ev::End) => break,
+                        Some(_) => {}
+                        None => return Err(unclosed(&start.name)),
+                    }
+                }
+            }
+            let mut last = None;
+            for child_obj in collected {
+                self.attach(obj, f, &child_obj);
+                last = Some(child_obj);
+            }
+            return Ok(last);
+        }
+
+        let Some(class) = self.determine_child_class_tag(&start, f.type_name()) else {
+            let el = self.materialize(r, start)?;
+            store::push_unknown_content(obj, el);
+            return Ok(None);
+        };
+        let child_obj = self.build_from_reader(r, start, &class)?;
+        if let Some(c) = &child_obj {
+            self.attach(obj, f, c);
+        }
+        Ok(child_obj)
+    }
+
+    /// Handle a non-containment reference element (streaming twin of
+    /// [`Self::handle_reference`]).
+    fn handle_reference_stream(
+        &mut self,
+        r: &mut XmlReader,
+        obj: &ObjectRef,
+        f: &EStructuralFeature,
+        start: StartTag,
+    ) -> Result<Option<ObjectRef>, String> {
+        let plural = explicit_plural(f);
+        let is_wrapper = (f.is_role_wrapper() || f.is_type_wrapper())
+            && f.is_many()
+            && plural == Some(start.local())
+            && plural != Some(f.name());
+        if is_wrapper {
+            let mut last = None;
+            if !start.self_closing {
+                loop {
+                    match r.next_event()? {
+                        Some(Ev::Start(tag)) => {
+                            if let Some(proxy) = self.create_proxy_stream(r, obj, f, tag)? {
+                                last = Some(proxy);
+                            }
+                        }
+                        Some(Ev::End) => break,
+                        Some(_) => {}
+                        None => return Err(unclosed(&start.name)),
+                    }
+                }
+            }
+            return Ok(last);
+        }
+        self.create_proxy_stream(r, obj, f, start)
+    }
+
+    /// Create a proxy for a reference element (streaming twin of
+    /// [`Self::create_proxy`]).
+    fn create_proxy_stream(
+        &mut self,
+        r: &mut XmlReader,
+        owner: &ObjectRef,
+        f: &EStructuralFeature,
+        start: StartTag,
+    ) -> Result<Option<ObjectRef>, String> {
+        let dest = start.attr(DEST_ATTR).map(|s| s.to_string());
+        let raw = self.read_text_until_end(r, &start)?;
+        let path = raw.trim().to_string();
+        let dest_class = dest
+            .as_deref()
+            .and_then(|d| self.reg.find_class_by_xml_name(d))
+            .or_else(|| f.type_name().and_then(|t| self.reg.find_class(t)));
+        let Some(target_class) = dest_class else {
+            let children = if raw.is_empty() {
+                Vec::new()
+            } else {
+                vec![Node::Text(raw.into())]
+            };
+            store::push_unknown_content(
+                owner,
+                Element {
+                    name: start.name,
+                    attrs: start.attrs,
+                    children,
+                },
+            );
+            return Ok(None);
+        };
+        let proxy: ObjectRef = Rc::new(RefCell::new(DynamicEObject::new_in(
+            target_class,
+            self.reg.clone(),
+        )));
+        proxy
+            .borrow_mut()
+            .e_set_proxy_uri(Some(Uri::parse(path.clone())));
+        if let Some(d) = dest {
+            store::set_ref_dest(owner, f.name(), &proxy, d);
+        }
+        self.attach(owner, f, &proxy);
+        if !path.is_empty() {
+            self.pending.push(PendingRef {
+                owner: owner.clone(),
+                feature: f.name().to_string(),
+                path,
+                base: start.attr("BASE").unwrap_or("").to_string(),
+                proxy: proxy.clone(),
+            });
+        }
+        Ok(Some(proxy))
+    }
+
+    /// Handle a child element that maps to an attribute feature (streaming twin
+    /// of [`Self::handle_attribute_element`]).
+    fn handle_attribute_element_stream(
+        &mut self,
+        r: &mut XmlReader,
+        obj: &ObjectRef,
+        f: &EStructuralFeature,
+        start: StartTag,
+    ) -> Result<(), String> {
+        let plural = explicit_plural(f);
+        // Multi-valued role-wrapper: the wrapper name wraps singular inner values.
+        if f.is_many()
+            && f.is_role_wrapper()
+            && plural == Some(start.local())
+            && plural != Some(f.name())
+        {
+            let mut values = Vec::new();
+            if !start.self_closing {
+                loop {
+                    match r.next_event()? {
+                        Some(Ev::Start(tag)) => {
+                            let text = self.read_text_until_end(r, &tag)?;
+                            let text = text.trim();
+                            if !text.is_empty() {
+                                values.push(self.convert(f, text));
+                            }
+                        }
+                        Some(Ev::End) => break,
+                        Some(_) => {}
+                        None => return Err(unclosed(&start.name)),
+                    }
+                }
+            }
+            if !values.is_empty() {
+                obj.borrow_mut().e_set(f.name(), Val::List(values));
+            }
+            return Ok(());
+        }
+        let text = self.read_text_until_end(r, &start)?;
+        if f.is_many() {
+            let text = text.trim();
+            if !text.is_empty() {
+                let v = self.convert(f, text);
+                append_value(obj, f.name(), v);
+            }
+            return Ok(());
+        }
+        // A present element sets the value even when empty (EMF semantics).
+        self.set_attribute_value(obj, f, text.trim());
+        Ok(())
+    }
+
+    /// Decide the `EClass` of a containment child from its start tag (streaming
+    /// twin of [`Self::determine_child_class`]).
+    fn determine_child_class_tag(
+        &self,
+        start: &StartTag,
+        declared: Option<&str>,
+    ) -> Option<EClass> {
+        let t = std::time::Instant::now();
+        DCC_COUNT.with(|c| c.set(c.get() + 1));
+        if start.attr("xsi:type").is_some() {
+            let r = self.determine_child_class_tag_inner(start, declared);
+            DCC_NS.with(|c| c.set(c.get() + t.elapsed().as_nanos() as u64));
+            return r;
+        }
+        let key = (
+            start.local().to_string(),
+            declared.unwrap_or("").to_string(),
+        );
+        if let Some(v) = self.dcc_cache.borrow().get(&key) {
+            DCC_NS.with(|c| c.set(c.get() + t.elapsed().as_nanos() as u64));
+            return v.clone();
+        }
+        let r = self.determine_child_class_tag_inner(start, declared);
+        self.dcc_cache.borrow_mut().insert(key, r.clone());
+        DCC_NS.with(|c| c.set(c.get() + t.elapsed().as_nanos() as u64));
+        r
+    }
+
+    fn determine_child_class_tag_inner(
+        &self,
+        start: &StartTag,
+        declared: Option<&str>,
+    ) -> Option<EClass> {
+        if let Some(t) = start.attr("xsi:type") {
+            let local = t.rsplit(':').next().unwrap_or(t);
+            if let Some(c) = self.reg.find_class_by_xml_name(local) {
+                return Some(c);
+            }
+        }
+        if let Some(c) = self.reg.find_class_by_xml_name(start.local()) {
+            match declared {
+                Some(d) => {
+                    if c.is_super_type_of(d, &self.reg) {
+                        return Some(c);
+                    }
+                }
+                None => return Some(c),
+            }
+        }
+        declared.and_then(|d| self.reg.find_class(d))
     }
 
     /// Decide the `EClass` of a containment child (C++ `determineChildClass`):
@@ -1222,6 +1698,11 @@ fn replace_proxy(pr: &PendingRef, target: &ObjectRef) {
 /// Append a value to a multi-valued feature (C++ `addOrSet`'s many branch).
 fn append_value(obj: &ObjectRef, feature: &str, value: Val) {
     obj.borrow_mut().e_append(feature, value);
+}
+
+/// The error for an element whose end tag never arrived (streaming reader).
+fn unclosed(name: &str) -> String {
+    format!("arxml: unclosed element <{name}>")
 }
 
 /// The explicit `xml.namePlural`, or `None` when absent (the C++ treats an
