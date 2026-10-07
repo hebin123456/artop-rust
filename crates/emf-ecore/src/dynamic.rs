@@ -42,8 +42,8 @@ thread_local! {
     /// object of that class. `EClass` clones preserve `instance_id`, and
     /// distinct metamodel instances get distinct ids, so this is a stable
     /// class identity for the lifetime of a load/save.
-    static CLASS_FEATURE_CACHE: RefCell<HashMap<u64, Rc<FeatureCache>>> =
-        RefCell::new(HashMap::new());
+    static CLASS_FEATURE_CACHE: RefCell<FxHashMap<u64, Rc<FeatureCache>>> =
+        RefCell::new(FxHashMap::default());
 
     /// `EClass::instance_id` -> the one shared `Rc<EClass>` handed to every
     /// object of that class. A metamodel lookup returns an owned `EClass`
@@ -51,7 +51,8 @@ thread_local! {
     /// (its `name`/`instanceClassName` strings included) per object; keyed by
     /// the clone-stable `instance_id`, all such clones collapse onto a single
     /// allocation. See [`shared_class`].
-    static SHARED_CLASSES: RefCell<HashMap<u64, Rc<EClass>>> = RefCell::new(HashMap::new());
+    static SHARED_CLASSES: RefCell<FxHashMap<u64, Rc<EClass>>> =
+        RefCell::new(FxHashMap::default());
 }
 
 /// Intern `class` so that every object built from the same metamodel class
@@ -87,33 +88,45 @@ pub type ContainerBackref = (Weak<RefCell<dyn EObject>>, String);
 /// unregistration, mirroring the C++ raw `EInverseList*` comparison.
 #[derive(Default)]
 struct InverseLists {
-    lists: HashMap<i32, Rc<RefCell<dyn InverseList>>>,
+    /// Lazily created: a `HashMap` header is 48 bytes (a `RawTable` plus its
+    /// hasher), which would sit in every object even though inverse lists are
+    /// only ever registered on the few objects a bidirectional reference points
+    /// *at*. `Option<Box<_>>` keeps the field at one pointer and allocates the
+    /// table on the first registration.
+    lists: Option<Box<InverseListMap>>,
 }
+
+/// Feature id -> the inverse list registered on the owning object.
+type InverseListMap = HashMap<i32, Rc<RefCell<dyn InverseList>>>;
 
 impl InverseLists {
     fn register(&mut self, feature_id: i32, list: Rc<RefCell<dyn InverseList>>) {
-        self.lists.insert(feature_id, list);
+        self.lists
+            .get_or_insert_with(Box::default)
+            .insert(feature_id, list);
     }
 
     fn unregister(&mut self, feature_id: i32, list: &Rc<RefCell<dyn InverseList>>) {
         // Only drop the entry when it *is* the list being unregistered; a
         // mismatched list is a no-op (C++ `it->second == list`).
-        if let Some(registered) = self.lists.get(&feature_id) {
-            if Rc::ptr_eq(registered, list) {
-                self.lists.remove(&feature_id);
+        if let Some(lists) = self.lists.as_mut() {
+            if let Some(registered) = lists.get(&feature_id) {
+                if Rc::ptr_eq(registered, list) {
+                    lists.remove(&feature_id);
+                }
             }
         }
     }
 
     fn get(&self, feature_id: i32) -> Option<Rc<RefCell<dyn InverseList>>> {
-        self.lists.get(&feature_id).cloned()
+        self.lists.as_ref()?.get(&feature_id).cloned()
     }
 }
 
 impl std::fmt::Debug for InverseLists {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InverseLists")
-            .field("len", &self.lists.len())
+            .field("len", &self.lists.as_ref().map_or(0, |l| l.len()))
             .finish()
     }
 }
@@ -255,7 +268,14 @@ pub struct DynamicEObject {
     registry: Option<crate::package::PackageRegistry>,
     /// A proxy URI, when this object stands in for an unresolved reference
     /// (`e_is_proxy` == true). `None` for a concrete object.
-    proxy_uri: Option<Uri>,
+    ///
+    /// Boxed: a `Uri` is seven `String`s plus flags (176 bytes), so storing it
+    /// inline reserved that much in *every* object while almost none are
+    /// proxies — the single largest field in the struct, and pure waste for the
+    /// concrete objects that make up the bulk of a document. An
+    /// `Option<Box<Uri>>` is one pointer; the URI is allocated only when an
+    /// object actually becomes a proxy.
+    proxy_uri: Option<Box<Uri>>,
     /// The notification sink for this object (EMF `Notifier`). Adapters
     /// attached here receive SET/UNSET notifications when features change.
     ///
@@ -909,11 +929,11 @@ impl EObject for DynamicEObject {
     }
 
     fn e_proxy_uri(&self) -> Option<&Uri> {
-        self.proxy_uri.as_ref()
+        self.proxy_uri.as_deref()
     }
 
     fn e_set_proxy_uri(&mut self, uri: Option<Uri>) {
-        self.proxy_uri = uri;
+        self.proxy_uri = uri.map(Box::new);
     }
 
     fn e_is_proxy(&self) -> bool {

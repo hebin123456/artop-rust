@@ -184,6 +184,22 @@ python3 tools/conformance/compare.py       # 无 REGRESSION 即通过
 - 逐级：共享 `EClass` 后 ≈529 MB，惰性 `Notifier` 后 ≈490 MB，`FeatureMap` 后 **409 MB**。
 - 质量门禁：`cargo test --workspace` 全绿；改动 crate `emf-ecore` fmt/clippy 干净；`settings()` 仅 `emf-compare::merge_engine` 使用且顺序无关（现为特征索引序）。
 
+**性能 —— 模型瘦身第二轮（`DynamicEObject` 结构体本身）**：
+
+用 `size_of` 实测发现结构体 **312 B**，其中两处「几乎永远为空却内联常驻」的字段占了大头：
+
+1. **`proxy_uri` 装箱**：`Uri` 是 7 个 `String` + 若干 bool = **176 B**，`Option<Uri>` 内联意味着**每个对象都预留 176 B**（占结构体 56%），而绝大多数对象根本不是代理。改为 `Option<Box<Uri>>`（一个指针），只有真正成为 proxy 时才分配。
+2. **`inverse_lists` 惰性**：`HashMap` 表头 48 B（`RawTable` + hasher）在每个对象里常驻，而反向引用列表只注册在少数被指向的对象上。改为 `Option<Box<InverseListMap>>`，首次注册才建表。
+3. **类缓存换 FxHash**：`CLASS_FEATURE_CACHE` / `SHARED_CLASSES` 由 std `HashMap`（SipHash）换为 `FxHashMap`——两者都在「每对象一次」的热路径上。
+
+结果：`DynamicEObject` **312 B → 104 B（−67%）**。
+
+**瓶颈已经转移**：加上 `ARXML_TIMING=1` 实测（46.2 MB / 60 万对象）：
+
+- **DOM 解析树 = 348 MB**（`dom_parse` 后 RSS），build 完成后 RSS 落到 **200 MB**（DOM 已释放，模型常驻）。即**峰值现在由 DOM 解析树决定**，模型只有 ~200 MB。
+- load-only 峰值 **381.6 MB → 354.6 MB**（模型原本把峰值顶到 DOM 之上，现在压在 DOM 之下）；save 不再增加峰值。
+- 结论：继续压模型对「峰值」收益递减（DOM 是地板），下一步的大杠杆是 **load 期的解析树**（名字 interning / 空 `attrs` 装箱，或直接流式建模型跳过 DOM）。
+
 **下一棒 —— arxml 互读互写收敛**（剩余工作）：
 
 1. `tools/conformance/interop_arxml.py` 已覆盖**写**路径（load→save、写路径幂等、与原文**逐字节相同**）并接入 CI conformance job；给出 `--cpp` 时追加 **Rust ↔ C++ 双向交接**（A/B/C/D 四步，见 Milestone 25），C++ 半侧 harness 为 `tools/conformance/interop_arxml_main.cpp`（构建脚本 `tools/conformance/build_arxml_interop.sh`）。
